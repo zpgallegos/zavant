@@ -4,4 +4,4 @@ A clone of some statistical tables presented on [MLB's Baseball Savant](https://
 
 ## Copyright Notice
 
-This repo and its author are not affiliated with MLB or any MLB team. The code in this repo interfaces with MLB's Stats API. Use of MLB data is subject to the notice posted at [here](http://gdx.mlb.com/components/copyright.txt).
+This repo and its author are not affiliated with MLB or any MLB team. The code in this repo interfaces with MLB's Stats API. Use of MLB data is subject to the notice posted [here](http://gdx.mlb.com/components/copyright.txt).

@@ -1,12 +1,12 @@
 # Baseball Zavant
 
-A clone of some statistical tables presented on [MLB's Baseball Savant](https://baseballsavant.mlb.com/). All data is queried from the [MLB Stats API](https://statsapi.mlb.com) and ETL'd from scratch using Python and PySpark. Output player pages (dev in progress) are hosted on AWS: see [Mookie's page](http://zavant.zgallegos.com/players/605141/), for example.
+A clone of some statistical tables presented on [MLB's Baseball Savant](https://baseballsavant.mlb.com/). All data is queried from the [MLB Stats API](https://statsapi.mlb.com) and ETL'd from scratch using Python and PySpark. Output player pages (front-end dev in progress) are hosted on AWS.
 
 The pipeline is as follows:
 1. A [Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/zavant-download-games/lambda_function.py) runs nightly, checking the day's scheduled games against an S3 bucket. Any new games are downloaded and landed in raw form to the bucket.
 2. A [second Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/zavant-process-raw-game/lambda_function.py) running on an event trigger from the raw bucket picks up the file and preprocesses it into JSON data that will occupy seven tables:
     * zavant-game-data: info about the game itself (start time, status, field, etc.)
-    * zavant-game-teams: info abou◊t the teams in the game
+    * zavant-game-teams: info about the teams in the game
     * zavant-game-players: info about the players in the game
     * zavant-game-boxscore: stats used to populate the boxscore of the game
     * zavant-play-info: high-level play types and outcomes (e.g., single, walk, strikeout, etc.)

@@ -1,28 +1,15 @@
 """
 verify that all game files are downloaded and the processing produced the expected tables
-
-main game bucket:
-    - zavant-games-raw
-processed buckets:
-    - zavant-game-data
-    - zavant-game-teams
-    - zavant-game-players
-    - zavant-game-boxscore
-    - zavant-play-info
-    - zavant-play-events
-    - zavant-play-runners
 """
 
+import os
 import json
 import boto3
 import requests
 
 from datetime import datetime
 
-import sys
-sys.path.append(r"/Users/zpgallegos/Documents/zavant/local")
-
-from zavant_py.api import API_BASE, get_schedule_url
+from zavant_py.api import get_schedule_url
 from zavant_py.utils import list_bucket_files, flatten
 
 SEASONS = [
@@ -36,15 +23,11 @@ SEASONS = [
 ]
 
 RAW_BUCKET = "zavant-games-raw"
-PROCESSED_BUCKETS = [
-    "zavant-game-data",
-    "zavant-game-teams",
-    "zavant-game-players",
-    "zavant-game-boxscore",
-    "zavant-play-info",
-    "zavant-play-events",
-    "zavant-play-runners",
-]
+PROC_BUCKET = "zavant-processed"
+
+RAW_LOCAL = "/Users/zpgallegos/Documents/zavant/local/data/zavant-games-raw"
+PROC_LOCAL = "/Users/zpgallegos/Documents/zavant/local/data/zavant-processed"
+
 
 def include_game(game: dict):
     """
@@ -79,12 +62,12 @@ def get_season_dates(seasons: list[str]):
             yield f"{year}-{month:02}-01", f"{year}-{month:02}-{end}"
 
 
-def check(raw, proc):
-    res = {"total_raw_files": len(raw)}
+def check(all_games, raw, proc):
+    res = {"total_raw_files": len(raw), "not_downloaded": list(all_games - set(raw))}
     for bucket, files in proc.items():
         res.update(
             {
-                bucket : {
+                bucket: {
                     "total_files": len(files),
                     "missing_files": list(set(raw) - set(files)),
                     "extra_files": list(set(files) - set(raw)),
@@ -102,18 +85,56 @@ if __name__ == "__main__":
         schedule = json.loads(requests.get(get_schedule_url(start, end)).text)
         for date in schedule["dates"]:
             for obj in date["games"]:
+                season = obj["gameDate"][:4]
                 game_pk = obj.pop("gamePk")
                 game = flatten({"game_pk": game_pk, **obj})
                 if include_game(game):
-                    all_games.add(game_pk)
-    
+                    all_games.add(f"{season}/{game_pk}.json")
+
     s3 = boto3.client("s3")
 
     # get all the raw game files that have been downloaded
     raw = list_bucket_files(s3, RAW_BUCKET)
 
     # check the processed buckets
+    proc_prefixed = list_bucket_files(s3, PROC_BUCKET)
     proc = {}
-    for bucket in PROCESSED_BUCKETS:
-        proc[bucket] = list_bucket_files(s3, bucket)
+    for key in proc_prefixed:
+        dname, file = key.split("/", 1)
+        if dname not in proc:
+            proc[dname] = [file]
+        else:
+            proc[dname].append(file)
+    
+    # get all local files that have been downloaded
+    local_raw = []
+    for root, _, files in os.walk(RAW_LOCAL):
+        for file in files:
+            if not file.endswith(".json"):
+                continue
+            dname, season = root.split("/")[-2:]
+            fname = f"{season}/{file}"
+            local_raw.append(fname)
 
+    # check the local files
+    local = {}
+    for root, _, files in os.walk(PROC_LOCAL):
+        for file in files:
+            if not file.endswith(".json"):
+                continue
+            dname, season = root.split("/")[-2:]
+            fname = f"{season}/{file}"
+            if dname not in local:
+                local[dname] = [fname]
+            else:
+                local[dname].append(fname)
+
+
+    cloud_res = check(all_games, raw, proc)
+    local_res = check(all_games, local_raw, local)
+
+    print("Cloud Results")
+    print(json.dumps(cloud_res, indent=4))
+
+    print("\nLocal Results")
+    print(json.dumps(local_res, indent=4))

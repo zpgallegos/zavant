@@ -1,34 +1,17 @@
 """
 lambda function to process a raw game json file when its uploaded to the zavant-games-raw bucket
-
-tables (buckets):
-- zavant-game-data: info about the game (start time, status, teams, etc.)
-- zavant-game-teams: info about the teams in the game
-- zavant-game-players: info about the players in the game
-- zavant-game-boxscore: info about the boxscore of the game
-- zavant-play-info: play types and outcomes
-- zavant-play-events: events that constitute the plays. most stats are calculated with here
-- zavant-play-runners: runner movement in the plays
 """
 
-import os
 import json
 import boto3
 import logging
 
 from zavant_py.utils import flatten, sort_obj
 
-OUT_BUCKET_PREFIX = os.environ["PROC_PREFIX"]
+TRIGGER_BUCKET = "zavant-games-raw"
+PROC_BUCKET = "zavant-processed"
 
-DNAMES = [
-    "game-data",
-    "game-teams",
-    "game-players",
-    "game-boxscore",
-    "play-info",
-    "play-events",
-    "play-runners",
-]
+s3 = boto3.client("s3")
 
 
 def write(client, data: dict | list[dict], dname: str, key: str):
@@ -37,12 +20,10 @@ def write(client, data: dict | list[dict], dname: str, key: str):
     bucket is determined by @dname
 
     :param obj: the flattened data
-    :param dname: the destination bucket name, prefixed by "zavant-"
+    :param dname: the destination bucket name prefix
     :param key: the original file key from the trigger
     :return: None
     """
-    assert dname in DNAMES, f"Invalid destination name: {dname}"
-
     if isinstance(data, dict):
         data = [data]
 
@@ -50,21 +31,25 @@ def write(client, data: dict | list[dict], dname: str, key: str):
     for obj in data:
         line_delim += json.dumps(sort_obj(obj)) + "\n"
 
-    client.put_object(Bucket=f"{OUT_BUCKET_PREFIX}{dname}", Key=key, Body=line_delim)
+    out_key = f"{dname}/{key}"
+    client.put_object(Bucket=PROC_BUCKET, Key=out_key, Body=line_delim)
+
+    logging.info(f"wrote {dname} data for {key}")
 
 
 def lambda_handler(event, context):
-    bucket = event["Records"][0]["s3"]["bucket"]["name"]  # bucket name
-    key = event["Records"][0]["s3"]["object"]["key"]  # file name
+    if "Records" in event:  # triggered by s3 upload
+        bucket = event["Records"][0]["s3"]["bucket"]["name"]  # bucket name
+        key = event["Records"][0]["s3"]["object"]["key"]  # file name
+    else:
+        key = event.get("key")
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    logger.info(f"Processing {key} from {bucket}")
-
-    s3 = boto3.client("s3")
+    logger.info(f"Processing {key} from {TRIGGER_BUCKET}")
 
     # get the object from s3
-    obj = s3.get_object(Bucket=bucket, Key=key)
+    obj = s3.get_object(Bucket=TRIGGER_BUCKET, Key=key)
 
     game = json.loads(obj["Body"].read())
 
@@ -72,13 +57,12 @@ def lambda_handler(event, context):
     game_data = game["gameData"]
     live_data = game["liveData"]
     boxscore = live_data["boxscore"]
-    game_date = game["gameData"]["datetime"]["officialDate"]
     plays = live_data["plays"]["allPlays"]
 
     # game data. players and teams are split off into their own tables
     players = game_data.pop("players")
     teams = game_data.pop("teams")
-    write(s3, flatten(game_data), "game-data", key)
+    write(s3, flatten(game_data), "game_info", key)
 
     # team info. this is better to union for easier joins
     game_teams = []
@@ -91,7 +75,7 @@ def lambda_handler(event, context):
                 **flatten(team_obj),
             }
         )
-    write(s3, game_teams, "game-teams", key)
+    write(s3, game_teams, "game_teams", key)
 
     # players = info for the players that were in the game
     # not really useful stuff but height, weight, shit like that
@@ -103,7 +87,7 @@ def lambda_handler(event, context):
         }
         p["player_id"] = p.pop("id")
         game_players.append(p)
-    write(s3, game_players, "game-players", key)
+    write(s3, game_players, "game_players", key)
 
     # boxscore = ending stats for players that partipated in the game
     # append the appropriate team id for easier joins to the team data
@@ -118,7 +102,7 @@ def lambda_handler(event, context):
                     **flatten(player_obj),
                 }
             )
-    write(s3, game_boxscore, "game-boxscore", key)
+    write(s3, game_boxscore, "game_boxscore", key)
 
     # play_info = information for the play itself (such as the outcome)
     play_info, play_events, play_runners = [], [], []
@@ -167,6 +151,6 @@ def lambda_handler(event, context):
                 }
             )
 
-    write(s3, play_info, "play-info", key)
-    write(s3, play_events, "play-events", key)
-    write(s3, play_runners, "play-runners", key)
+    write(s3, play_info, "play_info", key)
+    write(s3, play_events, "play_events", key)
+    write(s3, play_runners, "play_runners", key)

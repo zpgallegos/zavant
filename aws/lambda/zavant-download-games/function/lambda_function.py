@@ -9,6 +9,8 @@ from datetime import datetime
 from zavant_py.api import API_BASE, get_schedule_url
 from zavant_py.utils import sort_obj, flatten, list_bucket_files
 
+s3 = boto3.client("s3")
+
 
 def include_game(game: dict):
     """
@@ -58,13 +60,22 @@ def get_season_dates(seasons: list[str]):
 
 
 def lambda_handler(event, context):
+    """
+    download games from the MLB API
+    routine routines will only incrementally download games occurring in the current season
+    use the "past_seasons" parameter to download games from past seasons
+
+    :param event: dict: event data
+        past_seasons: list[int] of seasons to download in addition to the current season
+    :param context: object: context object
+    :return: dict: response
+    """
     games = []
     game_keys = set()
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    s3 = boto3.client("s3")
     bucket = os.environ["OUT_BUCKET"]
 
     # get the list of seasons to download
@@ -102,8 +113,8 @@ def lambda_handler(event, context):
                 if not game["downloaded"]:
                     continue
 
-                year, month, day = game["officialDate"].split("-")
-                game_outfile = f"{year}/{month}/{day}/{game_pk}.json"
+                year, _, _ = game["officialDate"].split("-")
+                game_outfile = f"{year}/{game_pk}.json"
 
                 # download the game and write it to the bucket
                 game_json = requests.get(f'{API_BASE}{game["link"]}').text

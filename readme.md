@@ -20,6 +20,8 @@ The pipeline is as follows:
     * [MLB Standard Batting](https://www.baseball-reference.com/leagues/majors/2022-standard-batting.shtml)
 5. A [simple Nuxt app](https://github.com/zpgallegos/zavant/tree/master/web) is used to create files for the root site and player leaf pages to be hosted as static sites on S3. See [Mookie's page](http://zavant.zgallegos.com/players/605141/), for example.
 
+![DB Diagram](zavant.png)
+
 ## Copyright Notice
 
 This repo and its author are not affiliated with MLB or any MLB team. The code in this repo interfaces with MLB's Stats API. Use of MLB data is subject to the notice posted [here](http://gdx.mlb.com/components/copyright.txt).

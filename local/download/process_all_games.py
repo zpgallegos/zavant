@@ -10,8 +10,22 @@ import multiprocessing
 
 CPU = multiprocessing.cpu_count()
 INTERP = "/Users/zpgallegos/opt/anaconda3/envs/zavant/bin/python3.12"
-SCRIPT = "zavant-process-raw-game.py"
-IN_DIR = "data/zavant-games-raw"
+DATA_DIR = "/Users/zpgallegos/Documents/zavant/local/data"
+IN_DIR = os.path.join(DATA_DIR, "zavant-games-raw")
+OUT_DIR = os.path.join(DATA_DIR, "zavant-processed")
+SCRIPT = "process_game.py"
+
+DNAMES = [
+    "game_boxscore",
+    "game_info",
+    "game_players",
+    "game_teams",
+    "play_events",
+    "play_info",
+    "play_runners",
+]
+
+SEASONS = range(2018, 2025)
 
 
 def to_cmd(key: str):
@@ -30,14 +44,22 @@ def process(key: str):
 
 if __name__ == "__main__":
 
+    for dname in DNAMES:
+        for season in SEASONS:
+            out = os.path.join(DATA_DIR, "zavant-processed", dname, str(season))
+            if not os.path.exists(out):
+                os.makedirs(out)
+
     # collect keys of all files in the raw bucket
-    # processing script expects them in key="YYYY/MM/DD/game_pk.json" format
+    # processing script expects them in key="YYYY/game_pk.json" format
     keys = []
     for root, _, files in os.walk(IN_DIR):
         for file in files:
             if file.lower().endswith(".json"):
                 _, prefix = root.split(IN_DIR + "/")
                 key = os.path.join(prefix, file)
+                if os.path.exists(os.path.join(OUT_DIR, "play_runners", key)):
+                    continue
                 keys.append(key)
 
     # process all files in parallel

@@ -22,7 +22,7 @@ The pipeline is as follows:
 
 ## Data Model (Flattened Data from MLB Stats API)
 [View on dbdiagram.io](https://dbdiagram.io/d/zavant-6625c0e603593b6b6193475f)  
-![Unprocessed Diagram](local/data/zavant-config/processed-schemas/zavant_processed.png)
+![Unprocessed Diagram](zavant_processed.png)
 
 ## Copyright Notice
 

@@ -20,9 +20,9 @@ The pipeline is as follows:
     * [MLB Standard Batting](https://www.baseball-reference.com/leagues/majors/2022-standard-batting.shtml)
 5. A [simple Nuxt app](https://github.com/zpgallegos/zavant/tree/master/web) is used to create files for the root site and player leaf pages to be hosted as static sites on S3. See [Mookie's page](http://zavant.zgallegos.com/players/605141/), for example.
 
-## Data Model (Flattened Data from MLB Stats API)
-[View on dbdiagram.io](https://dbdiagram.io/d/zavant-6625c0e603593b6b6193475f)  
-![Unprocessed Diagram](zavant_processed.png)
+## Datamart Model
+[View on dbdiagram.io](https://dbdiagram.io/d/zavant_datamart-662ecbda5b24a634d003db68)  
+![Zavant Datamart](zavant_datamart.png)
 
 ## Copyright Notice
 

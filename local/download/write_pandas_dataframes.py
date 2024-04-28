@@ -5,7 +5,7 @@ import pandas as pd
 from zavant_py.utils import sort_keys
 
 DATA_DIR = "/Users/zpgallegos/Documents/zavant/local/data"
-PROC_DIR = f"{DATA_DIR}/zavant-processed"
+PROC_DIR = f"{DATA_DIR}/zavant-flattened-json"
 OUT_DIR = f"{DATA_DIR}/pandas"
 
 if __name__ == "__main__":

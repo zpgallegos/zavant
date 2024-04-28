@@ -1,0 +1,314 @@
+Project zavant_datamart {
+  database_type: 'Athena'
+  Note: 'Schema for processed data from the MLB Stats API'
+}
+
+Table zavant.d_players {
+  player_id int [pk]
+  batside_code string
+  batside_description string
+  birthcity string
+  birthcountry string
+  birthdate string
+  birthstateprovince string
+  boxscorename string
+  currentage int
+  firstlastname string
+  firstname string
+  fullfmlname string
+  fulllfmname string
+  fullname string
+  height string
+  initlastname string
+  lastfirstname string
+  lastinitname string
+  lastname string
+  lastplayeddate string
+  middlename string
+  mlbdebutdate string
+  namefirstlast string
+  namematrilineal string
+  pitchhand_code string
+  pitchhand_description string
+  primaryposition_abbreviation string
+  primaryposition_code string
+  primaryposition_name string
+  primaryposition_type string
+  strikezonebottom float
+  strikezonetop float
+  uselastname string
+  usename string
+  weight float
+
+  Note: "Contains player attributes as recorded in their most recently played game"
+}
+
+Table zavant.d_game_info {
+  game_pk int [pk]
+  datetime_ampm string
+  datetime_datetime string
+  datetime_daynight string
+  datetime_officialdate string
+  datetime_originaldate string
+  datetime_resumedate string
+  datetime_resumedfromdate string
+  flags_awayteamnohitter boolean
+  flags_awayteamperfectgame boolean
+  flags_hometeamnohitter boolean
+  flags_hometeamperfectgame boolean
+  flags_nohitter boolean
+  flags_perfectgame boolean
+  gameinfo_attendance int
+  gameinfo_firstpitch string
+  gameinfo_gamedurationminutes int
+  game_doubleheader string
+  game_gamenumber int
+  game_gamedaytype string
+  officialvenue_id int
+  probablepitchers_away_fullname string
+  probablepitchers_away_id int
+  probablepitchers_home_fullname string
+  probablepitchers_home_id int
+  status_detailedstate string
+  venue_active boolean
+  venue_fieldinfo_center int
+  venue_fieldinfo_left int
+  venue_fieldinfo_leftcenter int
+  venue_fieldinfo_leftline int
+  venue_fieldinfo_right int
+  venue_fieldinfo_rightcenter int
+  venue_fieldinfo_rightline int
+  venue_fieldinfo_rooftype string
+  venue_fieldinfo_turftype string
+  venue_id int
+  venue_name string
+  weather_condition string
+  weather_temp string
+  file string
+  partition_0 string
+
+  Note: "Game-specific information such as date, venue, probable pitchers, etc."
+}
+
+Table zavant.d_game_teams {
+  game_pk int
+  team_id int
+  abbreviation string
+  clubname string
+  division_id int
+  division_name string
+  franchisename string
+  league_id int
+  league_name string
+  locationname string
+  name string
+  record_gamesplayed int
+  record_leaguerecord_losses int
+  record_leaguerecord_ties int
+  record_leaguerecord_wins int
+  record_losses int
+  record_wins int
+  season int
+  shortname string
+  team_game_loc string
+  venue_id int
+  venue_name string
+  file string
+  partition_0 string
+
+  indexes {
+    (game_pk, team_id) [pk]
+  }
+  Note: "Team attributes for each of the two participant teams in each game"
+}
+
+Table zavant.f_play_info {
+  game_pk int
+  play_idx int
+  about_halfinning string
+  about_hasout boolean
+  about_inning int
+  about_iscomplete boolean
+  about_isscoringplay boolean
+  count_balls int
+  count_strikes int
+  count_outs int
+  defense_team_id int
+  matchup_batside_code string
+  matchup_batter_fullname string
+  matchup_batter_id int
+  matchup_pitchhand_code string
+  matchup_pitcher_fullname string
+  matchup_pitcher_id int
+  matchup_postonfirst_fullname string
+  matchup_postonfirst_id int
+  matchup_postonsecond_fullname string
+  matchup_postonsecond_id int
+  matchup_postonthird_fullname string
+  matchup_postonthird_id int
+  matchup_splits_batter string
+  matchup_splits_menonbase string
+  matchup_splits_pitcher string
+  offense_team_id int
+  result_awayscore int
+  result_event string
+  result_eventtype string
+  result_homescore int
+  result_isout boolean
+  result_rbi int
+  reviewdetails_isoverturned boolean
+  file string
+  partition_0 string
+
+  indexes {
+    (game_pk, play_idx) [pk]
+  }
+  Note: "Fact table for the individual plays that together compose a game"
+}
+
+Table zavant.f_play_events {
+  game_pk int
+  play_idx int
+  event_idx int
+  player_id int
+  base int
+  count_balls int
+  count_outs int
+  count_strikes int
+  details_awayscore int
+  details_ballcolor string
+  details_call_code string
+  details_call_description string
+  details_code string
+  details_disengagementnum int
+  details_event string
+  details_eventtype string
+  details_fromcatcher boolean
+  details_hasreview boolean
+  details_homescore int
+  details_isball boolean
+  details_isinplay boolean
+  details_isout boolean
+  details_isscoringplay boolean
+  details_isstrike boolean
+  details_runnergoing boolean
+  details_trailcolor string
+  details_type_code string
+  details_type_description string
+  details_violation_description string
+  details_violation_player_fullname string
+  details_violation_player_id int
+  details_violation_type string
+  endtime string
+  hitdata_coordinates_coordx float
+  hitdata_coordinates_coordy float
+  hitdata_hardness string
+  hitdata_launchangle float
+  hitdata_launchspeed float
+  hitdata_location string
+  hitdata_totaldistance int
+  hitdata_trajectory string
+  injurytype string
+  isbaserunningplay boolean
+  ispitch boolean
+  issubstitution string
+  pitchdata_breaks_breakangle float
+  pitchdata_breaks_breakhorizontal float
+  pitchdata_breaks_breaklength float
+  pitchdata_breaks_breakvertical float
+  pitchdata_breaks_breakverticalinduced float
+  pitchdata_breaks_breaky float
+  pitchdata_breaks_spindirection float
+  pitchdata_breaks_spinrate float
+  pitchdata_coordinates_ax float
+  pitchdata_coordinates_ay float
+  pitchdata_coordinates_az float
+  pitchdata_coordinates_px float
+  pitchdata_coordinates_pz float
+  pitchdata_coordinates_pfxx float
+  pitchdata_coordinates_pfxz float
+  pitchdata_coordinates_vx0 float
+  pitchdata_coordinates_vy0 float
+  pitchdata_coordinates_vz0 float
+  pitchdata_coordinates_x float
+  pitchdata_coordinates_x0 float
+  pitchdata_coordinates_y float
+  pitchdata_coordinates_y0 float
+  pitchdata_coordinates_z0 float
+  pitchdata_endspeed float
+  pitchdata_extension float
+  pitchdata_platetime float
+  pitchdata_startspeed float
+  pitchdata_strikezonebottom float
+  pitchdata_strikezonetop float
+  pitchdata_typeconfidence float
+  pitchdata_zone int
+  pitchnumber int
+  playid string
+  position_abbreviation string
+  position_code string
+  position_name string
+  position_type string
+  replacedplayer_id int
+  reviewdetails_challengeteamid int
+  reviewdetails_isoverturned boolean
+  starttime string
+  type string
+  file string
+  partition_0 string
+
+  indexes {
+    (game_pk, play_idx, event_idx) [pk]
+  }
+  Note: "Fact table recording granular data for the events composing a play (pitches, hits, pickoffs, reviews, etc.)"
+}
+
+Table zavant.f_play_runners {
+  game_pk int
+  play_idx int
+  runner_idx int
+  details_earned boolean
+  details_event string
+  details_eventtype string
+  details_isscoringevent boolean
+  details_movementreason string
+  details_rbi boolean
+  details_responsiblepitcher_id string
+  details_runner_fullname string
+  details_runner_id int
+  details_teamunearned boolean
+  movement_end string
+  movement_isout boolean
+  movement_originbase string
+  movement_outbase string
+  movement_outnumber int
+  movement_start string
+  file string
+  partition_0 string
+  
+  indexes {
+    (game_pk, play_idx, runner_idx) [pk]
+  }
+  Note: "Fact table recording all runner movement on each play"
+}
+
+Ref: zavant.d_players.player_id < zavant.d_game_info.probablepitchers_away_id
+Ref: zavant.d_players.player_id < zavant.d_game_info.probablepitchers_home_id
+Ref: zavant.d_players.player_id < zavant.f_play_info.matchup_batter_id
+Ref: zavant.d_players.player_id < zavant.f_play_info.matchup_pitcher_id
+Ref: zavant.d_players.player_id < zavant.f_play_info.matchup_postonfirst_id
+Ref: zavant.d_players.player_id < zavant.f_play_info.matchup_postonsecond_id
+Ref: zavant.d_players.player_id < zavant.f_play_info.matchup_postonthird_id
+Ref: zavant.d_players.player_id < zavant.f_play_events.player_id
+Ref: zavant.d_players.player_id < zavant.f_play_events.replacedplayer_id
+Ref: zavant.d_players.player_id < zavant.f_play_events.details_violation_player_id
+Ref: zavant.d_players.player_id < zavant.f_play_runners.details_responsiblepitcher_id
+Ref: zavant.d_players.player_id < zavant.f_play_runners.details_runner_id
+
+Ref: zavant.d_game_info.game_pk < zavant.f_play_info.game_pk
+Ref: zavant.d_game_info.game_pk < zavant.f_play_events.game_pk
+Ref: zavant.d_game_info.game_pk < zavant.f_play_runners.game_pk
+Ref: zavant.d_game_info.game_pk < zavant.d_game_teams.game_pk
+
+Ref: zavant.f_play_info.(game_pk, play_idx) < zavant.f_play_events.(game_pk, play_idx)
+Ref: zavant.f_play_info.(game_pk, play_idx) < zavant.f_play_runners.(game_pk, play_idx)

@@ -9,7 +9,7 @@ import logging
 from zavant_py.utils import flatten, sort_obj
 
 TRIGGER_BUCKET = "zavant-games-raw"
-PROC_BUCKET = "zavant-processed"
+PROC_BUCKET = "zavant-flattened-json"
 
 s3 = boto3.client("s3")
 

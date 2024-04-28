@@ -12,7 +12,7 @@ CPU = multiprocessing.cpu_count()
 INTERP = "/Users/zpgallegos/opt/anaconda3/envs/zavant/bin/python3.12"
 DATA_DIR = "/Users/zpgallegos/Documents/zavant/local/data"
 IN_DIR = os.path.join(DATA_DIR, "zavant-games-raw")
-OUT_DIR = os.path.join(DATA_DIR, "zavant-processed")
+OUT_DIR = os.path.join(DATA_DIR, "zavant-flattened-json")
 SCRIPT = "process_game.py"
 
 DNAMES = [
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
     for dname in DNAMES:
         for season in SEASONS:
-            out = os.path.join(DATA_DIR, "zavant-processed", dname, str(season))
+            out = os.path.join(DATA_DIR, "zavant-flattened-json", dname, str(season))
             if not os.path.exists(out):
                 os.makedirs(out)
 

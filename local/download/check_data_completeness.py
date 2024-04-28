@@ -23,10 +23,10 @@ SEASONS = [
 ]
 
 RAW_BUCKET = "zavant-games-raw"
-PROC_BUCKET = "zavant-processed"
+PROC_BUCKET = "zavant-flattened-json"
 
 RAW_LOCAL = "/Users/zpgallegos/Documents/zavant/local/data/zavant-games-raw"
-PROC_LOCAL = "/Users/zpgallegos/Documents/zavant/local/data/zavant-processed"
+PROC_LOCAL = "/Users/zpgallegos/Documents/zavant/local/data/zavant-flattened-json"
 
 
 def include_game(game: dict):
@@ -105,7 +105,7 @@ if __name__ == "__main__":
             proc[dname] = [file]
         else:
             proc[dname].append(file)
-    
+
     # get all local files that have been downloaded
     local_raw = []
     for root, _, files in os.walk(RAW_LOCAL):
@@ -128,7 +128,6 @@ if __name__ == "__main__":
                 local[dname] = [fname]
             else:
                 local[dname].append(fname)
-
 
     cloud_res = check(all_games, raw, proc)
     local_res = check(all_games, local_raw, local)

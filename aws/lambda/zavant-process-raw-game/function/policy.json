@@ -10,7 +10,7 @@
         "Effect": "Allow",
         "Action": "s3:PutObject",
         "Resource": [
-          "arn:aws:s3:::zavant-processed/*"
+          "arn:aws:s3:::zavant-flattened-json/*"
         ]
       }
     ]

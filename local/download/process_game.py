@@ -24,7 +24,7 @@ from zavant_py.utils import flatten, sort_obj
 # these both have equivalent S3 buckets
 DATA_DIR = "/Users/zpgallegos/Documents/zavant/local/data"
 IN_DIR = os.path.join(DATA_DIR, "zavant-games-raw")
-OUT_DIR = os.path.join(DATA_DIR, "zavant-processed")
+OUT_DIR = os.path.join(DATA_DIR, "zavant-flattened-json")
 
 
 def write(data: dict | list[dict], dname: str, key: str):

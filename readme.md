@@ -1,12 +1,14 @@
 # Baseball Zavant
 
-A clone of some statistical tables presented on [MLB's Baseball Savant](https://baseballsavant.mlb.com/). All data is queried from the [MLB Stats API](https://statsapi.mlb.com) and ELT'd from scratch using Python and PySpark. Output player pages (front-end dev in progress) are hosted on AWS.
+A clone of some statistical tables presented on [MLB's Baseball Savant](https://baseballsavant.mlb.com/). All data is queried from the [MLB Stats API](https://statsapi.mlb.com) and ETL'd from scratch using Python and PySpark. Output player pages (front-end dev in progress) are hosted on AWS.
 
 ## Datamart Pipeline
 
+This is a transformation pipeline that runs on several AWS services to extract/transform/load data from the MLB Stats API and massage it into a useful format for analytics. The raw game data, [as it comes out of the API](https://github.com/zpgallegos/zavant/blob/master/docs/readme/744863.json), is overly detailed, heavily nested, and generally difficult to work with. The pipeline takes it from this cumbersome format to a set of datamart tables that are easy to produce data products from.
+
 1. **Download from API**: A [Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/zavant-download-games/lambda_function.py) runs nightly, downloading any new games that are not already present in the S3 bucket for raw game files.
-2. **Flatten and Preprocess the Game Data**: The raw game files are detailed and heavily nested (see an example [here](https://github.com/zpgallegos/zavant/blob/master/docs/readme/744863.json)). Upon landing in the raw bucket, a [second Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/zavant-process-raw-game/lambda_function.py) will run on event trigger to preprocess the data into a flat structure and save it to a dedicated bucket for each data type.
-3. **Spark Transformation**: A [PySpark script](https://github.com/zpgallegos/zavant/blob/master/aws/glue/load_datamart.py) runs nightly to transform the processed data into its final structure, convert to Parquet, and do an incremental load of any new files into the datamart tables. These are:
+2. **Flatten and Preprocess the Game Data**: The raw game files need to be picked apart and flattened before they'll be useful for anything. Upon landing in the raw bucket, a [second Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/zavant-process-raw-game/lambda_function.py) will run on event trigger to preprocess the file into a flat structure, saving several files to their own dedicated buckets in the process.
+3. **Spark Transformation**: A [PySpark script](https://github.com/zpgallegos/zavant/blob/master/aws/glue/load_datamart.py) runs to transform the processed data into its final structure, convert to Parquet, and do an incremental load of any new files into the datamart tables. The tables are:
     * D_PLAYERS: player attributes as recorded in their most recently played game
     * D_GAME_INFO: game-specific information such as date, venue, probable pitchers, etc.
     * D_GAME_TEAMS: team attributes for each of the two participant teams in each game
@@ -21,7 +23,7 @@ A clone of some statistical tables presented on [MLB's Baseball Savant](https://
 
 ## BI
 
-__switches hats__
+_switches hats_
 
 A [simple Nuxt app](https://github.com/zpgallegos/zavant/tree/master/web) is used to create files for the root site and player leaf pages to be hosted as static sites on S3. See [Mookie's page](http://zavant.zgallegos.com/players/605141/), for example.
 

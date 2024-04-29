@@ -6,6 +6,8 @@ A clone of some statistical tables presented on [MLB's Baseball Savant](https://
 
 This is a transformation pipeline that runs on several AWS services to extract/transform/load data from the MLB Stats API and massage it into a useful format for analytics. The raw game data, [as it comes out of the API](https://github.com/zpgallegos/zavant/blob/master/docs/readme/744863.json), is overly detailed, heavily nested, and generally difficult to work with. The pipeline takes it from this cumbersome format to a set of datamart tables that are easy to produce data products from.
 
+A high-level overview of the pipeline is as follows:
+
 1. **Download from API**: A [Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/lambda/zavant-download-games/function/lambda_function.py) runs nightly, downloading any new games that are not already present in the S3 bucket for raw game files.
 2. **Flatten and Preprocess the Game Data**: The raw game files need to be picked apart and flattened before they'll be useful for anything. Upon landing in the raw bucket, a [second Lambda function](https://github.com/zpgallegos/zavant/blob/master/aws/lambda/zavant-process-raw-game/function/lambda_function.py) will run on event trigger to preprocess the file into a flat structure, saving several files to their own dedicated buckets in the process.
 3. **Spark Transformation**: A [PySpark script](https://github.com/zpgallegos/zavant/blob/master/aws/glue/load_datamart.py) runs to transform the processed data into its final structure, convert to Parquet, and do an incremental load of any new files into the datamart tables. The tables are:

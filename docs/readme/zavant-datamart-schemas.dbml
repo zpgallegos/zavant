@@ -163,7 +163,7 @@ Table zavant.f_play_info {
   indexes {
     (game_pk, play_idx) [pk]
   }
-  Note: "Fact table for the individual plays that together compose a game"
+  Note: "Fact table for the individual plays and their outcomes that together compose the game"
 }
 
 Table zavant.f_play_events {

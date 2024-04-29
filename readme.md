@@ -16,10 +16,12 @@ A clone of some statistical tables presented on [MLB's Baseball Savant](https://
 4. (Runs once) AWS Glue crawlers are configured to crawl the datamart bucket and populate tables in the Glue Data Catalog, making the data available for BI purposes (e.g., Athena queries).
 
 **Datamart Model**
-![Datamart Model](zavant_datamart.png)
+![Datamart Model](docs/readme/zavant_datamart.png)
 [View on dbdiagram.io](https://dbdiagram.io/d/zavant_datamart-662ecbda5b24a634d003db68)  
 
-## 
+## BI
+
+__switches hats__
 
 A [simple Nuxt app](https://github.com/zpgallegos/zavant/tree/master/web) is used to create files for the root site and player leaf pages to be hosted as static sites on S3. See [Mookie's page](http://zavant.zgallegos.com/players/605141/), for example.
 

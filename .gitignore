@@ -1,11 +1,19 @@
-.vscode
-
 data/
 package/
+pandas/
 *.zip
 *.zsh
+policy.json
+temp*
+
+# dbt
+analytics/target/
+analytics/dbt_packages/
+analytics/logs/
 
 __pycache__/
+
+.vscode
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Node template

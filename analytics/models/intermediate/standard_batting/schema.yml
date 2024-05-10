@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: int_standard_batting__games
+    description: "Games Played (G) statistic for Standardized Batting table"
+    columns: &common
+      - name: partition_0
+      - name: player_id
+      - name: team_id
+      - name: stat
+      - name: value
+  - name: int_standard_batting__countstats
+    description: "Statistics for count events in Standardized Batting table"
+    columns:
+      - name: partition_0
+      - name: player_id
+      - name: team_id
+      - name: stat
+        tests:
+          - accepted_values:
+              values:
+                [
+                  "walk",
+                  "single",
+                  "double",
+                  "triple",
+                  "home_run",
+                  "intent_walk",
+                  "hit_by_pitch",
+                  "sac_bunt",
+                  "sac_fly",
+                  "catcher_interf",
+                  "grounded_into_double_play",
+                ]
+      - name: value
+  - name: int_standard_batting__plate_appearances
+    description: "Plate Appearances (PA) statistic for Standardized Batting table"
+    columns: *common

@@ -3,8 +3,10 @@ package/
 pandas/
 *.zip
 *.zsh
-policy.json
 temp*
+
+policy.json
+response.json
 
 # dbt
 analytics/target/

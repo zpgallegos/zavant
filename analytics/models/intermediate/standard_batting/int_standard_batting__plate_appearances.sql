@@ -5,7 +5,7 @@ with source as (
         when row_number() over(partition by game_pk order by play_idx desc) = 1 then 1
         else 0
         end as is_last_play
-    from zavant.f_play_info
+    from zavant.play_info
 ), filtered as (
     select *
     from source

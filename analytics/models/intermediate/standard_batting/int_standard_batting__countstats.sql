@@ -4,7 +4,7 @@ select
     offense_team_id as team_id,
     result_eventtype as stat,
     count(1) as value
-from zavant.f_play_info
+from zavant.play_info
 where 
     result_eventtype in(
         'walk',

@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: statcast_pitches
+    description: "Statcast data for all individual pitches thrown in each game."
+    columns:
+      - name: season
+      - name: pitch_id
+        tests:
+          - unique
+      - name: game_pk
+      - name: play_idx
+      - name: event_idx
+      - name: pitch_number
+      - name: pitch_type_code
+      - name: pitch_type_desc
+      - name: call_code
+      - name: call_desc
+      - name: count_balls
+      - name: count_strikes
+      - name: count_outs
+      - name: is_ball
+      - name: is_strike
+      - name: is_in_play
+      - name: is_out
+      - name: break_angle
+      - name: break_horizontal
+      - name: break_vertical
+      - name: break_length
+      - name: break_y
+      - name: spin_direction
+      - name: spin_rate
+      - name: coord_ax
+      - name: coord_ay
+      - name: coord_az
+      - name: coord_px
+      - name: coord_pz
+      - name: coord_pfxx
+      - name: coord_pfxz
+      - name: coord_vx0
+      - name: coord_vy0
+      - name: coord_vz0
+      - name: coord_x
+      - name: coord_x0
+      - name: coord_y
+      - name: coord_y0
+      - name: coord_z0
+      - name: start_speed
+      - name: end_speed
+      - name: extension
+      - name: plate_time
+      - name: hit_hardness
+      - name: hit_launchspeed
+      - name: hit_plate_location
+      - name: hit_trajectory
+      - name: batter_id
+      - name: batter_fullname
+      - name: batside_code
+      - name: batter_splits
+      - name: strikezonetop
+      - name: strikezonebottom
+      - name: pitcher_id
+      - name: pitcher_fullname
+      - name: pitchhand_code
+      - name: pitcher_splits
+      - name: zone
+        tests:
+          - not_null
+      - name: zone_type

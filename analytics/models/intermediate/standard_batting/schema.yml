@@ -30,7 +30,7 @@ models:
                   "sac_bunt",
                   "sac_fly",
                   "catcher_interf",
-                  "grounded_into_double_play",
+                  "grounded_into_double_play"
                 ]
       - name: value
   - name: int_standard_batting__plate_appearances

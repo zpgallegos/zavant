@@ -22,8 +22,8 @@ RAW_BUCKET = "zavant-statsapi-raw"
 PROC_BUCKET = "zavant-statsapi-flat"
 PROC_PREFIX = "json"
 
-RAW_LOCAL = "/Users/zpgallegos/Documents/zavant/data/zavant-statsapi-raw"
-PROC_LOCAL = "/Users/zpgallegos/Documents/zavant/data/zavant-statsapi-flat/json"
+RAW_LOCAL = "/Users/zpgallegos/Projects/zavant/data/zavant-statsapi-raw"
+PROC_LOCAL = "/Users/zpgallegos/Projects/zavant/data/zavant-statsapi-flat/json"
 
 
 def include_game(game: dict):

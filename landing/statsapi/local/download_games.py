@@ -18,7 +18,7 @@ from zavant_py.utils import sort_obj, flatten
 # -> environmental/event
 PAST_SEASONS = [2018, 2019, 2020, 2021, 2022, 2023]
 CURRENT_SEASON = 2024
-DATA_DIR = "/Users/zpgallegos/Documents/zavant/data/zavant-statsapi-raw"
+DATA_DIR = "/Users/zpgallegos/Projects/zavant/data/zavant-statsapi-raw"
 
 
 def include_game(game: dict):

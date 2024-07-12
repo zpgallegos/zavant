@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: statsapi
+    database: awsdatacatalog
+    schema: zavant
+    tables:
+      - name: game_boxscore
+      - name: game_info
+      - name: game_players
+      - name: game_teams
+      - name: play_events
+      - name: play_info
+      - name: play_runners

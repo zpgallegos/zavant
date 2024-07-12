@@ -3,7 +3,7 @@ import os
 from functools import reduce
 from pyspark.sql import SparkSession, functions as F, Window
 
-DATA_DIR = "/Users/zpgallegos/Documents/zavant/local/data/zavant-datamart"
+DATA_DIR = "/Users/zpgallegos/Projects/zavant/local/data/zavant-datamart"
 
 os.environ["SPARK_HOME"] = (
     "/Users/zpgallegos/opt/anaconda3/envs/zavant/lib/python3.12/site-packages/pyspark"

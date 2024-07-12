@@ -1,0 +1,58 @@
+with src as (
+    select * from {{ source('statsapi', 'play_events') }}
+)
+
+select
+    partition_0 as season,
+    cast(game_pk as varchar) || '-' || cast(play_idx as varchar) as play_id,
+    cast(game_pk as varchar) || '-' || cast(play_idx as varchar) || '-' || cast(event_idx as varchar) as pitch_id,
+    game_pk,
+    play_idx,
+    event_idx,
+    pitchnumber as pitch_number,
+    details_type_code as pitch_type_code,
+    details_type_description as pitch_type_desc,
+    details_call_code as call_code,
+    details_call_description as call_desc,
+    count_balls,
+    count_strikes,
+    count_outs,
+    details_isball as is_ball,
+    details_isstrike as is_strike,
+    details_isinplay as is_in_play,
+    details_isout as is_out,
+    pitchdata_breaks_breakangle as break_angle,
+    pitchdata_breaks_breakhorizontal as break_horizontal,
+    pitchdata_breaks_breakvertical as break_vertical,
+    pitchdata_breaks_breaklength as break_length,
+    pitchdata_breaks_breakverticalinduced as break_vertical_induced,
+    pitchdata_breaks_breaky as break_y,
+    pitchdata_breaks_spindirection as spin_direction,
+    pitchdata_breaks_spinrate as spin_rate,
+    pitchdata_coordinates_ax as coord_ax,
+    pitchdata_coordinates_ay as coord_ay,
+    pitchdata_coordinates_az as coord_az,
+    pitchdata_coordinates_px as coord_px,
+    pitchdata_coordinates_pz as coord_pz,
+    pitchdata_coordinates_pfxx as coord_pfxx,
+    pitchdata_coordinates_pfxz as coord_pfxz,
+    pitchdata_coordinates_vx0 as coord_vx0,
+    pitchdata_coordinates_vy0 as coord_vy0,
+    pitchdata_coordinates_vz0 as coord_vz0,
+    pitchdata_coordinates_x as coord_x,
+    pitchdata_coordinates_x0 as coord_x0,
+    pitchdata_coordinates_y as coord_y,
+    pitchdata_coordinates_y0 as coord_y0,
+    pitchdata_coordinates_z0 as coord_z0,
+    pitchdata_startspeed as start_speed,
+    pitchdata_endspeed as end_speed,
+    pitchdata_extension as extension,
+    pitchdata_platetime as plate_time,
+    hitdata_hardness as hit_hardness,
+    hitdata_launchspeed as hit_launchspeed,
+    hitdata_location as hit_plate_location,
+    hitdata_trajectory as hit_trajectory
+from src
+where 
+    ispitch
+    and not (pitchdata_coordinates_px is null or pitchdata_coordinates_pz is null)

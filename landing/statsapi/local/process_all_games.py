@@ -10,7 +10,7 @@ import multiprocessing
 
 CPU = multiprocessing.cpu_count()
 INTERP = "/Users/zpgallegos/opt/anaconda3/envs/zavant/bin/python3.12"
-DATA_DIR = "/Users/zpgallegos/Documents/zavant/data"
+DATA_DIR = "/Users/zpgallegos/Projects/zavant/data"
 IN_DIR = os.path.join(DATA_DIR, "zavant-statsapi-raw")
 OUT_DIR = os.path.join(DATA_DIR, "zavant-statsapi-flat", "json")
 SCRIPT = "process_game.py"

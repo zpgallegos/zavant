@@ -1,9 +1,13 @@
+with src as (
+    select * from {{ ref('stg_statsapi__box_games') }}
+)
+
 select
-    partition_0,
-    person_id as player_id,
+    season,
+    player_id,
     team_id,
     'games_played' as stat,
     count(distinct game_pk) as value
-from zavant.game_boxscore
-where gamestatus_isonbench = false
-group by 1, 2, 3, 4;
+from src
+where not is_on_bench
+group by 1, 2, 3, 4

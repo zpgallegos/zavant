@@ -4,7 +4,7 @@ import pandas as pd
 
 from zavant_py.utils import sort_keys
 
-DATA_DIR = "/Users/zpgallegos/Documents/zavant/data"
+DATA_DIR = "/Users/zpgallegos/Projects/zavant/data"
 PROC_DIR = f"{DATA_DIR}/zavant-statsapi-flat/json"
 OUT_DIR = f"{DATA_DIR}/pandas"
 

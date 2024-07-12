@@ -22,7 +22,7 @@ import argparse
 from zavant_py.utils import flatten, sort_obj
 
 # these both have equivalent S3 buckets
-DATA_DIR = "/Users/zpgallegos/Documents/zavant/data"
+DATA_DIR = "/Users/zpgallegos/Projects/zavant/data"
 IN_DIR = os.path.join(DATA_DIR, "zavant-statsapi-raw")
 OUT_DIR = os.path.join(DATA_DIR, "zavant-statsapi-flat", "json")
 

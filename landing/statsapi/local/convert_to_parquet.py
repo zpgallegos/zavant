@@ -7,7 +7,7 @@ os.environ["SPARK_HOME"] = (
     "/Users/zpgallegos/opt/anaconda3/envs/zavant/lib/python3.12/site-packages/pyspark"
 )
 
-DATA_PATH = "/Users/zpgallegos/Documents/zavant/data"
+DATA_PATH = "/Users/zpgallegos/Projects/zavant/data"
 IN_PATH = f"{DATA_PATH}/zavant-statsapi-flat/json"
 OUT_PATH = f"{DATA_PATH}/zavant-statsapi-flat/parquet"
 

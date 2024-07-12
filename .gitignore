@@ -4,6 +4,7 @@ pandas/
 *.zip
 *.zsh
 temp*
+_dep
 
 policy.json
 response.json

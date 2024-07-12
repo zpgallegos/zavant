@@ -34,8 +34,6 @@ models:
     staging:
       +materialized: view
     intermediate:
-      standard_batting:
-        +materialized: view
-    marts:
+      +materialized: ephemeral
+    products:
       +materialized: table
-    

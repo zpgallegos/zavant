@@ -10,8 +10,9 @@ with src as (
 ),
 pivoted as (
     select 
-        a.season,
         a.player_id,
+        a.season,
+        a.complete,
         a.team_id,
         sum(case when a.stat = 'games_played' then value else 0 end) as G,
         sum(case when a.stat = 'plate_appearances' then value else 0 end) as PA,
@@ -32,7 +33,7 @@ pivoted as (
         sum(case when a.stat = 'stolen_bases' then value else 0 end) as SB,
         sum(case when a.stat = 'caught_stealing' then value else 0 end) as CS
     from src a
-    group by 1, 2, 3
+    group by 1, 2, 3, 4
 ),
 calcd_1 as (
     select
@@ -52,7 +53,7 @@ calcd_3 as (
     select
         a.*,
         cast(a.H as double) / cast(a.AB as double) as BA,
-        cast(a.H + a.BB + a.HBP as double) / cast(a.AB + a.BB + a.HBP + a.SH + a.SF as double) as OBP,
+        cast(a.H + a.BB + a.HBP as double) / cast(a.AB + a.BB + a.HBP + a.SF as double) as OBP,
         cast(a.TB as double) / cast(a.AB as double) as SLG
     from calcd_2 a
     where a.AB > 0
@@ -67,9 +68,10 @@ calcd_4 as (
 select
     a.player_id,
     a.season,
-    b.team_id,
-    b.team_short,
-    case when b.league_name = 'National League' then 'NL' else 'AL' end as league_name_short,
+    a.complete,
+    a.team_id,
+    if(a.team_id = 0, 'TOT', b.team_short) as team_short,
+    if(a.team_id = 0, 'MLB', if(b.league_name = 'National League', 'NL', 'AL')) as league_name_short,
     a.G,
     a.PA,
     a.AB,
@@ -95,5 +97,5 @@ select
     a.IBB
 
 from calcd_4 a
-    inner join {{ ref('stg_statsapi__team_info') }} b on a.team_id = b.team_id
     inner join {{ ref('stg_statsapi__player_info') }} c on a.player_id = c.player_id
+    left join {{ ref('stg_statsapi__team_info') }} b on a.team_id = b.team_id

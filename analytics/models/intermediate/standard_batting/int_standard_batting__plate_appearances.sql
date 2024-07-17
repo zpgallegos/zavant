@@ -1,5 +1,5 @@
 with src as (
-    select * from {{ ref('stg_statsapi__play_info') }}
+    select * from {{ ref('int_standard_batting__play_info') }}
 ),
 with_last_play as (
     select
@@ -28,13 +28,30 @@ with_last_play as (
                 event_code like '%balk%'
                 )
         )
+),
+tbl as (
+    select
+        a.batter_id as player_id,
+        a.season,
+        a.is_single_team_player as complete,
+        a.offense_team_id as team_id,
+        'plate_appearances' as stat,
+        count(1) as value
+    from filtered a
+    group by 1, 2, 3, 4, 5
+),
+tot as (
+    select
+        a.batter_id as player_id,
+        a.season,
+        1 as complete,
+        0 as team_id,
+        'plate_appearances' as stat,
+        count(1) as value
+    from filtered a
+    where a.is_single_team_player = 0
+    group by 1, 2, 3, 4, 5
 )
 
-select
-    season,
-    batter_id as player_id,
-    offense_team_id as team_id,
-    'plate_appearances' as stat,
-    count(1) as value
-from filtered
-group by 1, 2, 3, 4
+select * from tbl union
+select * from tot

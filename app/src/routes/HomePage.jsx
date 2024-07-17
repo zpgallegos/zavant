@@ -18,7 +18,6 @@ const HomePage = () => {
             try {
                 const data = await fetchRoster();
                 setRoster(data);
-                console.log(data);
             } catch (error) {
                 setError(error);
             } finally {

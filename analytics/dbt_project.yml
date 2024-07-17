@@ -35,5 +35,7 @@ models:
       +materialized: view
     intermediate:
       +materialized: ephemeral
+      standard_batting:
+        +materialized: view
     products:
       +materialized: table

@@ -6,7 +6,7 @@ import StdMouseoverCell from "./StdMouseoverCell";
 import StdValuesRow from "./StdValuesRow";
 import { STATS } from "./defs";
 
-const StandardBattingTable = ({ data }) => {
+const StdTable = ({ data }) => {
     const tooltipInitialState = { obj: null, stat: null };
     const [tooltipState, setTooltipState] = useState(tooltipInitialState);
     const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
@@ -25,9 +25,6 @@ const StandardBattingTable = ({ data }) => {
         <div className=" bg-white shadow-lg rounded-lg overflow-hidden">
             <div className="bg-gray-800 p-4">
                 <h2 className="text-white text-2xl font-semibold">Standard Batting</h2>
-                <p className="italic text-sm text-white">
-                    Mouseover Stats for Context Distributions
-                </p>
             </div>
             <div className="overflow-x-auto">
                 <table className="min-w-full bg-white">
@@ -91,4 +88,4 @@ const StandardBattingTable = ({ data }) => {
     );
 };
 
-export default StandardBattingTable;
+export default StdTable;

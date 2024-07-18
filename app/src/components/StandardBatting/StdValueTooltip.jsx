@@ -3,14 +3,14 @@ import { select, scaleLinear, min, max, axisBottom, axisLeft } from "d3";
 import { Dims } from "../../utils.js";
 import { STATS, formatStat } from "./defs.js";
 
-const dims = new Dims(600, 400, 40, 20, 50, 20);
+const dims = new Dims(600, 400, 40, 20, 20, 30);
 
 const fetchTooltipData = async () => {
     const response = await fetch(`/data/standard_batting/tooltip.json`);
     return response.json();
 };
 
-const StatTooltip = ({ obj, stat, x, y }) => {
+const StdValueTooltip = ({ obj, stat, x, y }) => {
     const [tooltipData, setTooltipData] = useState(null);
     const svgRef = useRef(null);
     const isVisible = obj && stat;
@@ -44,6 +44,7 @@ const StatTooltip = ({ obj, stat, x, y }) => {
 
         const xScaler = scaleLinear()
             .domain([min(data, (d) => d.bin_left), max(data, (d) => d.bin_right)])
+            .nice()
             .range([0, dims.innerWidth]);
 
         const yScaler = scaleLinear()
@@ -59,22 +60,29 @@ const StatTooltip = ({ obj, stat, x, y }) => {
             .enter()
             .append("rect")
             .attr("x", (d, i) => xScaler(d.bin_left))
-            .attr("y", (d) => yScaler(d.count))
+            .attr("y", dims.innerHeight)
+            .attr("height", 0)
             .attr("width", (d) => xScaler(d.bin_right) - xScaler(d.bin_left))
-            .attr("height", (d) => dims.innerHeight - yScaler(d.count))
             .attr("fill", "#6200EE")
             .attr("stroke", "lightgray")
-            .attr("stroke-width", 0.5);
+            .attr("stroke-width", 0.5)
+            .transition()
+            .duration(250)
+            .attr("y", (d) => yScaler(d.count))
+            .attr("height", (d) => dims.innerHeight - yScaler(d.count));
 
         // vertical annotation line at player's value
         cont.append("line")
             .attr("x1", xScaler(val))
             .attr("x2", xScaler(val))
-            .attr("y1", 0)
+            .attr("y1", dims.innerHeight)
             .attr("y2", dims.innerHeight)
             .attr("stroke", "black")
             .attr("stroke-dasharray", "4 1")
-            .attr("stroke-width", 1);
+            .attr("stroke-width", 1)
+            .transition()
+            .delay(250)
+            .attr("y2", 0);
 
         // label for player's value/percentile at the annotation line
         const gap = 10; // between label and annotation line
@@ -83,6 +91,7 @@ const StatTooltip = ({ obj, stat, x, y }) => {
 
         const lab = cont
             .append("text")
+            .attr("opacity", 0)
             .attr("x", xScaler(val) + gap)
             .attr("y", 20)
             .attr("font-size", 12)
@@ -97,15 +106,20 @@ const StatTooltip = ({ obj, stat, x, y }) => {
         }
 
         cont.append("rect")
+            .attr("opacity", 0)
             .attr("x", bbox.x - px)
             .attr("y", bbox.y - px)
             .attr("width", bbox.width + 2 * px)
             .attr("height", bbox.height + 2 * py)
             .attr("fill", "#ddd")
             .attr("stroke", "black")
-            .attr("stroke-width", 0.5);
+            .attr("stroke-width", 0.5)
+            .transition()
+            .delay(500)
+            .attr("opacity", 1);
 
-        lab.raise(); // rectangle drawn on top of the text, fix
+        lab.transition().delay(500).attr("opacity", 1);
+        lab.raise();
 
         // chart title
         svg.append("text")
@@ -130,4 +144,4 @@ const StatTooltip = ({ obj, stat, x, y }) => {
     );
 };
 
-export default StatTooltip;
+export default StdValueTooltip;

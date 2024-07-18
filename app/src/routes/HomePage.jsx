@@ -35,9 +35,9 @@ const HomePage = () => {
             <h1 class="text-lg font-semibold">Player Directory</h1>
             {Object.entries(roster).map(([leagueId, league]) => (
                 <div key={leagueId} className="border p-4 m-4 rounded-lg">
-                    <h2 class="text-lg border-b border-black mb-1">
+                    {/* <h2 class="text-lg border-b border-black mb-1">
                         {league.league_name}
-                    </h2>
+                    </h2> */}
                     <div class="flex flex-col space-y-4">
                         {Object.entries(league.divisions).map(
                             ([divisionId, division]) => (

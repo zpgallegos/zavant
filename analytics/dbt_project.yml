@@ -31,11 +31,12 @@ clean-targets: # directories to be removed by `dbt clean`
 models:
   analytics:
     # Config indicated by + and applies to all files under models/example/
+    +file_format: parquet
     staging:
       +materialized: view
     intermediate:
       +materialized: ephemeral
-      standard_batting:
+      ab_outcomes:
         +materialized: view
     products:
       +materialized: table

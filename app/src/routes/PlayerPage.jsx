@@ -11,8 +11,10 @@ const fetchData = async (playerId, dataType) => {
 
 const PlayerPage = () => {
     const { playerId } = useParams();
+
     const [playerInfo, setPlayerInfo] = useState(null);
     const [stdData, setStdData] = useState(null);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -41,7 +43,7 @@ const PlayerPage = () => {
             <div className="mb-4">
                 <PlayerInfoCard info={playerInfo} />
             </div>
-            <div>
+            <div className="mb-4">
                 <StdTable data={stdData} />
             </div>
         </div>

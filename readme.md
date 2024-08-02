@@ -1,6 +1,8 @@
 # Baseball Zavant
 
-This repo is an ongoing baseball analytics project inspired by [MLB's Baseball Savant](https://baseballsavant.mlb.com/). The project makes holistic use of data services on AWS, including:
+This repo is an ongoing baseball analytics project inspired by [MLB's Baseball Savant](https://baseballsavant.mlb.com/). See [an example player page](http://zavant.zgallegos.com/players/605141), or find your favorite player in [the directory](http://zavant.zgallegos.com/).
+
+The project makes holistic use of AWS data services, including:
 
 - **Lambda** for nightly downloads of new data from the API and for basic preprocessing (e.g., unnesting)
 - **S3** for object storage and as a data lake for raw and processed data
@@ -30,12 +32,6 @@ The steps are:
 **Data Model**
 ![Data Model](docs/readme/zavant_datamart.png)◊
 [View on dbdiagram.io](https://dbdiagram.io/d/zavant_datamart-662ecbda5b24a634d003db68)
-
-## BI
-
-_switches hats_
-
-A [simple Nuxt app](https://github.com/zpgallegos/zavant/tree/master/web) is used to create files for the root site and player leaf pages to be hosted as static sites on S3. See [Mookie's page](http://zavant.zgallegos.com/players/605141/), for example.
 
 ## Copyright Notice
 

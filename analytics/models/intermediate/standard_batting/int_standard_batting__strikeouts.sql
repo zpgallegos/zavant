@@ -1,7 +1,7 @@
 with src as (
     select a.* 
     from {{ ref('int_standard_batting__play_info') }} a
-    where a.event_code like '%strikeout%'
+    where a.play_result_code like '%strikeout%'
 ),
 tbl as (
     select

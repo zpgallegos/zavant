@@ -1,13 +1,6 @@
 import { formatStat } from "./defs";
 
-
-
-const StdMouseoverCell = ({
-    obj,
-    stat,
-    mouseoverHandler,
-    mouseoutHandler,
-}) => {
+const StdMouseoverCell = ({ obj, stat, mouseoverHandler, mouseoutHandler }) => {
     return (
         <td
             className="py-3 px-4 text-left cursor-pointer"

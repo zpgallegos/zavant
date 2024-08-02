@@ -55,4 +55,4 @@ select
 from src
 where 
     ispitch
-    and not (pitchdata_coordinates_px is null or pitchdata_coordinates_pz is null)
+    --and not (pitchdata_coordinates_px is null or pitchdata_coordinates_pz is null)

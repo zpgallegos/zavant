@@ -14,18 +14,18 @@ with_last_play as (
     from with_last_play a
     where
         1=1
-        and is_complete 
+        and is_complete
         and not (
             count_outs = 3 and (
-                event_code like 'pickoff%' or
-                event_code like 'caught%' or
-                event_code like 'other_out%'
+                play_result_code like 'pickoff%' or
+                play_result_code like 'caught%' or
+                play_result_code like 'other_out%'
                 )
         ) and not (
             is_last_play = 1 and (
-                event_code like '%wild_pitch%' or
-                event_code like '%passed_ball%' or
-                event_code like '%balk%'
+                play_result_code like '%wild_pitch%' or
+                play_result_code like '%passed_ball%' or
+                play_result_code like '%balk%'
                 )
         )
 ),

@@ -1,5 +1,4 @@
 import json
-import numpy as np
 import pandas as pd
 
 from utils import connect_athena, convert

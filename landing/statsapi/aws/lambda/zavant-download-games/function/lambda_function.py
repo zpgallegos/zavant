@@ -95,7 +95,7 @@ def lambda_handler(event, context):
             game_pks.add(int(os.path.splitext(os.path.basename(file))[0]))
 
     # download the games
-    dld = 0
+    dld = []
     for start, end in get_season_dates(seasons):
         schedule = json.loads(requests.get(get_schedule_url(start, end)).text)
 
@@ -121,6 +121,10 @@ def lambda_handler(event, context):
                 s3.put_object(Bucket=bucket, Key=game_outfile, Body=game_json)
 
                 logging.info(f"Downloaded {game_pk}: {to_game_str(game)}")
-                dld += 1
+                dld.append(game_pk)
 
-    return {"statusCode": 200, "body": json.dumps(f"Completed, downloaded {dld} games")}
+    dld = sorted(dld)
+
+    logging.info(f"Downloaded {len(dld)} games: {dld}")
+
+    return {"downloaded_games": dld}

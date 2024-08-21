@@ -1,6 +1,8 @@
 # Baseball Zavant
 
-This repo is an ongoing baseball analytics project inspired by [MLB's Baseball Savant](https://baseballsavant.mlb.com/). See [an example player page](http://zavant.zgallegos.com/players/605141), or find your favorite player in [the directory](http://zavant.zgallegos.com/). All products are built from [live game data](https://github.com/zpgallegos/zavant/blob/master/docs/readme/example-game-raw.json), queried and ETL'd from scratch from the [MLB Stats API](https://statsapi.mlb.com). (See the [copyright notice](#copyright-notice).)
+This repo is an ongoing baseball analytics project inspired by [MLB's Baseball Savant](https://baseballsavant.mlb.com/). See [an example player page](http://zavant.zgallegos.com/players/605141), or find your favorite player in [the directory](http://zavant.zgallegos.com/).
+
+All products are built from [live game data](https://github.com/zpgallegos/zavant/blob/master/docs/readme/example-game-raw.json), queried and ETL'd from scratch from the [MLB Stats API](https://statsapi.mlb.com). (See the [copyright notice](#copyright-notice).)
 
 The [front end](https://github.com/zpgallegos/zavant/tree/master/app) is built with **React**, with plots powered by **D3.js**.
 
@@ -14,6 +16,9 @@ The back end is built on **AWS** and makes use of a variety of services, includi
 -   The **AWS CLI** for sticking it all together and for local testing and development
 
 ## Data Download and Transformation Pipeline
+
+![Pipeline](landing/statsapi/aws/step-functions/pipeline.png.png)
+[Full Pipeline Definition](landing/statsapi/aws/step-functions/zavant-update-pipeline.json)
 
 The raw data, [as it comes out of the API](https://github.com/zpgallegos/zavant/blob/master/docs/readme/example-game-raw.json), is overly detailed, heavily nested, and generally difficult to work with for analytics purposes. This pipeline takes the data from the API into a minimally processed form in the S3 data lake, where it can be crawled and stored as a set of tables with baseball-logical organization. These tables are used as sources in the dbt project that produces the final marts and products.
 
@@ -31,7 +36,7 @@ The steps are:
     - play_runners: records all runner movement on each play
 
 **Data Model**
-![Data Model](docs/readme/zavant_datamart.png)◊
+![Data Model](docs/readme/zavant_datamart.png)
 [View on dbdiagram.io](https://dbdiagram.io/d/zavant_datamart-662ecbda5b24a634d003db68)
 
 ## Copyright Notice

@@ -18,7 +18,6 @@ The back end is built on **AWS** and makes use of a variety of services, includi
 ## Data Download and Transformation Pipeline
 
 ![Pipeline](landing/statsapi/aws/step-functions/pipeline.png)
-[Full Pipeline Definition](landing/statsapi/aws/step-functions/zavant-update-pipeline.json)
 
 The raw data, [as it comes out of the API](https://github.com/zpgallegos/zavant/blob/master/docs/readme/example-game-raw.json), is overly detailed, heavily nested, and generally difficult to work with for analytics purposes. This pipeline takes the data from the API into a minimally processed form in the S3 data lake, where it can be crawled and stored as a set of tables with baseball-logical organization. These tables are used as sources in the dbt project that produces the final marts and products.
 

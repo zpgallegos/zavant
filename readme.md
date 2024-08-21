@@ -12,8 +12,8 @@ The back end is built on **AWS** and makes use of a variety of services, includi
 -   **S3** as a data lake for raw and processed data and for other general object storage
 -   **Glue** for running scheduled Spark scripts/crawlers and for the data catalog as a central metadata store
 -   **Athena** as the source database for the **dbt** project and for interactive queries
--   **EventBridge** for basic orchestration
--   The **AWS CLI** for sticking it all together and for local testing and development
+-   **Step Functions** for basic orchestration
+-   The **AWS CLI** for local testing/development and deployment
 
 ## Data Download and Transformation Pipeline
 

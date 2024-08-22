@@ -3,7 +3,6 @@ import pyathena
 import subprocess
 import pandas as pd
 
-
 database = "zavant_dev"
 temp_bucket = "s3://aws-athena-query-results-995283862400-us-east-1-yfge1n3q/"
 dbt_bucket = "s3://zavant-dbt-dev/"

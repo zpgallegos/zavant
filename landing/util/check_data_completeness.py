@@ -22,9 +22,6 @@ RAW_BUCKET = "zavant-statsapi-raw"
 PROC_BUCKET = "zavant-statsapi-flat"
 PROC_PREFIX = "json"
 
-RAW_LOCAL = "/Users/zpgallegos/Projects/zavant/data/zavant-statsapi-raw"
-PROC_LOCAL = "/Users/zpgallegos/Projects/zavant/data/zavant-statsapi-flat/json"
-
 
 def include_game(game: dict):
     """
@@ -104,34 +101,7 @@ if __name__ == "__main__":
         else:
             proc[dname].append(file)
 
-    # get all local files that have been downloaded
-    local_raw = []
-    for root, _, files in os.walk(RAW_LOCAL):
-        for file in files:
-            if not file.endswith(".json"):
-                continue
-            dname, season = root.split("/")[-2:]
-            fname = f"{season}/{file}"
-            local_raw.append(fname)
-
-    # check the local files
-    local = {}
-    for root, _, files in os.walk(PROC_LOCAL):
-        for file in files:
-            if not file.endswith(".json"):
-                continue
-            dname, season = root.split("/")[-2:]
-            fname = f"{season}/{file}"
-            if dname not in local:
-                local[dname] = [fname]
-            else:
-                local[dname].append(fname)
-
     cloud_res = check(all_games, raw, proc)
-    local_res = check(all_games, local_raw, local)
 
     print("Cloud Results")
     print(json.dumps(cloud_res, indent=4))
-
-    print("\nLocal Results")
-    print(json.dumps(local_res, indent=4))

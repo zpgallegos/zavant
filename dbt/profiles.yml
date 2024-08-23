@@ -1,0 +1,13 @@
+zavant_mlb_analytics:
+  outputs:
+    dev:
+      type: athena
+      region_name: us-east-1
+      database: awsdatacatalog
+      schema: zavant_dev
+      threads: 1
+      s3_staging_dir: "{{ env_var('ZDBT_S3_STAGING_DIR') }}"
+      s3_data_dir: "{{ env_var('ZDBT_S3_DATA_DIR') }}"
+      aws_access_key_id: "{{ env_var('CLI_ACCESS_KEY_ID') }}"
+      aws_secret_access_key: "{{ env_var('CLI_SECRET_ACCESS_KEY') }}"
+  target: dev

@@ -1,0 +1,114 @@
+{
+    "Comment": "Download new MLB StatsAPI data, flatten/convert to parquet, and update data products",
+    "StartAt": "InitializeRunParameters",
+    "States": {
+        "InitializeRunParameters": {
+            "Comment": "Set parameters used for the run",
+            "Type": "Pass",
+            "Result": {
+                "checkTriggerRetryCount": 0,
+                "checkTriggerMaxRetries": 3
+            },
+            "Next": "DownloadNewGames",
+            "ResultPath": "$.runParams"
+        },
+        "DownloadNewGames": {
+            "Comment": "Download any game files not already present in the data lake",
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:<ACCT_ID>:function:zavant-download-games:$LATEST",
+            "Next": "CheckEventTriggerSuccessful",
+            "ResultPath": "$.downloadResult"
+        },
+        "CheckEventTriggerSuccessful": {
+            "Comment": "New file creations in the raw bucket trigger several writes to the flattened bucket, verify all expected files are present",
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:<ACCT_ID>:function:zavant-monitor-for-flattened:$LATEST",
+            "Next": "EvaluateEventTriggerCheck",
+            "InputPath": "$.downloadResult",
+            "ResultPath": "$.checkTriggerResult"
+        },
+        "EvaluateEventTriggerCheck": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.checkTriggerResult.ready",
+                    "BooleanEquals": true,
+                    "Next": "ConvertToParquet"
+                }
+            ],
+            "Default": "IncrementRetries"
+        },
+        "IncrementRetries": {
+            "Type": "Pass",
+            "Parameters": {
+                "checkTriggerRetryCount.$": "States.MathAdd($.runParams.checkTriggerRetryCount, 1)",
+                "checkTriggerMaxRetries.$": "$.runParams.checkTriggerMaxRetries"
+            },
+            "ResultPath": "$.runParams",
+            "Next": "CheckRetryCount"
+        },
+        "CheckRetryCount": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.runParams.checkTriggerRetryCount",
+                    "NumericGreaterThanPath": "$.runParams.checkTriggerMaxRetries",
+                    "Next": "FlattenTriggerFailed"
+                }
+            ],
+            "Default": "Wait"
+        },
+        "Wait": {
+            "Type": "Wait",
+            "Seconds": 10,
+            "Next": "CheckEventTriggerSuccessful"
+        },
+        "ConvertToParquet": {
+            "Comment": "Start a Glue ETL job to apply a set schema to the json data and convert to parquet",
+            "Type": "Task",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Parameters": {
+                "JobName": "convert_statsapi_json_to_parquet"
+            },
+            "Next": "UpdateDBTModels"
+        },
+        "FlattenTriggerFailed": {
+            "Type": "Fail",
+            "Error": "FileCheckFailed",
+            "Cause": "Maximum retries reached"
+        },
+        "UpdateDBTModels": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "LaunchType": "FARGATE",
+                "Cluster": "<cluster>",
+                "TaskDefinition": "<taskdefinition>",
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "Subnets": ["subnet-<id>", "subnet-<id>"],
+                        "SecurityGroups": ["sg-<id>"],
+                        "AssignPublicIp": "ENABLED"
+                    }
+                }
+            },
+            "Next": "SuccessState",
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.errorInfo",
+                    "Next": "ContainerError"
+                }
+            ]
+        },
+        "ContainerError": {
+            "Type": "Fail",
+            "Error": "ContainerError",
+            "Cause": "An error occurred during the container run",
+            "Comment": "Check the errorInfo field for more details"
+        },
+        "SuccessState": {
+            "Type": "Succeed"
+        }
+    }
+}

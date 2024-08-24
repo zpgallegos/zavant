@@ -2,7 +2,7 @@
 
 This repo is an ongoing baseball analytics project inspired by [MLB's Baseball Savant](https://baseballsavant.mlb.com/). All products are built from [live game data](https://github.com/zpgallegos/zavant/blob/master/docs/example-game-raw.json), queried and ETL'd from scratch from the [MLB Stats API](https://statsapi.mlb.com). (See the [copyright notice](#copyright-notice).)
 
-See [an example player page](http://zavant.zgallegos.com/players/605141), or find your favorite player in [the directory](http://zavant.zgallegos.com/).
+See <a target="_blank" href="http://zavant.zgallegos.com/players/605141">an example player page</a>, or find your favorite player in <a target="_blank" href="http://zavant.zgallegos.com/">the directory</a>.
 
 ## Transformation and App Update Pipeline
 

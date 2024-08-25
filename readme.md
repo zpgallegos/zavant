@@ -4,7 +4,7 @@ This repo is an ongoing baseball analytics project inspired by [MLB's Baseball S
 
 See [an example player page](http://zavant.zgallegos.com/players/605141), or find your favorite player in [the directory](http://zavant.zgallegos.com/).
 
-Products are currently reflecting stats from **6,453,850** events from **1,132,454** unique plays across **14,962** games.
+Products are currently reflecting stats calculated from **6,453,850** events from **1,132,454** unique plays across **14,962** games.
 
 ## Transformation and App Update Pipeline
 

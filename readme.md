@@ -16,7 +16,7 @@ Steps:
 
 1. **DownloadNewGames**: Download new game files from the API - [Lambda](https://github.com/zpgallegos/zavant/blob/master/landing/lambda/zavant-download-games/function/lambda_function.py)
 
-    - Raw game files that look like [this]([live game data](https://github.com/zpgallegos/zavant/blob/master/docs/example-game-raw.json)) are saved to S3
+    - Raw game files that look like [this](https://github.com/zpgallegos/zavant/blob/master/docs/example-game-raw.json) are saved to S3
 
 2. **CheckEventTriggerSuccessful**: Monitor processed for new files - [Lambda](https://github.com/zpgallegos/zavant/blob/master/landing/lambda/zavant-monitor-for-flattened/function/lambda_function.py)
 

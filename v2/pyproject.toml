@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zavant"
+version = "0.2.0"
+description = "An end-to-end, local-first MLB analytics platform"
+readme = "readme.md"
+requires-python = ">=3.9"
+authors = [{name = "Zavant contributors"}]
+dependencies = []
+
+[project.scripts]
+zavant = "zavant.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["zavant"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.9"
+typeCheckingMode = "standard"

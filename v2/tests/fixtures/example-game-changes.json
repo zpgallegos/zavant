@@ -1,0 +1,55 @@
+{
+  "copyright": "Copyright 2026 MLB Advanced Media, L.P.",
+  "totalItems": 2,
+  "totalEvents": 0,
+  "totalGames": 2,
+  "totalGamesInProgress": 0,
+  "dates": [
+    {
+      "date": "2026-08-07",
+      "totalItems": 1,
+      "totalEvents": 0,
+      "totalGames": 1,
+      "totalGamesInProgress": 0,
+      "games": [
+        {
+          "gamePk": 822863,
+          "gameDate": "2026-08-08T00:15:00Z",
+          "officialDate": "2026-08-07",
+          "gameType": "R",
+          "season": "2026",
+          "link": "/api/v1.1/game/822863/feed/live",
+          "status": {
+            "abstractGameState": "Final",
+            "codedGameState": "F",
+            "detailedState": "Final",
+            "statusCode": "F"
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-08-08",
+      "totalItems": 1,
+      "totalEvents": 0,
+      "totalGames": 1,
+      "totalGamesInProgress": 0,
+      "games": [
+        {
+          "gamePk": 823426,
+          "gameDate": "2026-08-08T22:05:00Z",
+          "officialDate": "2026-08-08",
+          "gameType": "R",
+          "season": "2026",
+          "link": "/api/v1.1/game/823426/feed/live",
+          "status": {
+            "abstractGameState": "Final",
+            "codedGameState": "F",
+            "detailedState": "Final",
+            "statusCode": "F"
+          }
+        }
+      ]
+    }
+  ]
+}

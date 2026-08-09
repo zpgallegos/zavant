@@ -1,0 +1,240 @@
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from uuid import UUID
+
+from zavant.contracts.game_changes import (
+    GameChangesContractError,
+    GameChangesRequest,
+    GameChangesResponse,
+)
+from zavant.storage.local_game_changes import (
+    GameChangesConflictError,
+    LocalGameChangesStore,
+)
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_CHANGES = (
+    REPOSITORY_ROOT / "tests" / "fixtures" / "example-game-changes.json"
+)
+UPDATED_SINCE = datetime(2026, 8, 8, tzinfo=timezone.utc)
+WINDOW_END = datetime(2026, 8, 9, tzinfo=timezone.utc)
+OBSERVED_AT = datetime(2026, 8, 9, 0, 1, tzinfo=timezone.utc)
+RUN_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+
+class GameChangesContractTests(unittest.TestCase):
+    """Tests for validation at the MLB game-changes boundary."""
+
+    def test_extracts_deduplicated_changed_games(self) -> None:
+        """Extract routing fields from a representative correction response."""
+
+        changes = GameChangesResponse.from_bytes(SAMPLE_CHANGES.read_bytes())
+
+        self.assertEqual(changes.total_items, 2)
+        self.assertEqual(changes.total_games, 2)
+        self.assertEqual(changes.game_pks, (822863, 823426))
+        self.assertEqual(
+            changes.changed_games[1].live_feed_link,
+            "/api/v1.1/game/823426/feed/live",
+        )
+
+    def test_rejects_game_without_live_feed_link(self) -> None:
+        """Reject a response that cannot route a changed game for retrieval."""
+
+        payload = json.loads(SAMPLE_CHANGES.read_bytes())
+        del payload["dates"][0]["games"][0]["link"]
+
+        with self.assertRaisesRegex(GameChangesContractError, "link must be"):
+            GameChangesResponse.from_bytes(json.dumps(payload).encode())
+
+    def test_request_requires_timezone_aware_boundaries(self) -> None:
+        """Reject a poll request whose watermark has no UTC offset."""
+
+        with self.assertRaisesRegex(ValueError, "UTC offset"):
+            GameChangesRequest(
+                updated_since=datetime(2026, 8, 8),
+                window_end=WINDOW_END,
+                page_number=0,
+                limit=1000,
+                offset=0,
+                source_uri="fixture://game-changes",
+            )
+
+
+class LocalGameChangesStoreTests(unittest.TestCase):
+    """Tests for immutable correction pages and their poll manifest."""
+
+    def setUp(self) -> None:
+        """Create an isolated change-feed store for each test."""
+
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.data_dir = Path(self.temporary_directory.name)
+        self.raw = SAMPLE_CHANGES.read_bytes()
+        self.changes = GameChangesResponse.from_bytes(self.raw)
+        self.store = LocalGameChangesStore(
+            self.data_dir,
+            clock=lambda: OBSERVED_AT,
+        )
+
+    def request(self, page_number: int = 0, offset: int = 0) -> GameChangesRequest:
+        """Build request metadata for a test page.
+
+        Args:
+            page_number: Zero-based logical page number.
+            offset: API result offset represented by the page.
+
+        Returns:
+            Valid poll request metadata.
+        """
+
+        return GameChangesRequest(
+            updated_since=UPDATED_SINCE,
+            window_end=WINDOW_END,
+            page_number=page_number,
+            limit=1000,
+            offset=offset,
+            source_uri="fixture://game-changes",
+        )
+
+    def test_lands_page_metadata_and_deduplicated_manifest(self) -> None:
+        """Persist source bytes and create a routable poll manifest."""
+
+        result = self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+
+        self.assertTrue(result.created)
+        self.assertEqual(result.response_path.read_bytes(), self.raw)
+        self.assertIn(
+            "game_changes/poll_date=2026-08-09/"
+            "run_id=00000000-0000-0000-0000-000000000001/page=0000",
+            result.response_path.as_posix(),
+        )
+
+        metadata = json.loads(result.metadata_path.read_text())
+        self.assertEqual(
+            metadata["contract"],
+            "mlb-stats-api-game-changes-page/v1",
+        )
+        self.assertEqual(
+            metadata["request"]["updated_since"],
+            "2026-08-08T00:00:00+00:00",
+        )
+
+        manifest = json.loads(result.manifest_path.read_text())
+        self.assertEqual(
+            manifest["contract"],
+            "mlb-stats-api-game-changes-manifest/v1",
+        )
+        self.assertEqual(len(manifest["pages"]), 1)
+        self.assertEqual(
+            [game["game_pk"] for game in manifest["changed_games"]],
+            [822863, 823426],
+        )
+        self.assertTrue(
+            all(
+                game["processing_status"] == "pending"
+                for game in manifest["changed_games"]
+            )
+        )
+
+    def test_same_page_is_idempotent(self) -> None:
+        """Report an existing identical page without duplicating its manifest."""
+
+        self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+
+        result = self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+
+        self.assertFalse(result.created)
+        manifest = json.loads(result.manifest_path.read_text())
+        self.assertEqual(len(manifest["pages"]), 1)
+        self.assertEqual(len(manifest["changed_games"]), 2)
+
+    def test_multiple_pages_merge_and_deduplicate_games(self) -> None:
+        """Merge page provenance while retaining one entry per changed game."""
+
+        first_result = self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+        self.store.land_page(
+            changes=self.changes,
+            request=self.request(page_number=1, offset=1000),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+
+        manifest = json.loads(first_result.manifest_path.read_text())
+        self.assertEqual(
+            [page["page_number"] for page in manifest["pages"]],
+            [0, 1],
+        )
+        self.assertEqual(len(manifest["changed_games"]), 2)
+
+    def test_refuses_different_content_for_the_same_page(self) -> None:
+        """Protect an immutable poll page from conflicting response bytes."""
+
+        self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+        changed_payload = json.loads(self.raw)
+        changed_payload["copyright"] = "different"
+        changed_raw = json.dumps(changed_payload).encode()
+        changed_response = GameChangesResponse.from_bytes(changed_raw)
+
+        with self.assertRaisesRegex(GameChangesConflictError, "different content"):
+            self.store.land_page(
+                changes=changed_response,
+                request=self.request(),
+                raw=changed_raw,
+                run_id=RUN_ID,
+            )
+
+    def test_refuses_conflicting_request_for_the_same_page(self) -> None:
+        """Protect immutable page provenance from a different request."""
+
+        self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+        conflicting_request = GameChangesRequest(
+            updated_since=UPDATED_SINCE,
+            window_end=WINDOW_END,
+            page_number=0,
+            limit=1000,
+            offset=1000,
+            source_uri="fixture://game-changes",
+        )
+
+        with self.assertRaisesRegex(GameChangesConflictError, "metadata conflicts"):
+            self.store.land_page(
+                changes=self.changes,
+                request=conflicting_request,
+                raw=self.raw,
+                run_id=RUN_ID,
+            )

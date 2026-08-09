@@ -1,11 +1,11 @@
-with src as (
+with
+
+src as (
     select * from {{ source('statsapi', 'play_events') }}
 )
 
 select
     partition_0 as season,
-    cast(game_pk as varchar) || '-' || cast(play_idx as varchar) as play_id,
-    cast(game_pk as varchar) || '-' || cast(play_idx as varchar) || '-' || cast(event_idx as varchar) as pitch_id,
     game_pk,
     play_idx,
     event_idx,
@@ -46,13 +46,17 @@ select
     pitchdata_coordinates_z0 as coord_z0,
     pitchdata_startspeed as start_speed,
     pitchdata_endspeed as end_speed,
-    pitchdata_extension as extension,
+    pitchdata_extension as pitch_extension,
     pitchdata_platetime as plate_time,
     hitdata_hardness as hit_hardness,
     hitdata_launchspeed as hit_launchspeed,
     hitdata_location as hit_plate_location,
-    hitdata_trajectory as hit_trajectory
+    hitdata_trajectory as hit_trajectory,
+    cast(game_pk as varchar) || '-' || cast(play_idx as varchar) as play_id,
+    cast(game_pk as varchar)
+    || '-'
+    || cast(play_idx as varchar)
+    || '-'
+    || cast(event_idx as varchar) as pitch_id
 from src
-where 
-    ispitch
-    --and not (pitchdata_coordinates_px is null or pitchdata_coordinates_pz is null)
+where ispitch

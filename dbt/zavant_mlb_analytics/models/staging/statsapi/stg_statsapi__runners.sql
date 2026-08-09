@@ -4,8 +4,6 @@ with src as (
 
 select
     a.partition_0 as season,
-    cast(a.game_pk as varchar) || '-' || cast(a.play_idx as varchar) as play_id,
-    cast(a.game_pk as varchar) || '-' || cast(a.play_idx as varchar) || '-' || cast(a.runner_idx as varchar) as movement_id,
     a.details_runner_id as runner_id,
     a.details_runner_fullname as runner_fullname,
     a.game_pk,
@@ -23,6 +21,11 @@ select
     a.details_isscoringevent as is_scoring_event,
     a.details_earned as is_earned,
     a.details_teamunearned as is_team_unearned,
-    a.details_responsiblepitcher_id as responsible_pitcher_id
-
-from src a
+    a.details_responsiblepitcher_id as responsible_pitcher_id,
+    cast(a.game_pk as varchar) || '-' || cast(a.play_idx as varchar) as play_id,
+    cast(a.game_pk as varchar)
+    || '-'
+    || cast(a.play_idx as varchar)
+    || '-'
+    || cast(a.runner_idx as varchar) as movement_id
+from src as a

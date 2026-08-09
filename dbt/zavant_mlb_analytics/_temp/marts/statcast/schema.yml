@@ -6,7 +6,7 @@ models:
     columns:
       - name: season
       - name: pitch_id
-        tests:
+        data_tests:
           - unique
       - name: game_pk
       - name: play_idx
@@ -64,6 +64,6 @@ models:
       - name: pitchhand_code
       - name: pitcher_splits
       - name: zone
-        tests:
+        data_tests:
           - not_null
       - name: zone_type

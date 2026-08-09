@@ -22,21 +22,20 @@ clean-targets: # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
 
-# Configuring models
+# Configuring models 
 # Full documentation: https://docs.getdbt.com/docs/configuring-models
 
-# In this example config, we tell dbt to build all models in the example/
-# directory as views. These settings can be overridden in the individual model
-# files using the `{{ config(...) }}` macro.
 models:
   zavant_mlb_analytics:
     # Config indicated by + and applies to all files under models/example/
     +file_format: parquet
+    utilities:
+      +materialized: ephemeral
     staging:
       +materialized: view
     intermediate:
       +materialized: ephemeral
-      ab_outcomes:
-        +materialized: view
+    marts:
+      +materialized: table
     products:
       +materialized: table

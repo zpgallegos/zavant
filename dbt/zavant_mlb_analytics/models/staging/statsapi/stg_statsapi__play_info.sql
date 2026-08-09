@@ -1,10 +1,11 @@
-with src as (
+with
+
+src as (
     select * from {{ source('statsapi', 'play_info') }}
 )
 
 select
     a.partition_0 as season,
-    cast(a.game_pk as varchar) || '-' || cast(a.play_idx as varchar) as play_id,
     a.game_pk,
     a.play_idx,
     a.offense_team_id,
@@ -34,6 +35,6 @@ select
     a.matchup_splits_menonbase as men_on_base,
     a.matchup_postonfirst_id as postonfirst_id,
     a.matchup_postonsecond_id as postonsecond_id,
-    a.matchup_postonthird_id as postonthird_id
-
-from src a
+    a.matchup_postonthird_id as postonthird_id,
+    cast(a.game_pk as varchar) || '-' || cast(a.play_idx as varchar) as play_id
+from src as a

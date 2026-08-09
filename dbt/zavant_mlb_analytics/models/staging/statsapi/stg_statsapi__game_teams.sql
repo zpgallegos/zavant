@@ -1,11 +1,17 @@
-with src as (
+with
+
+src as (
+    select * from {{ source('statsapi', 'game_teams') }}
+),
+
+ordered as (
     select
         *,
-        row_number() over(partition by a.team_id order by a.game_pk desc) as rn
-    from {{ source('statsapi', 'game_teams') }} a
+        row_number() over (partition by team_id order by game_pk desc) as rn
+    from src
 )
 
-select 
+select
     a.team_id,
     a.abbreviation as team_short,
     a.franchisename as team_loc,
@@ -15,5 +21,5 @@ select
     a.division_name,
     a.league_id,
     a.league_name
-from src a
+from ordered as a
 where a.rn = 1

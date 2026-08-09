@@ -11,7 +11,9 @@ select
     a.weight,
     a.current_age,
     case
-    when a.birthcountry = 'USA' then a.birthcity || ', ' || a.birthstateprovince
-    else a.birthcity || ', ' || a.birthcountry
+        when
+            a.birthcountry = 'USA'
+            then a.birthcity || ', ' || a.birthstateprovince
+        else a.birthcity || ', ' || a.birthcountry
     end as birthplace
-from src a
+from src as a

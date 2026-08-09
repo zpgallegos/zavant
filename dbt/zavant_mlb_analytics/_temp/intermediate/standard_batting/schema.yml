@@ -16,7 +16,7 @@ models:
       - name: player_id
       - name: team_id
       - name: stat
-        tests:
+        data_tests:
           - accepted_values:
               values:
                 [

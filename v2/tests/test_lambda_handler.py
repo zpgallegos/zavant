@@ -5,7 +5,6 @@ import unittest
 
 from zavant.clients.mlb_stats_api import RetrievedResource
 from zavant.lambda_handler import (
-    DEFAULT_INITIAL_SCHEDULE_DATE,
     LambdaConfiguration,
     build_lambda_application,
 )
@@ -59,18 +58,24 @@ class EmptyDailyApi:
 
 
 class LambdaConfigurationTests(unittest.TestCase):
-    def test_requires_bucket_and_uses_documented_schedule_bootstrap(self) -> None:
+    def test_requires_bucket_and_explicit_bootstrap_boundaries(self) -> None:
         with self.assertRaises(ValueError):
             LambdaConfiguration.from_environment({})
 
+        with self.assertRaisesRegex(ValueError, "INITIAL_SCHEDULE_DATE"):
+            LambdaConfiguration.from_environment(
+                {"ZAVANT_S3_BUCKET": "example-bucket"}
+            )
+
         configuration = LambdaConfiguration.from_environment(
-            {"ZAVANT_S3_BUCKET": "example-bucket"}
+            {
+                "ZAVANT_S3_BUCKET": "example-bucket",
+                "ZAVANT_INITIAL_SCHEDULE_DATE": "2026-08-03",
+                "ZAVANT_INITIAL_CORRECTION_WATERMARK": "2026-08-03T00:00:00Z",
+            }
         )
 
-        self.assertEqual(
-            configuration.initial_schedule_date,
-            DEFAULT_INITIAL_SCHEDULE_DATE,
-        )
+        self.assertEqual(configuration.initial_schedule_date, date(2026, 8, 3))
 
 
 class LambdaApplicationTests(unittest.TestCase):

@@ -21,12 +21,12 @@ Parameters:
     Description: Content-addressed deployment package key; empty omits Lambda.
   InitialScheduleDate:
     Type: String
-    Default: "2026-08-03"
-    AllowedPattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    Default: ""
+    AllowedPattern: "^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
     Description: First schedule date used while no schedule watermark exists.
   InitialCorrectionWatermark:
     Type: String
-    Default: "2026-08-03T00:00:00Z"
+    Default: ""
     Description: First correction boundary used while no correction watermark exists.
 
 Conditions:

@@ -3,7 +3,7 @@
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Dict, Optional, Protocol, Set
+from typing import Dict, FrozenSet, Optional, Protocol, Set
 from uuid import UUID, uuid5
 
 from zavant.acquisition.backfill_modes import SeasonBackfillMode
@@ -34,6 +34,9 @@ class MlbBackfillGamesApi(Protocol):
 class BackfillMonthResult:
     manifest_path: ArtifactReference
     counters: Dict[str, int]
+    scheduled_game_pks: FrozenSet[int]
+    eligible_game_pks: FrozenSet[int]
+    deferred_game_pks: FrozenSet[int]
 
 
 class BackfillMonthProcessor:
@@ -89,6 +92,9 @@ class BackfillMonthProcessor:
             manifest_path = loaded.manifest_path
 
         statuses = self.schedule_store.game_statuses(manifest_path)
+        scheduled_game_pks = {game.game_pk for game in schedule.scheduled_games}
+        eligible_game_pks: Set[int] = set()
+        deferred_game_pks: Set[int] = set()
         counters = {
             "correction_candidates": 0,
             "deferred": 0,
@@ -97,6 +103,7 @@ class BackfillMonthProcessor:
             "failed": 0,
             "missing_before": 0,
             "revisions_created": 0,
+            "schedule_entries": schedule.total_games,
             "scheduled": len(schedule.scheduled_games),
             "selected": 0,
             "skipped": 0,
@@ -126,6 +133,7 @@ class BackfillMonthProcessor:
                     )
                 continue
             if decision.disposition == EligibilityDisposition.DEFERRED:
+                deferred_game_pks.add(game.game_pk)
                 counters["deferred"] += 1
                 if statuses[game.game_pk] not in terminal:
                     self.schedule_store.record_game_outcome(
@@ -136,6 +144,7 @@ class BackfillMonthProcessor:
                     )
                 continue
 
+            eligible_game_pks.add(game.game_pk)
             if game.game_pk in resolved_game_pks:
                 if statuses[game.game_pk] not in terminal:
                     self.schedule_store.record_game_outcome(
@@ -207,7 +216,13 @@ class BackfillMonthProcessor:
         counters["failed"] = self.schedule_store.finalize_manifest(manifest_path)[
             "failed"
         ]
-        return BackfillMonthResult(manifest_path, counters)
+        return BackfillMonthResult(
+            manifest_path=manifest_path,
+            counters=counters,
+            scheduled_game_pks=frozenset(scheduled_game_pks),
+            eligible_game_pks=frozenset(eligible_game_pks),
+            deferred_game_pks=frozenset(deferred_game_pks),
+        )
 
     def _download(
         self,

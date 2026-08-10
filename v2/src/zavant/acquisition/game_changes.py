@@ -5,6 +5,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional, Protocol
 from uuid import UUID, uuid4
 
+from zavant.acquisition.correction_pagination import (
+    CorrectionPaginationGuard,
+    GameChangesPollingError,
+)
 from zavant.clients.mlb_stats_api import RetrievedResource
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.storage.artifacts import ArtifactReference
@@ -42,10 +46,6 @@ class MlbGameChangesApi(Protocol):
         """
 
         ...
-
-
-class GameChangesPollingError(RuntimeError):
-    """Raised when a correction poll cannot establish a complete page set."""
 
 
 class GameChangesWatermarkNotInitializedError(GameChangesPollingError):
@@ -173,11 +173,10 @@ class GameChangesPoller:
 
         run_id = self.run_id_factory()
         page_number = 0
-        expected_page_count = 1
-        source_item_count = 0
+        pagination = CorrectionPaginationGuard(limit, max_pages, "correction poll")
         http_attempts = 0
         manifest_path: Optional[ArtifactReference] = None
-        while page_number < expected_page_count:
+        while page_number < pagination.expected_page_count:
             offset = page_number * limit
             retrieved = self.api.get_game_changes(
                 updated_since=query_updated_since,
@@ -187,26 +186,7 @@ class GameChangesPoller:
             )
             http_attempts += retrieved.attempts
             changes = GameChangesResponse.from_bytes(retrieved.body)
-            if page_number == 0:
-                source_item_count = changes.total_items
-                expected_page_count = max(
-                    1,
-                    (source_item_count + limit - 1) // limit,
-                )
-                if expected_page_count > max_pages:
-                    raise GameChangesPollingError(
-                        f"poll requires {expected_page_count} pages, exceeding "
-                        f"max_pages={max_pages}"
-                    )
-            expected_items_on_page = min(
-                limit,
-                max(0, source_item_count - offset),
-            )
-            if len(changes.changed_games) != expected_items_on_page:
-                raise GameChangesPollingError(
-                    f"page {page_number} contains {len(changes.changed_games)} "
-                    f"deduplicated games; expected {expected_items_on_page}"
-                )
+            pagination.accept(page_number, changes)
 
             request = GameChangesRequest(
                 updated_since=query_updated_since,
@@ -227,10 +207,11 @@ class GameChangesPoller:
 
         if manifest_path is None:
             raise AssertionError("correction poll completed without landing a page")
+        pagination.validate_complete()
         summary = self.changes_store.finalize_manifest(
             manifest_path=manifest_path,
-            expected_page_count=expected_page_count,
-            expected_total_items=source_item_count,
+            expected_page_count=pagination.expected_page_count,
+            expected_total_items=pagination.total_items,
             watermark_before=watermark_before,
         )
         self.watermark_store.advance(
@@ -247,7 +228,7 @@ class GameChangesPoller:
             watermark_after=watermark_after,
             manifest_path=manifest_path,
             page_count=summary["pages"],
-            source_item_count=summary["source_items"],
+            source_item_count=pagination.total_items,
             changed_game_count=summary["changed_games"],
             http_attempts=http_attempts,
         )

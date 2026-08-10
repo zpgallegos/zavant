@@ -275,6 +275,32 @@ class GameChangesPollerTests(unittest.TestCase):
 
         self.assertIsNone(self.watermark_store.read())
 
+    def test_changing_total_does_not_advance_watermark(self) -> None:
+        api = FakeGameChangesApi(
+            {
+                0: retrieved(game_changes_raw([823426], total_items=2), 0),
+                1: retrieved(game_changes_raw([823427], total_items=3), 1),
+            }
+        )
+
+        with self.assertRaisesRegex(GameChangesPollingError, "totalItems changed"):
+            self.poller(api).poll(initial_watermark=INITIAL_WATERMARK, limit=1)
+
+        self.assertIsNone(self.watermark_store.read())
+
+    def test_repeated_game_across_pages_does_not_advance_watermark(self) -> None:
+        api = FakeGameChangesApi(
+            {
+                0: retrieved(game_changes_raw([823426], total_items=2), 0),
+                1: retrieved(game_changes_raw([823426], total_items=2), 1),
+            }
+        )
+
+        with self.assertRaisesRegex(GameChangesPollingError, "repeated gamePk"):
+            self.poller(api).poll(initial_watermark=INITIAL_WATERMARK, limit=1)
+
+        self.assertIsNone(self.watermark_store.read())
+
 
 class PathGameChangesWatermarkStoreTests(unittest.TestCase):
     def setUp(self) -> None:

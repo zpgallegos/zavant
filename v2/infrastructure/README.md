@@ -35,7 +35,7 @@ The CloudFormation stack owns the durable S3 bucket, the daily acquisition Lambd
 
 ## Validate
 
-Validation is read-only. The project defaults to account `995283862400` and Region `us-east-1`; credentials still come from the normal AWS CLI configuration:
+Validation is read-only. The project defaults to Region `us-east-1`; credentials still come from the normal AWS CLI configuration:
 
 ```shell
 make infra-validate
@@ -50,16 +50,19 @@ The production stack follows the `{project}-{workload}-{environment}` convention
 For a brand-new stack, bootstrap the artifact bucket and role first:
 
 ```shell
-make infra-bootstrap
+make infra-bootstrap EXPECTED_AWS_ACCOUNT_ID=<12-digit-account-id>
 ```
 
 Then build the zip, upload it to the generated bucket, and create or update the function:
 
 ```shell
-make infra-deploy
+make infra-deploy \
+  EXPECTED_AWS_ACCOUNT_ID=<12-digit-account-id> \
+  INITIAL_SCHEDULE_DATE=<YYYY-MM-DD> \
+  INITIAL_CORRECTION_WATERMARK=<UTC-timestamp>
 ```
 
-The existing production stack is already bootstrapped, so ordinary updates need only `make infra-deploy`. Before deployment, the target verifies that active credentials belong to account `995283862400`. It builds and import-checks the package, uploads it under a content-addressed key, acknowledges generated-name IAM resources, and updates the stack in `us-east-1`.
+The existing production stack is already bootstrapped, so ordinary updates use the same deploy command and explicit parameters. Before deployment, the target verifies that active credentials belong to the supplied account. It builds and import-checks the package, uploads it under a content-addressed key, acknowledges generated-name IAM resources, and updates the stack in `us-east-1`.
 
 To retrieve the generated bucket name afterward:
 

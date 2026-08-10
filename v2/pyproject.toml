@@ -11,6 +11,13 @@ requires-python = ">=3.9"
 authors = [{name = "Zavant contributors"}]
 dependencies = ["boto3>=1.40,<2"]
 
+[project.optional-dependencies]
+dev = [
+    "coverage==7.15.4",
+    "pyright==1.1.411",
+    "ruff==0.16.2",
+]
+
 [project.scripts]
 zavant = "zavant.cli:main"
 
@@ -24,7 +31,15 @@ where = ["src"]
 branch = true
 source = ["zavant"]
 
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
 [tool.pyright]
 include = ["src", "tests"]
 pythonVersion = "3.9"
 typeCheckingMode = "standard"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

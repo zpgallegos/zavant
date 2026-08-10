@@ -45,6 +45,11 @@ class RawGameStore(Protocol):
 
         Returns:
             Revision identity, artifact references, hashes, and creation state.
+
+        Notes:
+            Callers must supply a current live-endpoint observation. A newly
+            observed content revision becomes current by observation order;
+            the store cannot infer source chronology from the response body.
         """
 
         ...

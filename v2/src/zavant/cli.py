@@ -4,8 +4,9 @@ import argparse
 from datetime import date, datetime, timedelta, timezone
 from importlib import import_module
 import json
+import logging
 from pathlib import Path
-from typing import Any, Optional, Sequence, cast
+from typing import Any, Dict, Optional, Protocol, Sequence, cast
 from uuid import UUID
 
 from zavant.acquisition.bounded_games import BoundedGameAcquirer
@@ -40,6 +41,13 @@ from zavant.storage.bundles import (
     s3_acquisition_storage,
 )
 from zavant.storage.s3_objects import S3Client
+
+
+class StsClient(Protocol):
+    """AWS identity operation used to guard explicit S3 backfills."""
+
+    def get_caller_identity(self) -> Dict[str, Any]:
+        ...
 
 
 def parse_iso_date(value: str) -> date:
@@ -182,9 +190,9 @@ def build_parser() -> argparse.ArgumentParser:
     backfill.add_argument("--started-at", type=parse_utc_datetime, default=None)
     backfill.add_argument(
         "--storage",
-        choices=("auto", "local", "s3"),
-        default="auto",
-        help="auto uses S3 when a bucket is configured, otherwise local",
+        choices=("local", "s3"),
+        default="local",
+        help="local is the safe default; S3 must be selected explicitly",
     )
     backfill.add_argument("--bucket", help="override ZAVANT_S3_BUCKET")
     backfill.add_argument("--prefix", help="override ZAVANT_S3_PREFIX")
@@ -300,6 +308,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.command == "backfill-seasons":
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+        )
         if (args.run_id is None) != (args.started_at is None):
             parser.error("--run-id and --started-at must be supplied together")
         try:
@@ -345,13 +357,28 @@ def _backfill_storage(
     data_dir: Path,
 ) -> AcquisitionStorage:
     bucket = args.bucket or settings.s3_bucket
-    use_s3 = args.storage == "s3" or (args.storage == "auto" and bucket is not None)
-    if not use_s3:
+    if args.storage != "s3":
         return local_acquisition_storage(data_dir)
     if not bucket:
         raise ValueError("S3 backfill storage requires --bucket or ZAVANT_S3_BUCKET")
+    expected_account_id = settings.expected_aws_account_id
+    if not expected_account_id:
+        raise ValueError(
+            "S3 backfill storage requires ZAVANT_EXPECTED_AWS_ACCOUNT_ID"
+        )
     boto3 = import_module("boto3")
     client_factory = getattr(boto3, "client")
+    sts_client = cast(StsClient, client_factory("sts"))
+    try:
+        identity = sts_client.get_caller_identity()
+    except Exception as exc:
+        raise OSError("failed to verify the active AWS account") from exc
+    actual_account_id = identity.get("Account")
+    if actual_account_id != expected_account_id:
+        raise ValueError(
+            f"refusing S3 backfill: expected AWS account {expected_account_id}, "
+            f"received {actual_account_id}"
+        )
     client = cast(S3Client, client_factory("s3"))
     return s3_acquisition_storage(
         client=client,

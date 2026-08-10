@@ -12,6 +12,8 @@ from zavant.acquisition.season_backfill import (
 )
 from zavant.clients.mlb_stats_api import RetrievedResource
 from zavant.contracts.raw_game import RawGameResponse
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.models import SeasonBackfillCheckpoint
 from zavant.storage.path_raw import PathRawGameStore
 from zavant.storage.path_schedule import PathScheduleStore
 from zavant.storage.path_season_backfills import PathSeasonBackfillStore
@@ -48,7 +50,7 @@ def raw_game(game_pk: int, marker: int = 1) -> bytes:
     ).encode()
 
 
-def schedule(games: Tuple[int, ...]) -> bytes:
+def schedule(games: Tuple[int, ...], deferred_games: Tuple[int, ...] = ()) -> bytes:
     entries = [
         {
             "gamePk": game_pk,
@@ -57,7 +59,10 @@ def schedule(games: Tuple[int, ...]) -> bytes:
             "season": "2024",
             "gameType": "R",
             "link": f"/api/v1.1/game/{game_pk}/feed/live",
-            "status": {"codedGameState": "F", "detailedState": "Final"},
+            "status": {
+                "codedGameState": "S" if game_pk in deferred_games else "F",
+                "detailedState": "Scheduled" if game_pk in deferred_games else "Final",
+            },
         }
         for game_pk in games
     ]
@@ -94,10 +99,16 @@ class FakeBackfillApi:
         game_responses: Dict[int, bytes],
         changed_games: Tuple[int, ...] = (),
         scheduled_games_by_month: Optional[Dict[int, Tuple[int, ...]]] = None,
+        deferred_games: Tuple[int, ...] = (),
     ) -> None:
         self.game_responses = game_responses
         self.changed_games = changed_games
-        self.scheduled_games_by_month = scheduled_games_by_month or {4: (1, 2)}
+        self.scheduled_games_by_month = (
+            scheduled_games_by_month
+            if scheduled_games_by_month is not None
+            else {4: (1, 2)}
+        )
+        self.deferred_games = deferred_games
         self.schedule_calls: List[Tuple[date, date, int]] = []
         self.game_calls: List[int] = []
         self.change_calls: List[Tuple[datetime, int, int, int]] = []
@@ -107,7 +118,10 @@ class FakeBackfillApi:
     ) -> RetrievedResource:
         self.schedule_calls.append((start_date, end_date, sport_id))
         games = self.scheduled_games_by_month.get(start_date.month, ())
-        return retrieved(schedule(games), "https://example.test/api/v1/schedule")
+        return retrieved(
+            schedule(games, self.deferred_games),
+            "https://example.test/api/v1/schedule",
+        )
 
     def get_live_game(self, game_pk: int) -> RetrievedResource:
         self.game_calls.append(game_pk)
@@ -128,6 +142,36 @@ class FakeBackfillApi:
             changes(self.changed_games),
             "https://example.test/api/v1/game/changes",
         )
+
+
+class SimulatedCrashError(RuntimeError):
+    pass
+
+
+class CrashAfterCheckpointStore(PathSeasonBackfillStore):
+    def __init__(self, storage_root: Path) -> None:
+        super().__init__(storage_root, clock=lambda: STARTED_AT + timedelta(minutes=1))
+        self.crash_after_next_checkpoint = True
+
+    def advance_checkpoint(
+        self,
+        season: int,
+        expected_current: Optional[datetime],
+        updated_since: datetime,
+        run_id: UUID,
+        manifest_path: ArtifactReference,
+    ) -> SeasonBackfillCheckpoint:
+        checkpoint = super().advance_checkpoint(
+            season,
+            expected_current,
+            updated_since,
+            run_id,
+            manifest_path,
+        )
+        if self.crash_after_next_checkpoint:
+            self.crash_after_next_checkpoint = False
+            raise SimulatedCrashError("process stopped after checkpoint publication")
+        return checkpoint
 
 
 class SeasonBackfillCoordinatorTests(unittest.TestCase):
@@ -287,6 +331,71 @@ class SeasonBackfillCoordinatorTests(unittest.TestCase):
         details = manifest["season_runs"][0]["details"]
         self.assertEqual(details["selected"], 1)
         self.assertEqual(details["downloaded"], 1)
+
+    def test_resume_recovers_checkpoint_committed_before_parent_manifest(self) -> None:
+        self.land_existing()
+        self.backfill_store = CrashAfterCheckpointStore(self.data_dir)
+        api = FakeBackfillApi(
+            {1: raw_game(1, marker=2), 2: raw_game(2)},
+            changed_games=(1,),
+        )
+
+        with self.assertRaises(SimulatedCrashError):
+            self.coordinator(api).run(
+                (SEASON,),
+                mode=SeasonBackfillMode.RECONCILE,
+                run_id=RUN_ID,
+                started_at=STARTED_AT,
+            )
+
+        resumed = self.coordinator(api).run(
+            (SEASON,),
+            mode=SeasonBackfillMode.RECONCILE,
+            run_id=RUN_ID,
+            started_at=STARTED_AT,
+        )
+
+        self.assertTrue(resumed.successful)
+        self.assertTrue(resumed.resumed)
+        self.assertEqual(len(api.change_calls), 1)
+        manifest = json.loads(Path(resumed.manifest_path.uri).read_text())
+        self.assertTrue(manifest["season_runs"][0]["details"]["checkpoint_recovered"])
+
+    def test_future_season_is_rejected_before_api_requests(self) -> None:
+        api = FakeBackfillApi({})
+
+        with self.assertRaisesRegex(ValueError, "future backfill seasons"):
+            self.coordinator(api).run((STARTED_AT.year + 1,))
+
+        self.assertEqual(api.schedule_calls, [])
+
+    def test_empty_season_is_not_complete(self) -> None:
+        api = FakeBackfillApi({}, scheduled_games_by_month={})
+
+        result = self.coordinator(api).run((SEASON,))
+
+        self.assertFalse(result.successful)
+        self.assertIsNone(self.backfill_store.read_checkpoint(SEASON))
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
+        details = manifest["season_runs"][0]["details"]
+        self.assertEqual(details["unique_scheduled"], 0)
+        self.assertEqual(details["unique_eligible"], 0)
+
+    def test_unresolved_deferred_game_prevents_completion(self) -> None:
+        api = FakeBackfillApi(
+            {},
+            scheduled_games_by_month={4: (1,)},
+            deferred_games=(1,),
+        )
+
+        result = self.coordinator(api).run((SEASON,))
+
+        self.assertFalse(result.successful)
+        self.assertIsNone(self.backfill_store.read_checkpoint(SEASON))
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
+        details = manifest["season_runs"][0]["details"]
+        self.assertEqual(details["unresolved_deferred"], 1)
+        self.assertEqual(details["unresolved_deferred_game_pks"], [1])
 
 
 if __name__ == "__main__":

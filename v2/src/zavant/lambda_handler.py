@@ -19,7 +19,6 @@ from zavant.storage.s3_objects import S3Client
 
 
 Clock = Callable[[], datetime]
-DEFAULT_INITIAL_SCHEDULE_DATE = date(2026, 8, 3)
 
 
 class DailyAcquisitionFailedError(RuntimeError):
@@ -31,12 +30,12 @@ class LambdaConfiguration:
     """Environment-owned configuration for the scheduled Lambda application."""
 
     bucket: str
+    initial_schedule_date: date
+    initial_correction_watermark: datetime
     prefix: str = "lake"
     mlb_api_base_url: str = DEFAULT_BASE_URL
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_attempts: int = 3
-    initial_schedule_date: Optional[date] = DEFAULT_INITIAL_SCHEDULE_DATE
-    initial_correction_watermark: Optional[datetime] = None
     schedule_lookback_days: int = 7
     correction_overlap_seconds: float = 300.0
     correction_limit: int = 1000
@@ -74,12 +73,10 @@ class LambdaConfiguration:
                 values, "ZAVANT_HTTP_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS
             ),
             max_attempts=_integer_value(values, "ZAVANT_HTTP_MAX_ATTEMPTS", 3),
-            initial_schedule_date=_optional_date(
-                values,
-                "ZAVANT_INITIAL_SCHEDULE_DATE",
-                DEFAULT_INITIAL_SCHEDULE_DATE,
+            initial_schedule_date=_required_date(
+                values, "ZAVANT_INITIAL_SCHEDULE_DATE"
             ),
-            initial_correction_watermark=_optional_timestamp(
+            initial_correction_watermark=_required_timestamp(
                 values, "ZAVANT_INITIAL_CORRECTION_WATERMARK"
             ),
             schedule_lookback_days=_integer_value(
@@ -265,29 +262,26 @@ def _float_value(values: Mapping[str, str], name: str, default: float) -> float:
         raise ValueError(f"{name} must be numeric") from exc
 
 
-def _optional_date(
+def _required_date(
     values: Mapping[str, str],
     name: str,
-    default: Optional[date] = None,
-) -> Optional[date]:
+) -> date:
     value = values.get(name)
-    if value is None:
-        return default
-    if not value.strip():
-        return None
+    if value is None or not value.strip():
+        raise ValueError(f"{name} must be configured")
     try:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"{name} must use YYYY-MM-DD format") from exc
 
 
-def _optional_timestamp(
+def _required_timestamp(
     values: Mapping[str, str],
     name: str,
-) -> Optional[datetime]:
+) -> datetime:
     value = values.get(name)
     if value is None or not value.strip():
-        return None
+        raise ValueError(f"{name} must be configured")
     normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
         parsed = datetime.fromisoformat(normalized)

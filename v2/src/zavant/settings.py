@@ -14,6 +14,7 @@ class Settings:
     mlb_api_base_url: str
     s3_bucket: Optional[str]
     s3_prefix: str
+    expected_aws_account_id: Optional[str]
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -25,4 +26,6 @@ class Settings:
             ).rstrip("/"),
             s3_bucket=os.getenv("ZAVANT_S3_BUCKET") or None,
             s3_prefix=os.getenv("ZAVANT_S3_PREFIX", "lake").strip("/"),
+            expected_aws_account_id=os.getenv("ZAVANT_EXPECTED_AWS_ACCOUNT_ID")
+            or None,
         )

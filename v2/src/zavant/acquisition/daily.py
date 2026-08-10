@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+import logging
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID, uuid4
 
@@ -35,6 +36,7 @@ from zavant.storage.protocols import DailyRunStore
 
 Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
+LOGGER = logging.getLogger(__name__)
 BRANCH_ERRORS = (
     GameChangesContractError,
     GameChangesConflictError,
@@ -170,6 +172,12 @@ class DailyAcquisitionCoordinator:
                 "sport_id": sport_id,
             },
         )
+        LOGGER.info(
+            "daily acquisition started run_id=%s through_date=%s manifest=%s",
+            run_id,
+            resolved_through_date,
+            started_run.manifest_path,
+        )
 
         self._run_correction_discovery(
             manifest_path=started_run.manifest_path,
@@ -193,6 +201,12 @@ class DailyAcquisitionCoordinator:
             if any(value == "failed" for value in branch_statuses.values())
             else "complete"
         )
+        LOGGER.info(
+            "daily acquisition finished run_id=%s status=%s branches=%s",
+            run_id,
+            status,
+            branch_statuses,
+        )
         return DailyAcquisitionResult(
             run_id=run_id,
             started_at=started_at,
@@ -211,6 +225,7 @@ class DailyAcquisitionCoordinator:
         overlap: timedelta,
         max_pages: int,
     ) -> None:
+        LOGGER.info("daily branch started branch=correction_discovery")
         try:
             result: GameChangesPollingResult = self.changes_poller.poll(
                 initial_watermark=initial_watermark,
@@ -228,8 +243,10 @@ class DailyAcquisitionCoordinator:
             "complete",
             result.as_dict(),
         )
+        LOGGER.info("daily branch finished branch=correction_discovery status=complete")
 
     def _run_correction_processing(self, manifest_path: ArtifactReference) -> None:
+        LOGGER.info("daily branch started branch=correction_processing")
         try:
             result: CorrectedGameProcessingResult = (
                 self.corrected_game_processor.process_all()
@@ -243,6 +260,10 @@ class DailyAcquisitionCoordinator:
             "complete" if result.successful else "failed",
             result.as_dict(),
         )
+        LOGGER.info(
+            "daily branch finished branch=correction_processing status=%s",
+            "complete" if result.successful else "failed",
+        )
 
     def _run_schedule_discovery(
         self,
@@ -252,6 +273,7 @@ class DailyAcquisitionCoordinator:
         lookback_days: int,
         sport_id: int,
     ) -> None:
+        LOGGER.info("daily branch started branch=schedule_discovery")
         try:
             result: ScheduleDiscoveryResult = self.schedule_discoverer.discover(
                 initial_start_date=initial_start_date,
@@ -270,10 +292,22 @@ class DailyAcquisitionCoordinator:
             else ("complete" if result.successful else "failed"),
             result.as_dict(),
         )
+        LOGGER.info(
+            "daily branch finished branch=schedule_discovery status=%s",
+            result.status
+            if result.status == "skipped"
+            else ("complete" if result.successful else "failed"),
+        )
 
     def _record_error(
         self, manifest_path: ArtifactReference, branch: str, exc: Exception
     ) -> None:
+        LOGGER.info(
+            "daily branch failed branch=%s error_type=%s error=%s",
+            branch,
+            type(exc).__name__,
+            str(exc)[:500],
+        )
         self.run_store.record_branch(
             manifest_path,
             branch,

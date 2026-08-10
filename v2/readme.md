@@ -112,7 +112,7 @@ Every later run reads its checkpoint from `.local/lake/state/mlb_stats_api/game_
 PYTHONPATH=src .venv/bin/python -m zavant poll-game-changes
 ```
 
-The poller captures its new checkpoint before making a request, subtracts a five-minute safety overlap from the prior checkpoint, follows the source's offset pagination, and lands every response page. It then validates and marks the run manifest `complete` before atomically replacing the watermark document. Any request, validation, landing, or finalization failure leaves the old watermark unchanged; already landed pages remain as evidence in an `open` manifest.
+The poller captures its new checkpoint before making a request, subtracts a five-minute safety overlap from the prior checkpoint, follows the source's offset pagination, and lands every response page. It rejects changing totals or repeated games observed across pages before checkpoint advancement. MLB does not expose an upper query boundary or document snapshot isolation, so this detects common result-set movement but cannot prove a perfectly stable source snapshot. It then validates and marks the run manifest `complete` before atomically replacing the watermark document. Any request, validation, landing, or finalization failure leaves the old watermark unchanged; already landed pages remain as evidence in an `open` manifest.
 
 The overlap intentionally allows a game to appear again in later polls. Manifests deduplicate game IDs, and raw-game content addressing makes reprocessing idempotent. The daily workflow processes every completed correction manifest containing pending or failed games. Only games with an existing raw revision are re-downloaded; schedule discovery remains the sole owner of initial portfolio inclusion. Per-game failures remain retriable in the source correction manifest.
 
@@ -152,15 +152,16 @@ acquisition, and lands selected games through the same immutable revision store.
 The recommended mode is `reconcile`:
 
 ```shell
-export ZAVANT_S3_BUCKET=zavant-acquisition-prod-acquisitionbucket-bzvr2u2jpr5l
+export ZAVANT_S3_BUCKET=<AcquisitionBucketName-output>
+export ZAVANT_EXPECTED_AWS_ACCOUNT_ID=<12-digit-account-id>
 PYTHONPATH=src .venv/bin/python -m zavant backfill-seasons \
-  2019 2020 2021 --mode reconcile
+  2019 2020 2021 --mode reconcile --storage s3
 ```
 
-Storage selection defaults to `auto`: it uses S3 when `ZAVANT_S3_BUCKET` (or
-`--bucket`) is set and otherwise uses `.local/lake`. Use `--storage local` or
-`--storage s3` to make that choice explicit. Credentials remain owned by the
-normal AWS SDK credential chain.
+Storage defaults to `.local/lake` even when an S3 bucket is present in the
+environment. Cloud backfills require explicit `--storage s3`, a bucket, and an
+expected AWS account ID. Credentials remain owned by the normal AWS SDK
+credential chain.
 
 The three modes have intentionally different costs and guarantees:
 
@@ -193,6 +194,13 @@ Each season advances its own checkpoint only after all twelve monthly manifests
 finish without game failures. The daily correction watermark is never read or
 modified by this workflow.
 
+Progress is emitted to stderr at run, season, and month boundaries. A season
+cannot complete when it is future-dated, empty, has no eligible games, or leaves
+regular-season games unresolved in a deferred state. The parent manifest records
+unique scheduled and eligible counts, duplicate schedule entries, and unresolved
+game IDs. Resumption also recognizes a checkpoint already committed by the same
+run, closing the crash window between checkpoint and parent-manifest publication.
+
 ## S3 and Lambda application boundary
 
 The production handler is `zavant.lambda_handler.lambda_handler`. It composes the same API client, persistence state machines, and daily coordinator used locally, replacing only the object-storage machinery. Required Lambda configuration starts with:
@@ -200,7 +208,7 @@ The production handler is `zavant.lambda_handler.lambda_handler`. It composes th
 ```text
 ZAVANT_S3_BUCKET=<bucket-name>
 ZAVANT_S3_PREFIX=lake
-ZAVANT_INITIAL_SCHEDULE_DATE=2026-08-03
+ZAVANT_INITIAL_SCHEDULE_DATE=<first-schedule-date>
 ZAVANT_INITIAL_CORRECTION_WATERMARK=<first-known-safe-UTC-timestamp>
 ```
 

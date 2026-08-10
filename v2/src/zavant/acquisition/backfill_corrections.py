@@ -5,7 +5,9 @@ from datetime import datetime
 from typing import List, Protocol, Set, Tuple
 from uuid import UUID
 
-from zavant.acquisition.game_changes import GameChangesPollingError
+from zavant.acquisition.correction_pagination import (
+    CorrectionPaginationGuard,
+)
 from zavant.clients.mlb_stats_api import RetrievedResource
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.storage.artifacts import ArtifactReference
@@ -62,9 +64,12 @@ class SeasonCorrectionDiscoverer:
         changed_game_pks: Set[int] = set()
         evidence: List[ArtifactReference] = []
         page_number = 0
-        expected_pages = 1
-        total_items = 0
-        while page_number < expected_pages:
+        pagination = CorrectionPaginationGuard(
+            limit,
+            max_pages,
+            f"season {season} reconciliation",
+        )
+        while page_number < pagination.expected_page_count:
             offset = page_number * limit
             retrieved = self.api.get_game_changes(
                 updated_since=updated_since,
@@ -73,20 +78,7 @@ class SeasonCorrectionDiscoverer:
                 offset=offset,
             )
             changes = GameChangesResponse.from_bytes(retrieved.body)
-            if page_number == 0:
-                total_items = changes.total_items
-                expected_pages = max(1, (total_items + limit - 1) // limit)
-                if expected_pages > max_pages:
-                    raise GameChangesPollingError(
-                        f"season {season} reconciliation requires {expected_pages} "
-                        f"pages, exceeding max_pages={max_pages}"
-                    )
-            expected_items = min(limit, max(0, total_items - offset))
-            if len(changes.changed_games) != expected_items:
-                raise GameChangesPollingError(
-                    f"correction page {page_number} contains "
-                    f"{len(changes.changed_games)} games; expected {expected_items}"
-                )
+            pagination.accept(page_number, changes)
             request = GameChangesRequest(
                 updated_since=updated_since,
                 window_end=window_end,
@@ -110,6 +102,7 @@ class SeasonCorrectionDiscoverer:
             )
             page_number += 1
 
+        pagination.validate_complete()
         response_paths = tuple(evidence)
         normalized_game_pks = tuple(sorted(changed_game_pks))
         self.store.complete_changes(
@@ -117,7 +110,7 @@ class SeasonCorrectionDiscoverer:
             season=season,
             updated_since=updated_since,
             window_end=window_end,
-            total_items=total_items,
+            total_items=pagination.total_items,
             response_paths=response_paths,
             changed_game_pks=normalized_game_pks,
         )

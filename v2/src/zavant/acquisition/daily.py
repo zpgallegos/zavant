@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID, uuid4
 
@@ -23,14 +22,15 @@ from zavant.acquisition.schedule_discovery import (
 from zavant.clients.mlb_stats_api import MlbStatsApiError
 from zavant.contracts.game_changes import GameChangesContractError
 from zavant.contracts.schedule import ScheduleContractError
-from zavant.storage.local_daily_runs import LocalDailyRunStore
-from zavant.storage.local_game_changes import GameChangesConflictError
-from zavant.storage.local_game_changes_watermark import (
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import (
+    GameChangesConflictError,
     GameChangesWatermarkConflictError,
+    RawGameConflictError,
+    ScheduleConflictError,
+    ScheduleWatermarkConflictError,
 )
-from zavant.storage.local_raw import RawGameConflictError
-from zavant.storage.local_schedule import ScheduleConflictError
-from zavant.storage.local_schedule_watermark import ScheduleWatermarkConflictError
+from zavant.storage.protocols import DailyRunStore
 
 
 Clock = Callable[[], datetime]
@@ -77,7 +77,7 @@ class DailyAcquisitionResult:
     run_id: UUID
     started_at: datetime
     through_date: date
-    manifest_path: Path
+    manifest_path: ArtifactReference
     status: str
     branch_statuses: Dict[str, str]
 
@@ -125,7 +125,7 @@ class DailyAcquisitionCoordinator:
         changes_poller: GameChangesPoller,
         corrected_game_processor: CorrectedGameProcessor,
         schedule_discoverer: ScheduleDiscoverer,
-        run_store: LocalDailyRunStore,
+        run_store: DailyRunStore,
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
@@ -242,7 +242,7 @@ class DailyAcquisitionCoordinator:
 
     def _run_correction_discovery(
         self,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
         initial_watermark: Optional[datetime],
         sport_id: int,
         limit: int,
@@ -278,7 +278,7 @@ class DailyAcquisitionCoordinator:
             result.as_dict(),
         )
 
-    def _run_correction_processing(self, manifest_path: Path) -> None:
+    def _run_correction_processing(self, manifest_path: ArtifactReference) -> None:
         """Run and record processing of all durable correction work.
 
         Args:
@@ -301,7 +301,7 @@ class DailyAcquisitionCoordinator:
 
     def _run_schedule_discovery(
         self,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
         initial_start_date: Optional[date],
         through_date: date,
         lookback_days: int,
@@ -336,7 +336,9 @@ class DailyAcquisitionCoordinator:
             result.as_dict(),
         )
 
-    def _record_error(self, manifest_path: Path, branch: str, exc: Exception) -> None:
+    def _record_error(
+        self, manifest_path: ArtifactReference, branch: str, exc: Exception
+    ) -> None:
         """Record a bounded branch failure in the daily manifest.
 
         Args:

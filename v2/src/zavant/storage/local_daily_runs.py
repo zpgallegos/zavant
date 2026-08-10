@@ -1,13 +1,21 @@
 """Durable local manifests for coordinated daily acquisition runs."""
 
-from dataclasses import dataclass
 from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Callable, Dict
 from uuid import UUID
 
-from zavant.storage._local_files import atomic_write, encode_json, read_json_object
+from zavant.storage._local_files import (
+    atomic_write,
+    encode_json,
+    local_artifact_path,
+    local_artifact_reference,
+    read_json_object,
+)
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import DailyRunConflictError
+from zavant.storage.models import StartedDailyRun
 
 
 Clock = Callable[[], datetime]
@@ -23,27 +31,6 @@ def utc_now() -> datetime:
     """
 
     return datetime.now(timezone.utc)
-
-
-class DailyRunConflictError(RuntimeError):
-    """Raised when a daily run manifest is malformed or conflicts."""
-
-
-@dataclass(frozen=True)
-class StartedDailyRun:
-    """Identity and path of a newly created daily run.
-
-    Attributes:
-        run_id: Unique daily coordinator run identifier.
-        started_at: UTC time captured before branch work.
-        through_date: Inclusive schedule discovery date.
-        manifest_path: Durable coordinator manifest.
-    """
-
-    run_id: UUID
-    started_at: datetime
-    through_date: date
-    manifest_path: Path
 
 
 class LocalDailyRunStore:
@@ -109,12 +96,12 @@ class LocalDailyRunStore:
             run_id=run_id,
             started_at=normalized_started_at,
             through_date=through_date,
-            manifest_path=manifest_path,
+            manifest_path=local_artifact_reference(self.data_dir, manifest_path),
         )
 
     def record_branch(
         self,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
         branch: str,
         status: str,
         details: Dict[str, Any],
@@ -137,7 +124,8 @@ class LocalDailyRunStore:
             raise ValueError(f"unsupported daily branch: {branch}")
         if status not in DAILY_BRANCH_STATUSES:
             raise ValueError(f"unsupported daily branch status: {status}")
-        manifest = self._read_manifest(manifest_path)
+        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
+        manifest = self._read_manifest(local_manifest_path)
         if manifest.get("status") != "running":
             raise DailyRunConflictError("finalized daily run cannot be updated")
         branches = manifest.get("branches")
@@ -154,9 +142,9 @@ class LocalDailyRunStore:
             "status": status,
         }
         manifest["updated_at"] = recorded_at
-        atomic_write(manifest_path, encode_json(manifest))
+        atomic_write(local_manifest_path, encode_json(manifest))
 
-    def finalize(self, manifest_path: Path) -> Dict[str, str]:
+    def finalize(self, manifest_path: ArtifactReference) -> Dict[str, str]:
         """Validate all branch outcomes and publish aggregate run status.
 
         Args:
@@ -170,7 +158,8 @@ class LocalDailyRunStore:
             OSError: If the manifest cannot be read or written.
         """
 
-        manifest = self._read_manifest(manifest_path)
+        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
+        manifest = self._read_manifest(local_manifest_path)
         branches = manifest.get("branches")
         if not isinstance(branches, dict):
             raise DailyRunConflictError("daily run branches are invalid")
@@ -199,7 +188,7 @@ class LocalDailyRunStore:
         manifest["status"] = run_status
         manifest["summary"] = statuses
         manifest["updated_at"] = finalized_at
-        atomic_write(manifest_path, encode_json(manifest))
+        atomic_write(local_manifest_path, encode_json(manifest))
         return statuses
 
     @staticmethod

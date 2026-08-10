@@ -253,7 +253,7 @@ class BoundedGameAcquirerTests(unittest.TestCase):
         self.assertEqual(api.schedule_calls, [(START_DATE, END_DATE, 1)])
         self.assertEqual(api.game_calls, [823514, 824726])
 
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["status"], "complete")
         self.assertEqual(manifest["summary"]["succeeded"], 2)
         self.assertTrue(manifest["games"][0]["revision_id"])
@@ -281,7 +281,7 @@ class BoundedGameAcquirerTests(unittest.TestCase):
         self.assertEqual(result.summary["skipped"], 1)
         self.assertEqual(result.summary["deferred"], 1)
         self.assertEqual(api.game_calls, [])
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["games"][0]["reason"], "unsupported_game_type")
         self.assertEqual(manifest["games"][1]["reason"], "game_not_final")
 
@@ -314,7 +314,7 @@ class BoundedGameAcquirerTests(unittest.TestCase):
         self.assertEqual(result.summary["failed"], 1)
         self.assertEqual(result.summary["succeeded"], 1)
         self.assertEqual(api.game_calls, [823514, 824726])
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(
             manifest["games"][0]["error_type"],
             "MlbStatsApiResponseError",
@@ -366,7 +366,7 @@ class BoundedGameAcquirerTests(unittest.TestCase):
         self.assertEqual(second_result.schedule_http_attempts, 0)
         self.assertEqual(len(api.schedule_calls), 1)
         self.assertEqual(api.game_calls, [823514, 824726, 823514])
-        manifest = json.loads(second_result.manifest_path.read_text())
+        manifest = json.loads(Path(second_result.manifest_path.uri).read_text())
         self.assertEqual(len(manifest["games"][0]["processing_attempts"]), 2)
         self.assertEqual(len(manifest["games"][1]["processing_attempts"]), 1)
 
@@ -394,7 +394,7 @@ class BoundedGameAcquirerTests(unittest.TestCase):
         result = self.acquirer(api).acquire(START_DATE, END_DATE)
 
         self.assertEqual(result.summary["failed"], 1)
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["games"][0]["error_type"], "GameIdentityError")
         self.assertFalse(
             list(self.data_dir.rglob("game_pk=999999")),

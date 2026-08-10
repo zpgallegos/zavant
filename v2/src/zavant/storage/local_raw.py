@@ -1,19 +1,21 @@
 """Local implementation of revision-aware raw-game storage."""
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Optional
 
 from zavant.contracts.raw_game import RawGameResponse
 from zavant.storage._local_files import (
     atomic_write,
     canonical_json_sha256,
     encode_json,
+    local_artifact_reference,
     read_json_object,
     sha256_bytes,
 )
+from zavant.storage.errors import RawGameConflictError
+from zavant.storage.models import LandedRawGame
 
 
 Clock = Callable[[], datetime]
@@ -27,59 +29,6 @@ def utc_now() -> datetime:
     """
 
     return datetime.now(timezone.utc)
-
-
-class RawGameConflictError(RuntimeError):
-    """Raised when a revision path contains inconsistent content."""
-
-
-@dataclass(frozen=True)
-class LandedRawGame:
-    """Result of landing a raw-game revision.
-
-    Attributes:
-        game_pk: MLB's primary identifier for the game.
-        season: Season partition containing the object.
-        revision_id: Canonical content hash identifying the revision.
-        previous_revision_id: Revision that was current before this one.
-        object_path: Path containing the unmodified source bytes.
-        metadata_path: Path containing revision provenance.
-        current_pointer_path: Path identifying the current revision.
-        raw_sha256: Digest of the exact source bytes.
-        canonical_sha256: Digest of canonicalized JSON content.
-        created: Whether this call created a revision.
-    """
-
-    game_pk: int
-    season: int
-    revision_id: str
-    previous_revision_id: Optional[str]
-    object_path: Path
-    metadata_path: Path
-    current_pointer_path: Path
-    raw_sha256: str
-    canonical_sha256: str
-    created: bool
-
-    def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable representation of the result.
-
-        Returns:
-            Landing result fields suitable for CLI output or run metadata.
-        """
-
-        return {
-            "canonical_sha256": self.canonical_sha256,
-            "created": self.created,
-            "current_pointer_path": str(self.current_pointer_path),
-            "game_pk": self.game_pk,
-            "metadata_path": str(self.metadata_path),
-            "object_path": str(self.object_path),
-            "previous_revision_id": self.previous_revision_id,
-            "raw_sha256": self.raw_sha256,
-            "revision_id": self.revision_id,
-            "season": self.season,
-        }
 
 
 class LocalRawGameStore:
@@ -218,9 +167,11 @@ class LocalRawGameStore:
             season=game.season,
             revision_id=revision_id,
             previous_revision_id=revision_previous_id,
-            object_path=object_path,
-            metadata_path=metadata_path,
-            current_pointer_path=current_pointer_path,
+            object_path=local_artifact_reference(self.data_dir, object_path),
+            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
+            current_pointer_path=local_artifact_reference(
+                self.data_dir, current_pointer_path
+            ),
             raw_sha256=stored_raw_checksum,
             canonical_sha256=canonical_checksum,
             created=created,

@@ -66,13 +66,13 @@ class LocalRawGameStoreTests(unittest.TestCase):
         )
 
         self.assertTrue(result.created)
-        self.assertEqual(result.object_path.read_bytes(), self.raw)
+        self.assertEqual(Path(result.object_path.uri).read_bytes(), self.raw)
         self.assertIn(
             f"season=2024/game_pk=744863/revision={result.revision_id}",
-            result.object_path.as_posix(),
+            result.object_path.key,
         )
 
-        metadata = json.loads(result.metadata_path.read_text())
+        metadata = json.loads(Path(result.metadata_path.uri).read_text())
         self.assertEqual(metadata["contract"], "mlb-stats-api-raw-game/v2")
         self.assertEqual(metadata["canonical_sha256"], result.canonical_sha256)
         self.assertEqual(metadata["raw_sha256"], result.raw_sha256)
@@ -80,7 +80,7 @@ class LocalRawGameStoreTests(unittest.TestCase):
         self.assertEqual(metadata["trigger"], "initial")
         self.assertIsNone(metadata["previous_revision_id"])
 
-        current = json.loads(result.current_pointer_path.read_text())
+        current = json.loads(Path(result.current_pointer_path.uri).read_text())
         self.assertEqual(current["revision_id"], result.revision_id)
 
     def test_same_payload_is_idempotent(self) -> None:
@@ -151,8 +151,8 @@ class LocalRawGameStoreTests(unittest.TestCase):
             second_result.previous_revision_id,
             first_result.revision_id,
         )
-        self.assertTrue(first_result.object_path.exists())
-        current = json.loads(second_result.current_pointer_path.read_text())
+        self.assertTrue(Path(first_result.object_path.uri).exists())
+        current = json.loads(Path(second_result.current_pointer_path.uri).read_text())
         self.assertEqual(current["revision_id"], second_result.revision_id)
 
         old_result = self.store.land(
@@ -161,7 +161,7 @@ class LocalRawGameStoreTests(unittest.TestCase):
             "fixture://sample-game",
         )
         current_after_old_revision = json.loads(
-            old_result.current_pointer_path.read_text()
+            Path(old_result.current_pointer_path.uri).read_text()
         )
         self.assertFalse(old_result.created)
         self.assertEqual(
@@ -173,7 +173,7 @@ class LocalRawGameStoreTests(unittest.TestCase):
         """Fail when stored content no longer matches its revision identifier."""
 
         result = self.store.land(self.game, self.raw, "fixture://sample-game")
-        result.object_path.write_bytes(b"different source bytes")
+        Path(result.object_path.uri).write_bytes(b"different source bytes")
 
         with self.assertRaisesRegex(RawGameConflictError, "invalid JSON"):
             self.store.land(self.game, self.raw, "fixture://sample-game")

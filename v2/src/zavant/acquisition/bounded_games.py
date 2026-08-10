@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Protocol
 from uuid import UUID, uuid4
 
@@ -20,8 +19,9 @@ from zavant.contracts.schedule import (
     ScheduleRequest,
     ScheduleResponse,
 )
-from zavant.storage.local_raw import LocalRawGameStore, RawGameConflictError
-from zavant.storage.local_schedule import LocalScheduleStore, ScheduleConflictError
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import RawGameConflictError, ScheduleConflictError
+from zavant.storage.protocols import RawGameStore, ScheduleStore
 
 
 Clock = Callable[[], datetime]
@@ -95,7 +95,7 @@ class BoundedGameAcquisitionResult:
 
     run_id: UUID
     requested_at: datetime
-    manifest_path: Path
+    manifest_path: ArtifactReference
     status: str
     summary: Dict[str, int]
     schedule_created: bool
@@ -146,8 +146,8 @@ class BoundedGameAcquirer:
     def __init__(
         self,
         api: MlbGameAcquisitionApi,
-        schedule_store: LocalScheduleStore,
-        game_store: LocalRawGameStore,
+        schedule_store: ScheduleStore,
+        game_store: RawGameStore,
         eligibility_policy: GameEligibilityPolicy = FinalRegularSeasonGamePolicy(),
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
@@ -156,8 +156,8 @@ class BoundedGameAcquirer:
 
         Args:
             api: MLB client supporting schedule and live-game retrieval.
-            schedule_store: Local schedule evidence and manifest store.
-            game_store: Local revision-aware raw-game store.
+            schedule_store: Schedule evidence and manifest store.
+            game_store: Revision-aware raw-game store.
             eligibility_policy: Explicit policy classifying scheduled games.
             clock: Function returning the current timezone-aware UTC time.
             run_id_factory: Function generating a new run identifier.
@@ -313,7 +313,9 @@ class BoundedGameAcquirer:
             schedule_http_attempts=schedule_http_attempts,
         )
 
-    def _acquire_game(self, manifest_path: Path, game_pk: int, season: int) -> None:
+    def _acquire_game(
+        self, manifest_path: ArtifactReference, game_pk: int, season: int
+    ) -> None:
         """Retrieve, validate, land, and record one eligible game.
 
         Args:

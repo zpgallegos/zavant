@@ -8,7 +8,7 @@ The current acquisition foundation validates and locally lands three recorded ML
 - Bounded schedule snapshots, stored by request run with a manifest of games discovered for later eligibility and retrieval processing.
 - Pages returned by the corrected-game change feed, stored by poll run with a manifest of games that need to be retrieved again.
 
-It has no third-party runtime dependencies and bootstrap works offline. A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete local acquisition workflow now combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest.
+It has no third-party runtime dependencies and bootstrap works offline. A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete local acquisition workflow now combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest. Acquisition depends on typed storage protocols and portable artifact references; the existing filesystem stores are the first conforming adapters and establish the behavior required of the planned S3 adapters.
 
 ## Local development
 

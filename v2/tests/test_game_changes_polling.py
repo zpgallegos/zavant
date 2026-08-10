@@ -13,6 +13,8 @@ from zavant.acquisition.game_changes import (
 )
 from zavant.clients.mlb_stats_api import RetrievedResource
 from zavant.storage.local_game_changes import LocalGameChangesStore
+from zavant.storage._local_files import local_artifact_reference
+from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.local_game_changes_watermark import (
     GameChangesWatermarkConflictError,
     LocalGameChangesWatermarkStore,
@@ -206,7 +208,7 @@ class GameChangesPollerTests(unittest.TestCase):
             )
         )
 
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["status"], "complete")
         self.assertEqual(manifest["watermark_before"], INITIAL_WATERMARK.isoformat())
         self.assertEqual(manifest["summary"]["pages"], 2)
@@ -238,7 +240,7 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertEqual(result.page_count, 1)
         self.assertEqual(result.changed_game_count, 0)
         self.assertEqual(result.source_item_count, 0)
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["status"], "complete")
 
     def test_subsequent_poll_reads_stored_watermark(self) -> None:
@@ -369,7 +371,7 @@ class LocalGameChangesWatermarkStoreTests(unittest.TestCase):
         run_id: UUID,
         watermark_before: datetime,
         window_end: datetime,
-    ) -> Path:
+    ) -> ArtifactReference:
         """Persist the minimum completed manifest required for advancement.
 
         Args:
@@ -394,7 +396,7 @@ class LocalGameChangesWatermarkStoreTests(unittest.TestCase):
                 }
             )
         )
-        return path
+        return local_artifact_reference(self.data_dir, path)
 
     def test_compare_and_set_rejects_stale_expected_state(self) -> None:
         """Reject a writer whose observed checkpoint is no longer current."""

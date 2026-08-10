@@ -1,15 +1,13 @@
 """Process durable corrected-game manifests into raw-game revisions."""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Protocol, Tuple
 
 from zavant.clients.mlb_stats_api import MlbStatsApiError, RetrievedResource
 from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
-from zavant.storage.local_game_changes import (
-    LocalGameChangesStore,
-)
-from zavant.storage.local_raw import LocalRawGameStore, RawGameConflictError
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import RawGameConflictError
+from zavant.storage.protocols import GameChangesStore, RawGameStore
 
 
 class MlbCorrectedGameApi(Protocol):
@@ -42,7 +40,7 @@ class CorrectionManifestProcessingResult:
         summary: Counts grouped by changed-game processing status.
     """
 
-    manifest_path: Path
+    manifest_path: ArtifactReference
     status: str
     summary: Dict[str, int]
 
@@ -109,7 +107,7 @@ class CorrectedGameProcessingResult:
 
 
 class CorrectedGameProcessor:
-    """Retrieve changed games already present in the local portfolio.
+    """Retrieve changed games already present in the managed portfolio.
 
     Args:
         api: MLB client supporting complete live-game retrieval.
@@ -120,8 +118,8 @@ class CorrectedGameProcessor:
     def __init__(
         self,
         api: MlbCorrectedGameApi,
-        changes_store: LocalGameChangesStore,
-        game_store: LocalRawGameStore,
+        changes_store: GameChangesStore,
+        game_store: RawGameStore,
     ) -> None:
         """Initialize the corrected-game processor.
 
@@ -166,7 +164,7 @@ class CorrectedGameProcessor:
 
     def process_manifest(
         self,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
     ) -> CorrectionManifestProcessingResult:
         """Process pending and failed games from one completed poll.
 
@@ -248,7 +246,7 @@ class CorrectedGameProcessor:
         )
 
     def _record_failure(
-        self, manifest_path: Path, game_pk: int, exc: Exception
+        self, manifest_path: ArtifactReference, game_pk: int, exc: Exception
     ) -> None:
         """Record one corrected-game failure in its source manifest.
 

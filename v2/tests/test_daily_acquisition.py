@@ -220,7 +220,7 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
         assert changes_watermark is not None
         self.assertEqual(schedule_watermark.through_date, date(2026, 8, 9))
         self.assertEqual(changes_watermark.updated_since, SECOND_STARTED_AT)
-        daily_manifest = json.loads(second.manifest_path.read_text())
+        daily_manifest = json.loads(Path(second.manifest_path.uri).read_text())
         self.assertEqual(daily_manifest["status"], "complete")
 
     def test_branch_failure_does_not_prevent_other_discovery(self) -> None:

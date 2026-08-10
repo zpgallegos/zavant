@@ -111,14 +111,14 @@ class LocalGameChangesStoreTests(unittest.TestCase):
         )
 
         self.assertTrue(result.created)
-        self.assertEqual(result.response_path.read_bytes(), self.raw)
+        self.assertEqual(Path(result.response_path.uri).read_bytes(), self.raw)
         self.assertIn(
             "game_changes/poll_date=2026-08-09/"
             "run_id=00000000-0000-0000-0000-000000000001/page=0000",
-            result.response_path.as_posix(),
+            result.response_path.key,
         )
 
-        metadata = json.loads(result.metadata_path.read_text())
+        metadata = json.loads(Path(result.metadata_path.uri).read_text())
         self.assertEqual(
             metadata["contract"],
             "mlb-stats-api-game-changes-page/v1",
@@ -128,7 +128,7 @@ class LocalGameChangesStoreTests(unittest.TestCase):
             "2026-08-08T00:00:00+00:00",
         )
 
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(
             manifest["contract"],
             "mlb-stats-api-game-changes-manifest/v1",
@@ -163,7 +163,7 @@ class LocalGameChangesStoreTests(unittest.TestCase):
         )
 
         self.assertFalse(result.created)
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(len(manifest["pages"]), 1)
         self.assertEqual(len(manifest["changed_games"]), 2)
 
@@ -183,7 +183,7 @@ class LocalGameChangesStoreTests(unittest.TestCase):
             run_id=RUN_ID,
         )
 
-        manifest = json.loads(first_result.manifest_path.read_text())
+        manifest = json.loads(Path(first_result.manifest_path.uri).read_text())
         self.assertEqual(
             [page["page_number"] for page in manifest["pages"]],
             [0, 1],
@@ -256,5 +256,5 @@ class LocalGameChangesStoreTests(unittest.TestCase):
                 watermark_before=UPDATED_SINCE,
             )
 
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["status"], "open")

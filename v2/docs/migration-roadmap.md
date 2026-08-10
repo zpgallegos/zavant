@@ -21,7 +21,7 @@ This is a sequence of independently demonstrable vertical slices, not a commitme
 
 ## 1. Acquisition — local workflow established
 
-- Generalize local storage behavior into protocols before adding cloud adapters.
+- Generalize local storage behavior into protocols before adding cloud adapters. Established in ADR 0008 with portable artifact references and conforming local adapters.
 - Add an S3 adapter and contract tests shared with the local adapter.
 
 Local exit demo established: bootstrap one daily run, acquire eligible schedule games, replay an MLB correction into a new revision, rerun safely, and inspect the schedule, correction, watermark, and coordinator manifests.

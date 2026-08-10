@@ -1,13 +1,21 @@
 """Durable local through-date for incremental schedule discovery."""
 
-from dataclasses import dataclass
 from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID
 
-from zavant.storage._local_files import atomic_write, encode_json, read_json_object
+from zavant.storage._local_files import (
+    atomic_write,
+    encode_json,
+    local_artifact_path,
+    local_artifact_reference,
+    read_json_object,
+)
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import ScheduleWatermarkConflictError
+from zavant.storage.models import ScheduleWatermark
 
 
 Clock = Callable[[], datetime]
@@ -21,44 +29,6 @@ def utc_now() -> datetime:
     """
 
     return datetime.now(timezone.utc)
-
-
-class ScheduleWatermarkConflictError(RuntimeError):
-    """Raised when stored schedule state fails compare-before-write validation."""
-
-
-@dataclass(frozen=True)
-class ScheduleWatermark:
-    """Current durable through-date for schedule discovery.
-
-    Attributes:
-        through_date: Latest date covered by a successful schedule run.
-        advanced_from: Prior through-date, or first bootstrap start date.
-        run_id: Schedule run supporting the state transition.
-        manifest_path: Completed schedule acquisition manifest.
-        updated_at: Time at which the state document was written.
-    """
-
-    through_date: date
-    advanced_from: date
-    run_id: UUID
-    manifest_path: Path
-    updated_at: datetime
-
-    def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable schedule watermark.
-
-        Returns:
-            Through-date, lineage, and update metadata.
-        """
-
-        return {
-            "advanced_from": self.advanced_from.isoformat(),
-            "manifest_path": str(self.manifest_path),
-            "run_id": str(self.run_id),
-            "through_date": self.through_date.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-        }
 
 
 class LocalScheduleWatermarkStore:
@@ -110,7 +80,7 @@ class LocalScheduleWatermarkStore:
         advanced_from: date,
         through_date: date,
         run_id: UUID,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
     ) -> ScheduleWatermark:
         """Compare current state and atomically publish a new through-date.
 
@@ -135,12 +105,9 @@ class LocalScheduleWatermarkStore:
             raise ValueError("through_date must not be before advanced_from")
         if expected_current is not None and expected_current != advanced_from:
             raise ValueError("advanced_from must equal the expected current date")
+        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
         try:
-            relative_manifest_path = manifest_path.relative_to(self.data_dir)
-        except ValueError as exc:
-            raise ValueError("manifest_path must be under data_dir") from exc
-        try:
-            manifest = read_json_object(manifest_path)
+            manifest = read_json_object(local_manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
             raise ValueError("manifest_path must contain a valid schedule run") from exc
         request = manifest.get("request")
@@ -171,13 +138,13 @@ class LocalScheduleWatermarkStore:
             through_date=through_date,
             advanced_from=advanced_from,
             run_id=run_id,
-            manifest_path=self.data_dir / relative_manifest_path,
+            manifest_path=manifest_path,
             updated_at=updated_at,
         )
         payload = {
             "advanced_from": advanced_from.isoformat(),
             "contract": "mlb-stats-api-schedule-watermark/v1",
-            "manifest_path": relative_manifest_path.as_posix(),
+            "manifest_path": manifest_path.key,
             "run_id": str(run_id),
             "through_date": through_date.isoformat(),
             "updated_at": updated_at.isoformat(),
@@ -210,6 +177,7 @@ class LocalScheduleWatermarkStore:
         if relative_manifest_path.is_absolute() or ".." in relative_manifest_path.parts:
             raise ValueError("schedule watermark manifest_path is invalid")
         manifest_path = self.data_dir / relative_manifest_path
+        manifest_reference = local_artifact_reference(self.data_dir, manifest_path)
         if not manifest_path.exists():
             raise ValueError("schedule watermark manifest_path does not exist")
         advanced_from = self._parse_date(payload, "advanced_from")
@@ -220,7 +188,7 @@ class LocalScheduleWatermarkStore:
             through_date=through_date,
             advanced_from=advanced_from,
             run_id=UUID(run_id_value),
-            manifest_path=manifest_path,
+            manifest_path=manifest_reference,
             updated_at=self._parse_timestamp(payload, "updated_at"),
         )
 

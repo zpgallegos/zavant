@@ -119,19 +119,19 @@ class LocalScheduleStoreTests(unittest.TestCase):
         )
 
         self.assertTrue(result.created)
-        self.assertEqual(result.response_path.read_bytes(), self.raw)
+        self.assertEqual(Path(result.response_path.uri).read_bytes(), self.raw)
         self.assertIn(
             "schedules/request_date=2026-08-09/"
             "run_id=00000000-0000-0000-0000-000000000002",
-            result.response_path.as_posix(),
+            result.response_path.key,
         )
 
-        metadata = json.loads(result.metadata_path.read_text())
+        metadata = json.loads(Path(result.metadata_path.uri).read_text())
         self.assertEqual(metadata["contract"], "mlb-stats-api-schedule-response/v1")
         self.assertEqual(metadata["request"]["start_date"], "2026-08-08")
         self.assertEqual(metadata["request"]["sport_id"], 1)
 
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(
             manifest["contract"],
             "mlb-stats-api-schedule-manifest/v1",
@@ -161,7 +161,7 @@ class LocalScheduleStoreTests(unittest.TestCase):
         )
 
         self.assertFalse(result.created)
-        manifest = json.loads(result.manifest_path.read_text())
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(len(manifest["games"]), 2)
 
     def test_refuses_different_content_for_the_same_run(self) -> None:

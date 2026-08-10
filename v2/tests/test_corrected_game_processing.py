@@ -16,6 +16,7 @@ from zavant.contracts.game_changes import GameChangesRequest, GameChangesRespons
 from zavant.contracts.raw_game import RawGameResponse
 from zavant.storage.local_game_changes import LocalGameChangesStore
 from zavant.storage.local_raw import LocalRawGameStore
+from zavant.storage.artifacts import ArtifactReference
 
 
 UPDATED_SINCE = datetime(2026, 8, 8, tzinfo=timezone.utc)
@@ -153,7 +154,7 @@ class CorrectedGameProcessorTests(unittest.TestCase):
             clock=lambda: OBSERVED_AT,
         )
 
-    def correction_manifest(self, game_pks: List[int]) -> Path:
+    def correction_manifest(self, game_pks: List[int]) -> ArtifactReference:
         """Land and finalize one correction response manifest.
 
         Args:
@@ -218,7 +219,7 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         self.assertTrue(result.successful)
         self.assertEqual(result.summary["succeeded"], 1)
         self.assertEqual(api.calls, [823426])
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(Path(manifest_path.uri).read_text())
         self.assertEqual(manifest["processing_status"], "complete")
         self.assertTrue(manifest["changed_games"][0]["revision_created"])
         self.assertEqual(
@@ -239,7 +240,7 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         self.assertTrue(result.successful)
         self.assertEqual(result.summary["skipped"], 1)
         self.assertEqual(api.calls, [])
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(Path(manifest_path.uri).read_text())
         self.assertEqual(
             manifest["changed_games"][0]["reason"],
             "game_not_previously_landed",
@@ -270,5 +271,5 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         self.assertFalse(first.successful)
         self.assertTrue(second.successful)
         self.assertEqual(api.calls, [823426, 823426])
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(Path(manifest_path.uri).read_text())
         self.assertEqual(len(manifest["changed_games"][0]["processing_attempts"]), 2)

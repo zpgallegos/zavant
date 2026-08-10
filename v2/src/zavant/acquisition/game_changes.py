@@ -2,16 +2,13 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Protocol
 from uuid import UUID, uuid4
 
 from zavant.clients.mlb_stats_api import RetrievedResource
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
-from zavant.storage.local_game_changes import LocalGameChangesStore
-from zavant.storage.local_game_changes_watermark import (
-    LocalGameChangesWatermarkStore,
-)
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.protocols import GameChangesStore, GameChangesWatermarkStore
 
 
 Clock = Callable[[], datetime]
@@ -81,7 +78,7 @@ class GameChangesPollingResult:
     watermark_before: datetime
     query_updated_since: datetime
     watermark_after: datetime
-    manifest_path: Path
+    manifest_path: ArtifactReference
     page_count: int
     source_item_count: int
     changed_game_count: int
@@ -121,8 +118,8 @@ class GameChangesPoller:
     def __init__(
         self,
         api: MlbGameChangesApi,
-        changes_store: LocalGameChangesStore,
-        watermark_store: LocalGameChangesWatermarkStore,
+        changes_store: GameChangesStore,
+        watermark_store: GameChangesWatermarkStore,
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
@@ -213,7 +210,7 @@ class GameChangesPoller:
         expected_page_count = 1
         source_item_count = 0
         http_attempts = 0
-        manifest_path: Optional[Path] = None
+        manifest_path: Optional[ArtifactReference] = None
         while page_number < expected_page_count:
             offset = page_number * limit
             retrieved = self.api.get_game_changes(

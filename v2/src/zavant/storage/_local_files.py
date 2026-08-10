@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Dict
 from uuid import uuid4
 
+from zavant.storage.artifacts import ArtifactReference
+
 
 def sha256_bytes(content: bytes) -> str:
     """Calculate a SHA-256 digest for bytes.
@@ -72,6 +74,47 @@ def read_json_object(path: Path) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return payload
+
+
+def local_artifact_reference(data_dir: Path, artifact_path: Path) -> ArtifactReference:
+    """Create a storage-neutral reference for a path below a local data root.
+
+    Args:
+        data_dir: Configured local storage root.
+        artifact_path: Persisted path below the storage root.
+
+    Returns:
+        Portable artifact key paired with its local display path.
+
+    Raises:
+        ValueError: If the artifact path is outside the storage root.
+    """
+
+    try:
+        key = artifact_path.relative_to(data_dir).as_posix()
+    except ValueError as exc:
+        raise ValueError("artifact path must be under data_dir") from exc
+    return ArtifactReference(key=key, uri=str(artifact_path))
+
+
+def local_artifact_path(data_dir: Path, reference: ArtifactReference) -> Path:
+    """Resolve and validate an artifact reference for a local data root.
+
+    Args:
+        data_dir: Configured local storage root.
+        reference: Storage-neutral reference created by this local adapter.
+
+    Returns:
+        Local filesystem path represented by the reference.
+
+    Raises:
+        ValueError: If the reference belongs to another storage root or backend.
+    """
+
+    artifact_path = data_dir.joinpath(*reference.key.split("/"))
+    if reference.uri != str(artifact_path):
+        raise ValueError("artifact reference does not belong to this local store")
+    return artifact_path
 
 
 def atomic_write(destination: Path, content: bytes) -> None:

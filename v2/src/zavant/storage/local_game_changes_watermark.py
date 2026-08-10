@@ -1,13 +1,21 @@
 """Durable local watermark for MLB corrected-game polling."""
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID
 
-from zavant.storage._local_files import atomic_write, encode_json, read_json_object
+from zavant.storage._local_files import (
+    atomic_write,
+    encode_json,
+    local_artifact_path,
+    local_artifact_reference,
+    read_json_object,
+)
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import GameChangesWatermarkConflictError
+from zavant.storage.models import GameChangesWatermark
 
 
 Clock = Callable[[], datetime]
@@ -21,44 +29,6 @@ def utc_now() -> datetime:
     """
 
     return datetime.now(timezone.utc)
-
-
-class GameChangesWatermarkConflictError(RuntimeError):
-    """Raised when stored watermark state fails compare-and-set validation."""
-
-
-@dataclass(frozen=True)
-class GameChangesWatermark:
-    """Current durable checkpoint for corrected-game polling.
-
-    Attributes:
-        updated_since: Logical lower checkpoint for the next poll.
-        advanced_from: Logical checkpoint used by the successful poll.
-        run_id: Poll run that advanced the watermark.
-        manifest_path: Completed poll manifest supporting the advancement.
-        updated_at: Time at which the state document was written.
-    """
-
-    updated_since: datetime
-    advanced_from: datetime
-    run_id: UUID
-    manifest_path: Path
-    updated_at: datetime
-
-    def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable watermark summary.
-
-        Returns:
-            Checkpoint, lineage, and update metadata.
-        """
-
-        return {
-            "advanced_from": self.advanced_from.isoformat(),
-            "manifest_path": str(self.manifest_path),
-            "run_id": str(self.run_id),
-            "updated_at": self.updated_at.isoformat(),
-            "updated_since": self.updated_since.isoformat(),
-        }
 
 
 class LocalGameChangesWatermarkStore:
@@ -110,7 +80,7 @@ class LocalGameChangesWatermarkStore:
         advanced_from: datetime,
         updated_since: datetime,
         run_id: UUID,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
     ) -> GameChangesWatermark:
         """Compare the current checkpoint and atomically advance it.
 
@@ -143,14 +113,11 @@ class LocalGameChangesWatermarkStore:
             raise ValueError("updated_since must be after advanced_from")
         if normalized_expected is not None and normalized_expected != normalized_from:
             raise ValueError("advanced_from must equal the expected current watermark")
-        try:
-            relative_manifest_path = manifest_path.relative_to(self.data_dir)
-        except ValueError as exc:
-            raise ValueError("manifest_path must be under data_dir") from exc
-        if not manifest_path.exists():
+        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
+        if not local_manifest_path.exists():
             raise ValueError("manifest_path must identify a completed poll manifest")
         try:
-            manifest = read_json_object(manifest_path)
+            manifest = read_json_object(local_manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
             raise ValueError(
                 "manifest_path must contain a valid poll manifest"
@@ -180,13 +147,13 @@ class LocalGameChangesWatermarkStore:
             updated_since=normalized_updated_since,
             advanced_from=normalized_from,
             run_id=run_id,
-            manifest_path=self.data_dir / relative_manifest_path,
+            manifest_path=manifest_path,
             updated_at=updated_at,
         )
         payload = {
             "advanced_from": normalized_from.isoformat(),
             "contract": "mlb-stats-api-game-changes-watermark/v1",
-            "manifest_path": relative_manifest_path.as_posix(),
+            "manifest_path": manifest_path.key,
             "run_id": str(run_id),
             "updated_at": updated_at.isoformat(),
             "updated_since": normalized_updated_since.isoformat(),
@@ -223,13 +190,14 @@ class LocalGameChangesWatermarkStore:
         if advanced_from >= updated_since:
             raise ValueError("watermark timestamps are not increasing")
         manifest_path = self.data_dir / relative_manifest_path
+        manifest_reference = local_artifact_reference(self.data_dir, manifest_path)
         if not manifest_path.exists():
             raise ValueError("watermark manifest_path does not exist")
         return GameChangesWatermark(
             updated_since=updated_since,
             advanced_from=advanced_from,
             run_id=UUID(run_id_value),
-            manifest_path=manifest_path,
+            manifest_path=manifest_reference,
             updated_at=self._parse_timestamp(payload, "updated_at"),
         )
 

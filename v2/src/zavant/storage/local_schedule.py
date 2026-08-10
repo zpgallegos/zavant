@@ -1,6 +1,5 @@
 """Local storage for immutable schedule snapshots and run manifests."""
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -11,9 +10,14 @@ from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
 from zavant.storage._local_files import (
     atomic_write,
     encode_json,
+    local_artifact_path,
+    local_artifact_reference,
     read_json_object,
     sha256_bytes,
 )
+from zavant.storage.artifacts import ArtifactReference
+from zavant.storage.errors import ScheduleConflictError
+from zavant.storage.models import LandedSchedule, LoadedScheduleRun
 
 
 Clock = Callable[[], datetime]
@@ -35,76 +39,6 @@ def utc_now() -> datetime:
     """
 
     return datetime.now(timezone.utc)
-
-
-class ScheduleConflictError(RuntimeError):
-    """Raised when a schedule run conflicts with stored content."""
-
-
-@dataclass(frozen=True)
-class LandedSchedule:
-    """Result of landing one bounded schedule snapshot.
-
-    Attributes:
-        run_id: Unique identifier for the schedule request.
-        request_date: UTC date on which the source request was made.
-        response_path: Path containing the unmodified API response.
-        metadata_path: Path containing request and provenance metadata.
-        manifest_path: Path containing the discovered-game manifest.
-        response_sha256: Digest of the exact response bytes.
-        scheduled_game_pks: Deduplicated identifiers found in the response.
-        created: Whether this call created the response object.
-    """
-
-    run_id: UUID
-    request_date: str
-    response_path: Path
-    metadata_path: Path
-    manifest_path: Path
-    response_sha256: str
-    scheduled_game_pks: Tuple[int, ...]
-    created: bool
-
-    def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable representation of the result.
-
-        Returns:
-            Landing result fields suitable for CLI output.
-        """
-
-        return {
-            "created": self.created,
-            "manifest_path": str(self.manifest_path),
-            "metadata_path": str(self.metadata_path),
-            "request_date": self.request_date,
-            "response_path": str(self.response_path),
-            "response_sha256": self.response_sha256,
-            "run_id": str(self.run_id),
-            "scheduled_game_pks": list(self.scheduled_game_pks),
-        }
-
-
-@dataclass(frozen=True)
-class LoadedScheduleRun:
-    """Previously landed schedule artifacts used to resume a run.
-
-    Attributes:
-        run_id: Unique identifier for the schedule request.
-        request_date: UTC request-date partition.
-        raw: Exact stored schedule response bytes.
-        request: Persisted request provenance.
-        response_path: Path containing the stored response.
-        metadata_path: Path containing response provenance.
-        manifest_path: Path containing per-game processing state.
-    """
-
-    run_id: UUID
-    request_date: str
-    raw: bytes
-    request: Dict[str, Any]
-    response_path: Path
-    metadata_path: Path
-    manifest_path: Path
 
 
 class LocalScheduleStore:
@@ -199,9 +133,9 @@ class LocalScheduleStore:
         return LandedSchedule(
             run_id=run_id,
             request_date=request_date,
-            response_path=response_path,
-            metadata_path=metadata_path,
-            manifest_path=manifest_path,
+            response_path=local_artifact_reference(self.data_dir, response_path),
+            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
+            manifest_path=local_artifact_reference(self.data_dir, manifest_path),
             response_sha256=response_checksum,
             scheduled_game_pks=schedule.game_pks,
             created=created,
@@ -275,12 +209,12 @@ class LocalScheduleStore:
             request_date=request_date,
             raw=raw,
             request=request,
-            response_path=response_path,
-            metadata_path=metadata_path,
-            manifest_path=manifest_path,
+            response_path=local_artifact_reference(self.data_dir, response_path),
+            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
+            manifest_path=local_artifact_reference(self.data_dir, manifest_path),
         )
 
-    def game_statuses(self, manifest_path: Path) -> Dict[int, str]:
+    def game_statuses(self, manifest_path: ArtifactReference) -> Dict[int, str]:
         """Read validated per-game processing states from a manifest.
 
         Args:
@@ -294,13 +228,15 @@ class LocalScheduleStore:
             OSError: If the manifest cannot be read.
         """
 
-        manifest = self._read_manifest(manifest_path)
+        manifest = self._read_manifest(
+            local_artifact_path(self.data_dir, manifest_path)
+        )
         games = self._validated_manifest_games(manifest)
         return {game["game_pk"]: game["processing_status"] for game in games}
 
     def record_game_outcome(
         self,
-        manifest_path: Path,
+        manifest_path: ArtifactReference,
         game_pk: int,
         status: str,
         details: Optional[Mapping[str, Any]] = None,
@@ -321,7 +257,8 @@ class LocalScheduleStore:
 
         if status not in SCHEDULE_GAME_OUTCOMES:
             raise ValueError(f"unsupported schedule game outcome: {status}")
-        manifest = self._read_manifest(manifest_path)
+        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
+        manifest = self._read_manifest(local_manifest_path)
         games = self._validated_manifest_games(manifest)
         matching_games = [game for game in games if game["game_pk"] == game_pk]
         if len(matching_games) != 1:
@@ -361,9 +298,9 @@ class LocalScheduleStore:
         manifest["updated_at"] = recorded_at
         manifest.pop("completed_at", None)
         manifest.pop("summary", None)
-        atomic_write(manifest_path, encode_json(manifest))
+        atomic_write(local_manifest_path, encode_json(manifest))
 
-    def finalize_manifest(self, manifest_path: Path) -> Dict[str, int]:
+    def finalize_manifest(self, manifest_path: ArtifactReference) -> Dict[str, int]:
         """Derive and atomically publish a schedule run's final status.
 
         Args:
@@ -377,7 +314,8 @@ class LocalScheduleStore:
             OSError: If the manifest cannot be read or atomically written.
         """
 
-        manifest = self._read_manifest(manifest_path)
+        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
+        manifest = self._read_manifest(local_manifest_path)
         games = self._validated_manifest_games(manifest)
         summary = {status: 0 for status in SCHEDULE_GAME_STATUSES}
         for game in games:
@@ -399,7 +337,7 @@ class LocalScheduleStore:
                 manifest["completed_at"] = finalized_at
             else:
                 manifest.pop("completed_at", None)
-            atomic_write(manifest_path, encode_json(manifest))
+            atomic_write(local_manifest_path, encode_json(manifest))
         return summary
 
     def _validate_existing_metadata(

@@ -9,7 +9,7 @@ from zavant.acquisition.bounded_games import (
     BoundedGameAcquirer,
     BoundedGameAcquisitionResult,
 )
-from zavant.storage.local_schedule_watermark import LocalScheduleWatermarkStore
+from zavant.storage.protocols import ScheduleWatermarkStore
 
 
 Clock = Callable[[], datetime]
@@ -96,7 +96,7 @@ class ScheduleDiscoverer:
     def __init__(
         self,
         acquirer: BoundedGameAcquirer,
-        watermark_store: LocalScheduleWatermarkStore,
+        watermark_store: ScheduleWatermarkStore,
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:

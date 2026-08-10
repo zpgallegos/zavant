@@ -19,8 +19,8 @@ This directory records why Zavant is built the way it is. The target architectur
 | Storage boundary | Acquisition imports concrete filesystem stores and exchanges `Path` values | Shared persistence state machines behind domain protocols, with local files or conditionally written S3 objects | Accepted in ADRs 0008–0009; local and S3 composition implemented |
 | Analytical format | Flattened JSON followed by Glue-written Parquet | Explicit datasets and locally testable Parquet publication | To decide in slice 2 |
 | Transformation | dbt on Athena | Retain dbt; reassess engine and model design independently | Partially accepted |
-| Production orchestration | AWS Step Functions plus S3 events | One scheduled Lambda invocation of the established daily coordinator | Accepted in ADR 0009; application boundary implemented |
-| Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with a retained bucket, scoped role, packaged Lambda, and controlled log retention | Accepted in ADRs 0010–0012; manual function implemented |
+| Production orchestration | AWS Step Functions plus S3 events | One EventBridge Scheduler invocation of the established daily coordinator | Accepted in ADRs 0009 and 0014; scheduled boundary implemented |
+| Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with a retained bucket, scoped roles, packaged Lambda, controlled log retention, and a daily schedule | Accepted in ADRs 0010–0012 and 0014; scheduled function implemented |
 | Semantics | Presentation-specific SQL and exported files | Central metric and entity definitions | Open |
 | Presentation | Create React App consuming generated artifacts | Select from product requirements after semantics | Open |
 

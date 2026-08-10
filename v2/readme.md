@@ -212,7 +212,7 @@ ZAVANT_INITIAL_SCHEDULE_DATE=<first-schedule-date>
 ZAVANT_INITIAL_CORRECTION_WATERMARK=<first-known-safe-UTC-timestamp>
 ```
 
-The bucket is deliberately not created by the application. Its private, encrypted, versioned CloudFormation definition, prefix-scoped execution role, manually invokable Lambda function, and retention-controlled log group live in [`infrastructure/template.yaml`](infrastructure/template.yaml); packaging and deployment instructions are in [`infrastructure/README.md`](infrastructure/README.md). The role can list only the configured prefix and read or write only its objects; it cannot delete data or administer the bucket. EventBridge scheduling and alarms remain later infrastructure slices. Credentials are supplied by the execution role, never environment variables.
+The bucket is deliberately not created by the application. Its private, encrypted, versioned CloudFormation definition, prefix-scoped execution role, Lambda function, retention-controlled log group, and daily EventBridge Scheduler trigger live in [`infrastructure/template.yaml`](infrastructure/template.yaml); packaging and deployment instructions are in [`infrastructure/README.md`](infrastructure/README.md). The Lambda role can list only the configured prefix and read or write only its objects; it cannot delete data or administer the bucket. A separate Scheduler role can invoke only this function. The schedule defaults to 6:00 AM `America/Los_Angeles`, follows daylight-saving time, and remains configurable through stack parameters. Credentials are supplied by execution roles, never environment variables.
 
 The optional `through_date` event field supports deterministic smoke tests:
 
@@ -222,6 +222,6 @@ The optional `through_date` event field supports deterministic smoke tests:
 
 Bootstrap configuration is consulted only while its corresponding watermark is absent. Thereafter the persisted S3 state is authoritative. If any daily branch fails, its manifest remains in S3 and the handler raises so the Lambda invocation is visibly unsuccessful.
 
-This completes the local application, historical CLI reconciliation, and manually invokable production Lambda definition for API-to-raw acquisition. Real-AWS smoke testing, scheduling and alarms, analytical dataset publication, dbt transformation, semantics, and presentation remain later layers of the project.
+This completes the local application, historical CLI reconciliation, and scheduled production Lambda definition for API-to-raw acquisition. Verification of the first scheduled run, alarms, analytical dataset publication, dbt transformation, semantics, and presentation remain later layers of the project.
 
 See the [target architecture](docs/architecture/target-architecture.md), [decision register](docs/architecture/README.md), and [migration roadmap](docs/migration-roadmap.md) for the intended path from acquisition through semantics and presentation.

@@ -29,8 +29,8 @@ This is a sequence of independently demonstrable vertical slices, not a commitme
 - Define the Lambda execution role with prefix-scoped S3 access. Established in ADR 0011; deployment remains operator-controlled.
 - Package and define a manually invokable Lambda plus log retention. Established in ADR 0012; deployment remains operator-controlled.
 - Reconcile historical seasons from a local CLI against local or S3 storage. Established in ADR 0013.
-- Define EventBridge scheduling and alarms as code.
-- Run a real-AWS integration smoke test before enabling the schedule.
+- Define EventBridge scheduling as code. Established in ADR 0014; deployment remains operator-controlled.
+- Add alarms and a failed-event destination, then verify the first scheduled invocation.
 
 Local exit demo established: bootstrap one daily run, acquire eligible schedule games, replay an MLB correction into a new revision, rerun safely, and inspect the schedule, correction, watermark, and coordinator manifests.
 

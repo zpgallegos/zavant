@@ -1,6 +1,6 @@
 # Zavant infrastructure
 
-The CloudFormation stack owns the durable S3 bucket, the daily acquisition Lambda function, its execution role, and its retention-controlled log group. EventBridge scheduling and monitoring remain later infrastructure slices; the function is manual-only until its real-S3 smoke test passes.
+The CloudFormation stack owns the durable S3 bucket, the daily acquisition Lambda function, its execution role, its retention-controlled log group, and the EventBridge Scheduler resources that invoke it. Monitoring remains a later infrastructure slice.
 
 ## Bucket guarantees
 
@@ -20,7 +20,7 @@ The CloudFormation stack owns the durable S3 bucket, the daily acquisition Lambd
 - `s3:GetObject` and `s3:PutObject` are restricted to objects beneath `lake/` in this bucket.
 - The application cannot delete objects or versions, inspect other prefixes, change bucket configuration, or manage ACLs.
 
-`AcquisitionPrefix` is a stack parameter and defaults to `lake`. The deploy target passes the matching `S3_PREFIX` Make variable, keeping the future `ZAVANT_S3_PREFIX` environment value and IAM resource boundary aligned.
+`AcquisitionPrefix` is a stack parameter and defaults to `lake`. The deploy target passes the matching `S3_PREFIX` Make variable, keeping the Lambda's `ZAVANT_S3_PREFIX` environment value and IAM resource boundary aligned.
 
 ## Lambda boundary
 
@@ -29,9 +29,17 @@ The CloudFormation stack owns the durable S3 bucket, the daily acquisition Lambd
 - Package bytes are addressed by SHA-256 beneath `deployments/lambda/`; the execution role cannot read that deployment prefix.
 - The function receives the bucket, prefix, and bootstrap boundaries directly from stack parameters and resources.
 - Memory is 512 MB and timeout is 900 seconds.
-- Reserved concurrency is intentionally unset so deployment works with reduced new-account quotas; the future daily schedule cannot naturally overlap a 15-minute invocation.
+- Reserved concurrency is intentionally unset so deployment works with reduced new-account quotas; the daily cadence cannot naturally overlap a 15-minute invocation.
 - JSON-formatted CloudWatch logs expire after 30 days.
-- No EventBridge rule or Lambda invoke permission exists yet.
+
+## Daily schedule
+
+- EventBridge Scheduler invokes the complete Lambda workflow once a day at 6:00 AM in `America/Los_Angeles` by default.
+- Scheduler handles daylight-saving transitions for the configured timezone. Both the cron expression and timezone are CloudFormation parameters.
+- The schedule is enabled by default and can be deployed disabled with `DAILY_SCHEDULE_STATE=DISABLED`.
+- Flexible delivery is disabled. Failed target deliveries can be retried twice for up to one hour; the application remains safe under repeated invocation because its storage transitions are conditional and its acquisition operations are idempotent.
+- Scheduler receives a dedicated execution role whose trust is restricted to this AWS account and the default schedule group. Its only permission is `lambda:InvokeFunction` on the acquisition function.
+- The target payload is `{}`, so the handler chooses its ordinary current-date boundary.
 
 ## Validate
 
@@ -64,6 +72,18 @@ make infra-deploy \
 
 The existing production stack is already bootstrapped, so ordinary updates use the same deploy command and explicit parameters. Before deployment, the target verifies that active credentials belong to the supplied account. It builds and import-checks the package, uploads it under a content-addressed key, acknowledges generated-name IAM resources, and updates the stack in `us-east-1`.
 
+The schedule defaults can be overridden during deployment:
+
+```shell
+make infra-deploy \
+  EXPECTED_AWS_ACCOUNT_ID=<12-digit-account-id> \
+  INITIAL_SCHEDULE_DATE=<YYYY-MM-DD> \
+  INITIAL_CORRECTION_WATERMARK=<UTC-timestamp> \
+  DAILY_SCHEDULE_EXPRESSION='cron(0 7 * * ? *)' \
+  DAILY_SCHEDULE_TIMEZONE=America/Los_Angeles \
+  DAILY_SCHEDULE_STATE=ENABLED
+```
+
 To retrieve the generated bucket name afterward:
 
 ```shell
@@ -76,6 +96,15 @@ aws cloudformation describe-stacks \
 
 Use that output as `ZAVANT_S3_BUCKET`. Use the stack's `AcquisitionPrefix` output as `ZAVANT_S3_PREFIX`; it defaults to `lake`.
 
+Inspect the deployed schedule with:
+
+```shell
+aws scheduler get-schedule \
+  --region us-east-1 \
+  --group-name default \
+  --name zavant-acquisition-daily-prod
+```
+
 ## Manual smoke test
 
 The checked-in event is an empty JSON object, so the function uses the current UTC date:
@@ -85,6 +114,8 @@ make lambda-invoke
 cat build/lambda-response.json
 ```
 
-Override `LAMBDA_EVENT_FILE` with another JSON file containing `{"through_date":"YYYY-MM-DD"}` for a deterministic boundary. A successful invocation writes its daily manifest and any discovered source artifacts beneath `s3://<bucket>/lake/`. A function error is reported in the invocation metadata and CloudWatch log group `/aws/lambda/zavant-acquisition-daily-prod`; inspect both before enabling a schedule.
+Override `LAMBDA_EVENT_FILE` with another JSON file containing `{"through_date":"YYYY-MM-DD"}` for a deterministic boundary. A successful invocation writes its daily manifest and any discovered source artifacts beneath `s3://<bucket>/lake/`. A function error is reported in the invocation metadata and CloudWatch log group `/aws/lambda/zavant-acquisition-daily-prod`. For a new environment, deploy with `DAILY_SCHEDULE_STATE=DISABLED` until this smoke test passes, then redeploy with the schedule enabled.
 
-Deleting the stack does not delete the bucket or bucket policy. This is intentional protection for the raw lake. The function, role, and log group follow normal stack deletion behavior. Removing retained bucket resources requires a separate, explicit cleanup decision.
+The first scheduled run should be verified in CloudWatch and against its S3 daily-run manifest. Alarms and a failed-event destination remain follow-up operational work.
+
+Deleting the stack does not delete the bucket or bucket policy. This is intentional protection for the raw lake. The function, roles, schedule, and log group follow normal stack deletion behavior. Removing retained bucket resources requires a separate, explicit cleanup decision.

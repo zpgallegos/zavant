@@ -10,6 +10,9 @@ ENVIRONMENT ?= prod
 S3_PREFIX ?= lake
 INITIAL_SCHEDULE_DATE ?=
 INITIAL_CORRECTION_WATERMARK ?=
+DAILY_SCHEDULE_EXPRESSION ?= cron(0 6 * * ? *)
+DAILY_SCHEDULE_TIMEZONE ?= America/Los_Angeles
+DAILY_SCHEDULE_STATE ?= ENABLED
 LAMBDA_BUILD_DIR := build/lambda
 LAMBDA_ARCHIVE := build/zavant-lambda.zip
 DEPENDENCY_CONSTRAINTS := constraints.txt
@@ -26,7 +29,7 @@ help:
 	@echo "infra-validate validate the CloudFormation template"
 	@echo "infra-bootstrap  create the bucket and execution role on a new stack"
 	@echo "lambda-package   build the Lambda zip with locked application dependencies"
-	@echo "infra-deploy     package and deploy the production Lambda infrastructure"
+	@echo "infra-deploy     package and deploy the scheduled production Lambda"
 	@echo "lambda-invoke    manually invoke the deployed function"
 
 bootstrap:
@@ -115,6 +118,9 @@ infra-deploy: infra-check-account infra-check-bootstrap lambda-package
 			AcquisitionPrefix=$(S3_PREFIX) \
 			InitialScheduleDate=$(INITIAL_SCHEDULE_DATE) \
 			InitialCorrectionWatermark=$(INITIAL_CORRECTION_WATERMARK) \
+			DailyScheduleExpression="$(DAILY_SCHEDULE_EXPRESSION)" \
+			DailyScheduleTimezone=$(DAILY_SCHEDULE_TIMEZONE) \
+			DailyScheduleState=$(DAILY_SCHEDULE_STATE) \
 			LambdaCodeS3Key="$$code_key" \
 		--tags Project=zavant Component=acquisition Environment=$(ENVIRONMENT) ManagedBy=cloudformation
 

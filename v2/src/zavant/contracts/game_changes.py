@@ -17,6 +17,7 @@ class ChangedGame:
     Attributes:
         game_pk: MLB's primary identifier for the changed game.
         official_date: Official date assigned to the game by MLB.
+        season: MLB season identifier used by raw storage.
         status_code: MLB's coded game state at observation time.
         detailed_state: Human-readable game state at observation time.
         live_feed_link: Relative link to the game's complete live feed.
@@ -24,6 +25,7 @@ class ChangedGame:
 
     game_pk: int
     official_date: date
+    season: int
     status_code: str
     detailed_state: str
     live_feed_link: str
@@ -41,6 +43,7 @@ class ChangedGame:
             "live_feed_link": self.live_feed_link,
             "official_date": self.official_date.isoformat(),
             "processing_status": "pending",
+            "season": self.season,
             "status_code": self.status_code,
         }
 
@@ -89,9 +92,7 @@ class GameChangesResponse:
         try:
             payload = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise GameChangesContractError(
-                "payload is not valid UTF-8 JSON"
-            ) from exc
+            raise GameChangesContractError("payload is not valid UTF-8 JSON") from exc
 
         if not isinstance(payload, dict):
             raise GameChangesContractError("payload root must be a JSON object")
@@ -99,8 +100,10 @@ class GameChangesResponse:
         total_items = payload.get("totalItems")
         total_games = payload.get("totalGames")
         if type(total_items) is not int or type(total_games) is not int:
+            raise GameChangesContractError("totalItems and totalGames must be integers")
+        if total_items < 0 or total_games < 0:
             raise GameChangesContractError(
-                "totalItems and totalGames must be integers"
+                "totalItems and totalGames must not be negative"
             )
 
         dates = payload.get("dates")
@@ -156,9 +159,7 @@ class GameChangesResponse:
 
         official_date_text = value.get("officialDate")
         if not isinstance(official_date_text, str):
-            raise GameChangesContractError(
-                f"{location}.officialDate must be a string"
-            )
+            raise GameChangesContractError(f"{location}.officialDate must be a string")
         try:
             official_date = date.fromisoformat(official_date_text)
         except ValueError as exc:
@@ -170,11 +171,24 @@ class GameChangesResponse:
         if not isinstance(live_feed_link, str) or not live_feed_link:
             raise GameChangesContractError(f"{location}.link must be a string")
 
+        season_value = value.get("season")
+        season: int
+        if type(season_value) is int:
+            season = season_value
+        elif isinstance(season_value, str) and season_value.isdecimal():
+            season = int(season_value)
+        else:
+            raise GameChangesContractError(
+                f"{location}.season must be an integer-like value"
+            )
+        if season <= 0:
+            raise GameChangesContractError(
+                f"{location}.season must be a positive integer-like value"
+            )
+
         status = value.get("status")
         if not isinstance(status, dict):
-            raise GameChangesContractError(
-                f"{location}.status must be a JSON object"
-            )
+            raise GameChangesContractError(f"{location}.status must be a JSON object")
         status_code = status.get("codedGameState")
         detailed_state = status.get("detailedState")
         if not isinstance(status_code, str) or not isinstance(detailed_state, str):
@@ -185,6 +199,7 @@ class GameChangesResponse:
         return ChangedGame(
             game_pk=game_pk,
             official_date=official_date,
+            season=season,
             status_code=status_code,
             detailed_state=detailed_state,
             live_feed_link=live_feed_link,

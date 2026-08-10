@@ -1,0 +1,81 @@
+{
+  "copyright": "Copyright 2026 MLB Advanced Media, L.P. Use of any content on this page acknowledges agreement to the terms posted here https://gdx.mlb.com/components/copyright.txt",
+  "totalItems": 2,
+  "totalEvents": 0,
+  "totalGames": 2,
+  "totalGamesInProgress": 0,
+  "dates": [
+    {
+      "date": "2026-08-08",
+      "totalItems": 2,
+      "totalEvents": 0,
+      "totalGames": 2,
+      "totalGamesInProgress": 0,
+      "games": [
+        {
+          "gamePk": 823514,
+          "link": "/api/v1.1/game/823514/feed/live",
+          "gameType": "R",
+          "season": "2026",
+          "gameDate": "2026-08-08T19:05:00Z",
+          "officialDate": "2026-08-08",
+          "status": {
+            "abstractGameState": "Final",
+            "codedGameState": "F",
+            "detailedState": "Final",
+            "statusCode": "F",
+            "startTimeTBD": false,
+            "abstractGameCode": "F"
+          },
+          "seriesDescription": "Regular Season",
+          "teams": {
+            "away": {
+              "team": {
+                "id": 144,
+                "name": "Atlanta Braves"
+              }
+            },
+            "home": {
+              "team": {
+                "id": 147,
+                "name": "New York Yankees"
+              }
+            }
+          }
+        },
+        {
+          "gamePk": 824726,
+          "link": "/api/v1.1/game/824726/feed/live",
+          "gameType": "R",
+          "season": "2026",
+          "gameDate": "2026-08-08T20:10:00Z",
+          "officialDate": "2026-08-08",
+          "status": {
+            "abstractGameState": "Final",
+            "codedGameState": "F",
+            "detailedState": "Final",
+            "statusCode": "F",
+            "startTimeTBD": false,
+            "abstractGameCode": "F"
+          },
+          "seriesDescription": "Regular Season",
+          "teams": {
+            "away": {
+              "team": {
+                "id": 133,
+                "name": "Athletics"
+              }
+            },
+            "home": {
+              "team": {
+                "id": 111,
+                "name": "Boston Red Sox"
+              }
+            }
+          }
+        }
+      ],
+      "events": []
+    }
+  ]
+}

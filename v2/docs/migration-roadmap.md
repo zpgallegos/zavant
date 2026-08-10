@@ -6,23 +6,27 @@ This is a sequence of independently demonstrable vertical slices, not a commitme
 
 - Python package and command-line boundary
 - Environment-based configuration
-- Versioned raw-game and corrected-game change-feed contracts
+- Versioned raw-game, schedule, and corrected-game change-feed contracts
 - Revision-aware local game storage with checksums, provenance, immutable history, and a current pointer
+- Immutable local schedule snapshots and per-request discovery manifests
 - Immutable local change-feed pages and per-poll manifests with deduplicated pending games
+- Typed MLB API client with explicit timeouts, bounded retries, and injectable transport
+- Resumable bounded schedule acquisition with explicit eligibility and per-game outcomes
+- Paginated corrected-game polling with safety overlap, completed-run validation, and success-only durable watermark advancement
+- Retriable corrected-game processing into immutable raw revisions
+- Incremental schedule discovery with a rolling lookback and independent through-date
+- Durable daily coordinator with isolated schedule, correction-discovery, and correction-processing outcomes
 - Tests based on representative checked-in MLB responses
 - Target architecture and ADR process
 
-## 1. Acquisition
+## 1. Acquisition — local workflow established
 
-- Add an MLB API client with explicit timeouts, retries, rate-limit behavior, and response validation.
-- Separate schedule discovery from game retrieval.
-- Represent game eligibility as a tested policy rather than an inline string comparison.
-- Poll the corrected-game feed from a durable watermark and retrieve every pending game again.
-- Record per-game processing outcomes and advance the watermark only after a complete poll succeeds.
-- Add schedule/retrieval run manifests so completeness is checked against expected outputs, not bucket scans.
+- Generalize local storage behavior into protocols before adding cloud adapters.
 - Add an S3 adapter and contract tests shared with the local adapter.
 
-Exit demo: request a bounded date range, land only eligible games locally, replay an MLB correction into a new revision, rerun safely, and inspect both run manifests.
+Local exit demo established: bootstrap one daily run, acquire eligible schedule games, replay an MLB correction into a new revision, rerun safely, and inspect the schedule, correction, watermark, and coordinator manifests.
+
+Cloud exit demo: run the same workflow through storage protocols backed by S3 and verify behavioral parity with the local adapters.
 
 ## 2. Analytical storage
 

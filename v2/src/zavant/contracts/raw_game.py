@@ -11,7 +11,7 @@ class RawGameContractError(ValueError):
 
 
 @dataclass(frozen=True)
-class RawGame:
+class RawGameResponse:
     """Validated routing fields plus the unmodified source payload.
 
     Attributes:
@@ -37,7 +37,7 @@ class RawGame:
         return self.official_date.year
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "RawGame":
+    def from_bytes(cls, raw: bytes) -> "RawGameResponse":
         """Validate source bytes and extract fields needed for routing.
 
         Args:

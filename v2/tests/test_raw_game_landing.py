@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from zavant.contracts.raw_game import RawGame, RawGameContractError
+from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
 from zavant.storage.local_raw import LocalRawGameStore, RawGameConflictError
 
 
@@ -19,7 +19,7 @@ class RawGameContractTests(unittest.TestCase):
     def test_extracts_routing_fields_from_real_fixture(self) -> None:
         """Extract routing fields from the representative source fixture."""
 
-        game = RawGame.from_bytes(SAMPLE_GAME.read_bytes())
+        game = RawGameResponse.from_bytes(SAMPLE_GAME.read_bytes())
 
         self.assertEqual(game.game_pk, 744863)
         self.assertEqual(game.season, 2024)
@@ -36,7 +36,7 @@ class RawGameContractTests(unittest.TestCase):
         ).encode()
 
         with self.assertRaisesRegex(RawGameContractError, "gameData and liveData"):
-            RawGame.from_bytes(raw)
+            RawGameResponse.from_bytes(raw)
 
 
 class LocalRawGameStoreTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class LocalRawGameStoreTests(unittest.TestCase):
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
         self.raw = SAMPLE_GAME.read_bytes()
-        self.game = RawGame.from_bytes(self.raw)
+        self.game = RawGameResponse.from_bytes(self.raw)
         self.store = LocalRawGameStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
@@ -111,7 +111,7 @@ class LocalRawGameStoreTests(unittest.TestCase):
             "fixture://sample-game",
         )
         reformatted = json.dumps(self.game.payload, sort_keys=True).encode()
-        reformatted_game = RawGame.from_bytes(reformatted)
+        reformatted_game = RawGameResponse.from_bytes(reformatted)
 
         second_result = self.store.land(
             reformatted_game,
@@ -135,7 +135,7 @@ class LocalRawGameStoreTests(unittest.TestCase):
         changed_payload = json.loads(self.raw)
         changed_payload["gameData"]["status"]["detailedState"] = "Final: Corrected"
         changed_raw = json.dumps(changed_payload).encode()
-        changed_game = RawGame.from_bytes(changed_raw)
+        changed_game = RawGameResponse.from_bytes(changed_raw)
 
         second_result = self.store.land(
             changed_game,

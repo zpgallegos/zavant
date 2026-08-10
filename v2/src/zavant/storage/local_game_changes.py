@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 from uuid import UUID
 
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
@@ -17,6 +17,8 @@ from zavant.storage._local_files import (
 
 
 Clock = Callable[[], datetime]
+GAME_CHANGE_PROCESSING_STATUSES = ("pending", "skipped", "succeeded", "failed")
+GAME_CHANGE_PROCESSING_OUTCOMES = GAME_CHANGE_PROCESSING_STATUSES[1:]
 
 
 def utc_now() -> datetime:
@@ -31,6 +33,23 @@ def utc_now() -> datetime:
 
 class GameChangesConflictError(RuntimeError):
     """Raised when a poll page or manifest conflicts with stored content."""
+
+
+@dataclass(frozen=True)
+class ChangedGameWorkItem:
+    """One changed game awaiting or retrying live-feed retrieval.
+
+    Attributes:
+        game_pk: MLB's primary game identifier.
+        season: MLB season partition containing the raw game.
+        live_feed_link: Relative complete-game feed link reported by MLB.
+        processing_status: Current manifest processing state.
+    """
+
+    game_pk: int
+    season: int
+    live_feed_link: str
+    processing_status: str
 
 
 @dataclass(frozen=True)
@@ -209,6 +228,439 @@ class LocalGameChangesStore:
             created=created,
         )
 
+    def finalize_manifest(
+        self,
+        manifest_path: Path,
+        expected_page_count: int,
+        expected_total_items: int,
+        watermark_before: datetime,
+    ) -> Dict[str, int]:
+        """Validate and mark a fully landed correction poll complete.
+
+        Args:
+            manifest_path: Poll manifest to validate and complete.
+            expected_page_count: Page count derived from the first response.
+            expected_total_items: Item count reported by the first response.
+            watermark_before: Logical checkpoint from which the poll began,
+                before applying its safety overlap.
+
+        Returns:
+            Counts for landed pages, source items, and pending games.
+
+        Raises:
+            ValueError: If expected counts or the watermark are invalid.
+            GameChangesConflictError: If the manifest is malformed,
+                incomplete, or inconsistent with the poll.
+            OSError: If the manifest cannot be read or written.
+        """
+
+        if type(expected_page_count) is not int or expected_page_count <= 0:
+            raise ValueError("expected_page_count must be a positive integer")
+        if type(expected_total_items) is not int or expected_total_items < 0:
+            raise ValueError("expected_total_items must be a non-negative integer")
+        if watermark_before.tzinfo is None or watermark_before.utcoffset() is None:
+            raise ValueError("watermark_before must include a UTC offset")
+
+        try:
+            manifest = read_json_object(manifest_path)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise GameChangesConflictError("poll manifest is invalid") from exc
+
+        pages_value = manifest.get("pages")
+        if not isinstance(pages_value, list):
+            raise GameChangesConflictError("poll manifest collections are invalid")
+        pages = self._validated_pages(pages_value, expected_page_count)
+        changed_games = self._validated_changed_games(manifest)
+
+        first_total_items = pages[0].get("total_items")
+        if first_total_items != expected_total_items:
+            raise GameChangesConflictError(
+                "poll manifest first page has a conflicting total_items"
+            )
+
+        updated_since = self._manifest_timestamp(manifest, "updated_since")
+        window_end = self._manifest_timestamp(manifest, "window_end")
+        normalized_watermark = watermark_before.astimezone(timezone.utc)
+        if updated_since > normalized_watermark:
+            raise GameChangesConflictError(
+                "poll query boundary is after its logical watermark"
+            )
+        if normalized_watermark >= window_end:
+            raise GameChangesConflictError(
+                "poll watermark must be before its window end"
+            )
+
+        summary = {
+            "changed_games": len(changed_games),
+            "pages": len(pages),
+            "source_items": expected_total_items,
+        }
+        processing_summary = self._processing_summary(changed_games)
+        processing_status = self._processing_status(processing_summary)
+        completed_at = self.clock().astimezone(timezone.utc).isoformat()
+        normalized_watermark_text = normalized_watermark.isoformat()
+        if manifest.get("status") == "complete":
+            expected_completion = {
+                "processing_status": processing_status,
+                "processing_summary": processing_summary,
+                "summary": summary,
+                "watermark_before": normalized_watermark_text,
+            }
+            if any(
+                manifest.get(key) != value for key, value in expected_completion.items()
+            ):
+                raise GameChangesConflictError(
+                    "completed poll manifest conflicts with finalization"
+                )
+            return summary
+        if manifest.get("status") != "open":
+            raise GameChangesConflictError("poll manifest has an invalid status")
+
+        manifest["completed_at"] = completed_at
+        manifest["processing_status"] = processing_status
+        manifest["processing_summary"] = processing_summary
+        manifest["status"] = "complete"
+        manifest["summary"] = summary
+        manifest["updated_at"] = completed_at
+        manifest["watermark_before"] = normalized_watermark_text
+        atomic_write(manifest_path, encode_json(manifest))
+        return summary
+
+    def processable_manifests(self) -> Tuple[Path, ...]:
+        """List completed polls with pending or failed changed games.
+
+        Returns:
+            Manifest paths ordered by poll partition and run identifier.
+
+        Raises:
+            GameChangesConflictError: If a discovered manifest is malformed.
+            OSError: If a manifest cannot be read.
+        """
+
+        pattern = "raw/mlb_stats_api/game_changes/poll_date=*/run_id=*/manifest.json"
+        processable: List[Path] = []
+        for manifest_path in sorted(self.data_dir.glob(pattern)):
+            manifest = self._read_manifest(manifest_path)
+            if manifest.get("status") != "complete":
+                continue
+            games = self._validated_changed_games(manifest)
+            if any(
+                game["processing_status"] in {"pending", "failed"} for game in games
+            ):
+                processable.append(manifest_path)
+        return tuple(processable)
+
+    def game_work_items(self, manifest_path: Path) -> Tuple[ChangedGameWorkItem, ...]:
+        """Read retriable changed games from a completed poll manifest.
+
+        Args:
+            manifest_path: Completed correction-poll manifest.
+
+        Returns:
+            Pending and previously failed games in manifest order.
+
+        Raises:
+            GameChangesConflictError: If the poll or games are invalid.
+            OSError: If the manifest cannot be read.
+        """
+
+        manifest = self._read_manifest(manifest_path)
+        if manifest.get("status") != "complete":
+            raise GameChangesConflictError(
+                "changed games can be processed only from a complete poll"
+            )
+        games = self._validated_changed_games(manifest)
+        return tuple(
+            ChangedGameWorkItem(
+                game_pk=game["game_pk"],
+                season=game["season"],
+                live_feed_link=game["live_feed_link"],
+                processing_status=game["processing_status"],
+            )
+            for game in games
+            if game["processing_status"] in {"pending", "failed"}
+        )
+
+    def record_game_outcome(
+        self,
+        manifest_path: Path,
+        game_pk: int,
+        status: str,
+        details: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        """Atomically record one corrected game's processing outcome.
+
+        Args:
+            manifest_path: Completed correction-poll manifest.
+            game_pk: MLB game identifier to update.
+            status: One of `skipped`, `succeeded`, or `failed`.
+            details: Optional JSON-serializable outcome details.
+
+        Raises:
+            ValueError: If the outcome is unsupported.
+            GameChangesConflictError: If the manifest or game is invalid.
+            OSError: If the manifest cannot be read or written.
+        """
+
+        if status not in GAME_CHANGE_PROCESSING_OUTCOMES:
+            raise ValueError(f"unsupported changed-game outcome: {status}")
+        manifest = self._read_manifest(manifest_path)
+        if manifest.get("status") != "complete":
+            raise GameChangesConflictError(
+                "changed games can be updated only in a complete poll"
+            )
+        games = self._validated_changed_games(manifest)
+        matching_games = [game for game in games if game["game_pk"] == game_pk]
+        if len(matching_games) != 1:
+            raise GameChangesConflictError(
+                f"poll manifest does not contain exactly one game {game_pk}"
+            )
+
+        game = matching_games[0]
+        recorded_at = self.clock().astimezone(timezone.utc).isoformat()
+        outcome = dict(details or {})
+        outcome["recorded_at"] = recorded_at
+        outcome["status"] = status
+        attempts = game.get("processing_attempts", [])
+        if not isinstance(attempts, list):
+            raise GameChangesConflictError(
+                f"poll manifest game {game_pk} has invalid processing attempts"
+            )
+        attempts.append(outcome)
+
+        outcome_fields = (
+            "error_message",
+            "error_type",
+            "http_attempts",
+            "reason",
+            "revision_created",
+            "revision_id",
+            "source_uri",
+        )
+        for field in outcome_fields:
+            game.pop(field, None)
+        for field in outcome_fields:
+            if field in outcome:
+                game[field] = outcome[field]
+        game["processing_attempts"] = attempts
+        game["processing_status"] = status
+        processing_summary = self._processing_summary(games)
+        manifest["processing_status"] = self._processing_status(processing_summary)
+        manifest["processing_summary"] = processing_summary
+        manifest["updated_at"] = recorded_at
+        atomic_write(manifest_path, encode_json(manifest))
+
+    def finalize_processing(self, manifest_path: Path) -> Dict[str, int]:
+        """Publish a correction manifest's derived processing status.
+
+        Args:
+            manifest_path: Completed correction-poll manifest.
+
+        Returns:
+            Counts for every changed-game processing status.
+
+        Raises:
+            GameChangesConflictError: If the manifest or games are invalid.
+            OSError: If the manifest cannot be read or written.
+        """
+
+        manifest = self._read_manifest(manifest_path)
+        if manifest.get("status") != "complete":
+            raise GameChangesConflictError(
+                "changed games can be finalized only in a complete poll"
+            )
+        games = self._validated_changed_games(manifest)
+        summary = self._processing_summary(games)
+        processing_status = self._processing_status(summary)
+        if (
+            manifest.get("processing_status") != processing_status
+            or manifest.get("processing_summary") != summary
+        ):
+            updated_at = self.clock().astimezone(timezone.utc).isoformat()
+            manifest["processing_status"] = processing_status
+            manifest["processing_summary"] = summary
+            manifest["updated_at"] = updated_at
+            if processing_status == "complete":
+                manifest["processing_completed_at"] = updated_at
+            else:
+                manifest.pop("processing_completed_at", None)
+            atomic_write(manifest_path, encode_json(manifest))
+        return summary
+
+    @staticmethod
+    def _validated_pages(
+        page_values: List[Any],
+        expected_page_count: int,
+    ) -> List[Dict[str, Any]]:
+        """Validate the page sequence in a poll manifest.
+
+        Args:
+            page_values: Untrusted page entries loaded from the manifest.
+            expected_page_count: Required number of landed pages.
+
+        Returns:
+            Page entries narrowed to dictionaries.
+
+        Raises:
+            GameChangesConflictError: If pages are missing, malformed, or not
+                contiguous.
+        """
+
+        if len(page_values) != expected_page_count:
+            raise GameChangesConflictError(
+                "poll manifest does not contain every expected page"
+            )
+        pages: List[Dict[str, Any]] = []
+        expected_offset = 0
+        for expected_page_number, value in enumerate(page_values):
+            if not isinstance(value, dict):
+                raise GameChangesConflictError("poll manifest page is invalid")
+            if value.get("page_number") != expected_page_number:
+                raise GameChangesConflictError("poll manifest pages are not contiguous")
+            limit = value.get("limit")
+            offset = value.get("offset")
+            if type(limit) is not int or limit <= 0 or offset != expected_offset:
+                raise GameChangesConflictError(
+                    "poll manifest page pagination is invalid"
+                )
+            pages.append(value)
+            expected_offset += limit
+        return pages
+
+    @staticmethod
+    def _manifest_timestamp(manifest: Dict[str, Any], key: str) -> datetime:
+        """Parse one timezone-aware timestamp from a poll manifest.
+
+        Args:
+            manifest: Poll manifest containing the timestamp.
+            key: Timestamp field to parse.
+
+        Returns:
+            Timestamp normalized to UTC.
+
+        Raises:
+            GameChangesConflictError: If the field is missing or invalid.
+        """
+
+        value = manifest.get(key)
+        if not isinstance(value, str):
+            raise GameChangesConflictError(f"poll manifest {key} is invalid")
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise GameChangesConflictError(f"poll manifest {key} is invalid") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise GameChangesConflictError(f"poll manifest {key} is invalid")
+        return parsed.astimezone(timezone.utc)
+
+    @staticmethod
+    def _read_manifest(manifest_path: Path) -> Dict[str, Any]:
+        """Read a correction manifest and normalize invalid-data failures.
+
+        Args:
+            manifest_path: Existing correction manifest path.
+
+        Returns:
+            Parsed manifest object.
+
+        Raises:
+            GameChangesConflictError: If the file is invalid JSON or not an
+                object.
+            OSError: If the manifest cannot be read.
+        """
+
+        try:
+            return read_json_object(manifest_path)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise GameChangesConflictError("poll manifest is invalid") from exc
+
+    @staticmethod
+    def _validated_changed_games(
+        manifest: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], ...]:
+        """Validate mutable changed-game entries in a poll manifest.
+
+        Args:
+            manifest: Parsed correction manifest.
+
+        Returns:
+            Validated changed-game objects.
+
+        Raises:
+            GameChangesConflictError: If entries, identifiers, seasons, links,
+                or processing states are malformed or duplicated.
+        """
+
+        games_value = manifest.get("changed_games")
+        if not isinstance(games_value, list):
+            raise GameChangesConflictError("poll manifest changed games are invalid")
+        games: List[Dict[str, Any]] = []
+        game_pks: Set[int] = set()
+        for value in games_value:
+            if not isinstance(value, dict):
+                raise GameChangesConflictError("poll manifest changed game is invalid")
+            game_pk = value.get("game_pk")
+            season = value.get("season")
+            live_feed_link = value.get("live_feed_link")
+            status = value.get("processing_status")
+            if type(game_pk) is not int or game_pk in game_pks:
+                raise GameChangesConflictError(
+                    "poll manifest changed-game identifiers are invalid"
+                )
+            if type(season) is not int or season <= 0:
+                raise GameChangesConflictError(
+                    f"poll manifest game {game_pk} has an invalid season"
+                )
+            if not isinstance(live_feed_link, str) or not live_feed_link:
+                raise GameChangesConflictError(
+                    f"poll manifest game {game_pk} has an invalid live-feed link"
+                )
+            if (
+                not isinstance(status, str)
+                or status not in GAME_CHANGE_PROCESSING_STATUSES
+            ):
+                raise GameChangesConflictError(
+                    f"poll manifest game {game_pk} has an invalid processing status"
+                )
+            game_pks.add(game_pk)
+            games.append(value)
+        return tuple(games)
+
+    @staticmethod
+    def _processing_summary(
+        games: Tuple[Dict[str, Any], ...],
+    ) -> Dict[str, int]:
+        """Count changed games by processing status.
+
+        Args:
+            games: Validated changed-game manifest entries.
+
+        Returns:
+            Count for every supported processing state.
+        """
+
+        summary = {status: 0 for status in GAME_CHANGE_PROCESSING_STATUSES}
+        for game in games:
+            summary[game["processing_status"]] += 1
+        return summary
+
+    @staticmethod
+    def _processing_status(summary: Dict[str, int]) -> str:
+        """Derive overall processing state from per-game counts.
+
+        Args:
+            summary: Counts for every changed-game processing state.
+
+        Returns:
+            `pending`, `failed`, or `complete`.
+        """
+
+        if summary["pending"]:
+            return "pending"
+        if summary["failed"]:
+            return "failed"
+        return "complete"
+
     def _load_or_create_manifest(
         self,
         manifest_path: Path,
@@ -240,6 +692,7 @@ class LocalGameChangesStore:
                 "contract": "mlb-stats-api-game-changes-manifest/v1",
                 "created_at": observed_at.isoformat(),
                 "pages": [],
+                "processing_status": "pending",
                 "run_id": str(run_id),
                 "status": "open",
                 "updated_at": observed_at.isoformat(),
@@ -259,14 +712,15 @@ class LocalGameChangesStore:
         }
         for key, expected_value in expected.items():
             if manifest.get(key) != expected_value:
-                raise GameChangesConflictError(
-                    f"poll manifest has a conflicting {key}"
-                )
+                raise GameChangesConflictError(f"poll manifest has a conflicting {key}")
 
         if not isinstance(manifest.get("pages"), list) or not isinstance(
             manifest.get("changed_games"), list
         ):
             raise GameChangesConflictError("poll manifest collections are invalid")
+        self._validated_changed_games(manifest)
+        if manifest.get("status") not in {"open", "complete"}:
+            raise GameChangesConflictError("poll manifest has an invalid status")
         return manifest
 
     def _merge_page(
@@ -315,6 +769,10 @@ class LocalGameChangesStore:
                     f"poll manifest page {request.page_number} has a different response"
                 )
             return False
+        if manifest.get("status") == "complete":
+            raise GameChangesConflictError(
+                "completed poll manifest cannot accept another page"
+            )
 
         page_entry = {
             "limit": request.limit,

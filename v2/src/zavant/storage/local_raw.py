@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from zavant.contracts.raw_game import RawGame
+from zavant.contracts.raw_game import RawGameResponse
 from zavant.storage._local_files import (
     atomic_write,
     canonical_json_sha256,
@@ -103,7 +103,7 @@ class LocalRawGameStore:
 
     def land(
         self,
-        game: RawGame,
+        game: RawGameResponse,
         raw: bytes,
         source_uri: str,
         trigger: str = "manual",
@@ -225,6 +225,37 @@ class LocalRawGameStore:
             canonical_sha256=canonical_checksum,
             created=created,
         )
+
+    def current_revision_id(self, season: int, game_pk: int) -> Optional[str]:
+        """Return the current revision for one season and game.
+
+        Args:
+            season: MLB season partition containing the game.
+            game_pk: MLB's primary game identifier.
+
+        Returns:
+            Current revision identifier, or `None` if the game is not landed.
+
+        Raises:
+            ValueError: If the season or game identifier is invalid.
+            RawGameConflictError: If the current pointer is malformed.
+            OSError: If the current pointer cannot be read.
+        """
+
+        if type(season) is not int or season <= 0:
+            raise ValueError("season must be a positive integer")
+        if type(game_pk) is not int or game_pk <= 0:
+            raise ValueError("game_pk must be a positive integer")
+        current_pointer_path = (
+            self.data_dir
+            / "raw"
+            / "mlb_stats_api"
+            / "games"
+            / f"season={season}"
+            / f"game_pk={game_pk}"
+            / "current.json"
+        )
+        return self._read_current_revision(current_pointer_path)
 
     @staticmethod
     def _read_current_revision(current_pointer_path: Path) -> Optional[str]:

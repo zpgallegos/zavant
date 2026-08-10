@@ -17,9 +17,7 @@ from zavant.storage.local_game_changes import (
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-SAMPLE_CHANGES = (
-    REPOSITORY_ROOT / "tests" / "fixtures" / "example-game-changes.json"
-)
+SAMPLE_CHANGES = REPOSITORY_ROOT / "tests" / "fixtures" / "example-game-changes.json"
 UPDATED_SINCE = datetime(2026, 8, 8, tzinfo=timezone.utc)
 WINDOW_END = datetime(2026, 8, 9, tzinfo=timezone.utc)
 OBSERVED_AT = datetime(2026, 8, 9, 0, 1, tzinfo=timezone.utc)
@@ -37,6 +35,7 @@ class GameChangesContractTests(unittest.TestCase):
         self.assertEqual(changes.total_items, 2)
         self.assertEqual(changes.total_games, 2)
         self.assertEqual(changes.game_pks, (822863, 823426))
+        self.assertEqual(changes.changed_games[1].season, 2026)
         self.assertEqual(
             changes.changed_games[1].live_feed_link,
             "/api/v1.1/game/823426/feed/live",
@@ -238,3 +237,24 @@ class LocalGameChangesStoreTests(unittest.TestCase):
                 raw=self.raw,
                 run_id=RUN_ID,
             )
+
+    def test_finalize_requires_every_expected_page(self) -> None:
+        """Keep a poll open when its expected page sequence is incomplete."""
+
+        result = self.store.land_page(
+            changes=self.changes,
+            request=self.request(),
+            raw=self.raw,
+            run_id=RUN_ID,
+        )
+
+        with self.assertRaisesRegex(GameChangesConflictError, "every expected page"):
+            self.store.finalize_manifest(
+                manifest_path=result.manifest_path,
+                expected_page_count=2,
+                expected_total_items=2,
+                watermark_before=UPDATED_SINCE,
+            )
+
+        manifest = json.loads(result.manifest_path.read_text())
+        self.assertEqual(manifest["status"], "open")

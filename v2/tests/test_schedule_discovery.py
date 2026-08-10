@@ -10,9 +10,9 @@ from zavant.acquisition.schedule_discovery import (
     ScheduleWatermarkNotInitializedError,
 )
 from zavant.clients.mlb_stats_api import MlbStatsApiResponseError
-from zavant.storage.local_raw import LocalRawGameStore
-from zavant.storage.local_schedule import LocalScheduleStore
-from zavant.storage.local_schedule_watermark import LocalScheduleWatermarkStore
+from zavant.storage.path_raw import PathRawGameStore
+from zavant.storage.path_schedule import PathScheduleStore
+from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
 from tests.test_bounded_game_acquisition import (
     FakeMlbGameAcquisitionApi,
     raw_game,
@@ -32,23 +32,19 @@ NEXT_RUN_ID = UUID("00000000-0000-0000-0000-000000000031")
 
 
 class ScheduleDiscovererTests(unittest.TestCase):
-    """Tests for rolling schedule discovery and its success watermark."""
-
     def setUp(self) -> None:
-        """Create isolated schedule, raw-game, and watermark stores."""
-
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
-        self.schedule_store = LocalScheduleStore(
+        self.schedule_store = PathScheduleStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.game_store = LocalRawGameStore(
+        self.game_store = PathRawGameStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.watermark_store = LocalScheduleWatermarkStore(
+        self.watermark_store = PathScheduleWatermarkStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
@@ -59,17 +55,6 @@ class ScheduleDiscovererTests(unittest.TestCase):
         started_at: datetime,
         run_id: UUID,
     ) -> ScheduleDiscoverer:
-        """Build a deterministic schedule discovery service.
-
-        Args:
-            api: Fake schedule and live-game source.
-            started_at: Schedule request timestamp.
-            run_id: Schedule acquisition run identifier.
-
-        Returns:
-            Configured incremental schedule discoverer.
-        """
-
         acquirer = BoundedGameAcquirer(
             api=api,
             schedule_store=self.schedule_store,
@@ -85,12 +70,6 @@ class ScheduleDiscovererTests(unittest.TestCase):
 
     @staticmethod
     def successful_api() -> FakeMlbGameAcquisitionApi:
-        """Build a source that can acquire both schedule fixture games.
-
-        Returns:
-            Configured successful schedule/game source.
-        """
-
         return FakeMlbGameAcquisitionApi(
             schedule_raw=SAMPLE_SCHEDULE.read_bytes(),
             game_outcomes={
@@ -100,8 +79,6 @@ class ScheduleDiscovererTests(unittest.TestCase):
         )
 
     def test_bootstrap_and_rolling_lookback_skip_existing_downloads(self) -> None:
-        """Advance dates while reconsidering recent schedule evidence cheaply."""
-
         first_api = self.successful_api()
         first = self.discoverer(first_api, FIRST_STARTED_AT, FIRST_RUN_ID).discover(
             initial_start_date=INITIAL_DATE,
@@ -129,8 +106,6 @@ class ScheduleDiscovererTests(unittest.TestCase):
         self.assertEqual(watermark.through_date, NEXT_DATE)
 
     def test_same_through_date_is_a_noop(self) -> None:
-        """Avoid another schedule request when discovery is already current."""
-
         first_api = self.successful_api()
         self.discoverer(first_api, FIRST_STARTED_AT, FIRST_RUN_ID).discover(
             initial_start_date=INITIAL_DATE,
@@ -149,8 +124,6 @@ class ScheduleDiscovererTests(unittest.TestCase):
         self.assertEqual(next_api.schedule_calls, [])
 
     def test_failed_acquisition_does_not_advance_watermark(self) -> None:
-        """Retain the old boundary when a newly eligible game fails."""
-
         api = FakeMlbGameAcquisitionApi(
             schedule_raw=SAMPLE_SCHEDULE.read_bytes(),
             game_outcomes={
@@ -174,8 +147,6 @@ class ScheduleDiscovererTests(unittest.TestCase):
         self.assertIsNone(self.watermark_store.read())
 
     def test_requires_bootstrap_date(self) -> None:
-        """Refuse to invent the first schedule coverage boundary."""
-
         api = FakeMlbGameAcquisitionApi(SAMPLE_SCHEDULE.read_bytes(), {})
 
         with self.assertRaises(ScheduleWatermarkNotInitializedError):

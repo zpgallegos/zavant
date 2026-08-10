@@ -1,4 +1,4 @@
-"""Local storage for immutable game-change pages and poll manifests."""
+"""Path-backed storage for immutable game-change pages and poll manifests."""
 
 from datetime import datetime, timezone
 import json
@@ -7,11 +7,11 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 from uuid import UUID
 
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
-from zavant.storage._local_files import (
+from zavant.storage._path_io import (
     atomic_write,
     encode_json,
-    local_artifact_path,
-    local_artifact_reference,
+    resolve_artifact_path,
+    artifact_reference_for_path,
     read_json_object,
     sha256_bytes,
 )
@@ -26,32 +26,19 @@ GAME_CHANGE_PROCESSING_OUTCOMES = GAME_CHANGE_PROCESSING_STATUSES[1:]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
-class LocalGameChangesStore:
+class PathGameChangesStore:
     """Persist correction-feed pages and merge their routing manifest.
 
     Args:
-        data_dir: Root directory under which raw objects are stored.
+        storage_root: Root path under which raw objects are stored.
         clock: Function returning the current timezone-aware UTC time.
     """
 
-    def __init__(self, data_dir: Path, clock: Clock = utc_now) -> None:
-        """Initialize the local store.
-
-        Args:
-            data_dir: Root directory under which raw objects are stored.
-            clock: Function returning the current timezone-aware UTC time.
-        """
-
-        self.data_dir = data_dir
+    def __init__(self, storage_root: Path, clock: Clock = utc_now) -> None:
+        self.storage_root = storage_root
         self.clock = clock
 
     def land_page(
@@ -61,26 +48,9 @@ class LocalGameChangesStore:
         raw: bytes,
         run_id: UUID,
     ) -> LandedGameChangesPage:
-        """Persist one immutable response page and update its poll manifest.
-
-        Args:
-            changes: Validated change-feed response.
-            request: Poll window and pagination metadata for the page.
-            raw: Unmodified API response bytes.
-            run_id: Identifier shared by every page in this poll.
-
-        Returns:
-            Paths, identifiers, checksum, changed games, and creation status.
-
-        Raises:
-            GameChangesConflictError: If the page or run conflicts with
-                previously stored data.
-            OSError: If local persistence fails.
-        """
-
         poll_date = request.window_end.astimezone(timezone.utc).date().isoformat()
         run_directory = (
-            self.data_dir
+            self.storage_root
             / "raw"
             / "mlb_stats_api"
             / "game_changes"
@@ -157,9 +127,9 @@ class LocalGameChangesStore:
             run_id=run_id,
             poll_date=poll_date,
             page_number=request.page_number,
-            response_path=local_artifact_reference(self.data_dir, response_path),
-            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
-            manifest_path=local_artifact_reference(self.data_dir, manifest_path),
+            response_path=artifact_reference_for_path(self.storage_root, response_path),
+            metadata_path=artifact_reference_for_path(self.storage_root, metadata_path),
+            manifest_path=artifact_reference_for_path(self.storage_root, manifest_path),
             response_sha256=response_checksum,
             changed_game_pks=changes.game_pks,
             created=created,
@@ -172,25 +142,6 @@ class LocalGameChangesStore:
         expected_total_items: int,
         watermark_before: datetime,
     ) -> Dict[str, int]:
-        """Validate and mark a fully landed correction poll complete.
-
-        Args:
-            manifest_path: Poll manifest to validate and complete.
-            expected_page_count: Page count derived from the first response.
-            expected_total_items: Item count reported by the first response.
-            watermark_before: Logical checkpoint from which the poll began,
-                before applying its safety overlap.
-
-        Returns:
-            Counts for landed pages, source items, and pending games.
-
-        Raises:
-            ValueError: If expected counts or the watermark are invalid.
-            GameChangesConflictError: If the manifest is malformed,
-                incomplete, or inconsistent with the poll.
-            OSError: If the manifest cannot be read or written.
-        """
-
         if type(expected_page_count) is not int or expected_page_count <= 0:
             raise ValueError("expected_page_count must be a positive integer")
         if type(expected_total_items) is not int or expected_total_items < 0:
@@ -198,9 +149,9 @@ class LocalGameChangesStore:
         if watermark_before.tzinfo is None or watermark_before.utcoffset() is None:
             raise ValueError("watermark_before must include a UTC offset")
 
-        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
+        resolved_manifest_path = resolve_artifact_path(self.storage_root, manifest_path)
         try:
-            manifest = read_json_object(local_manifest_path)
+            manifest = read_json_object(resolved_manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
             raise GameChangesConflictError("poll manifest is invalid") from exc
 
@@ -261,23 +212,13 @@ class LocalGameChangesStore:
         manifest["summary"] = summary
         manifest["updated_at"] = completed_at
         manifest["watermark_before"] = normalized_watermark_text
-        atomic_write(local_manifest_path, encode_json(manifest))
+        atomic_write(resolved_manifest_path, encode_json(manifest))
         return summary
 
     def processable_manifests(self) -> Tuple[ArtifactReference, ...]:
-        """List completed polls with pending or failed changed games.
-
-        Returns:
-            Manifest paths ordered by poll partition and run identifier.
-
-        Raises:
-            GameChangesConflictError: If a discovered manifest is malformed.
-            OSError: If a manifest cannot be read.
-        """
-
         pattern = "raw/mlb_stats_api/game_changes/poll_date=*/run_id=*/manifest.json"
         processable: List[ArtifactReference] = []
-        for manifest_path in sorted(self.data_dir.glob(pattern)):
+        for manifest_path in sorted(self.storage_root.glob(pattern)):
             manifest = self._read_manifest(manifest_path)
             if manifest.get("status") != "complete":
                 continue
@@ -286,28 +227,15 @@ class LocalGameChangesStore:
                 game["processing_status"] in {"pending", "failed"} for game in games
             ):
                 processable.append(
-                    local_artifact_reference(self.data_dir, manifest_path)
+                    artifact_reference_for_path(self.storage_root, manifest_path)
                 )
         return tuple(processable)
 
     def game_work_items(
         self, manifest_path: ArtifactReference
     ) -> Tuple[ChangedGameWorkItem, ...]:
-        """Read retriable changed games from a completed poll manifest.
-
-        Args:
-            manifest_path: Completed correction-poll manifest.
-
-        Returns:
-            Pending and previously failed games in manifest order.
-
-        Raises:
-            GameChangesConflictError: If the poll or games are invalid.
-            OSError: If the manifest cannot be read.
-        """
-
         manifest = self._read_manifest(
-            local_artifact_path(self.data_dir, manifest_path)
+            resolve_artifact_path(self.storage_root, manifest_path)
         )
         if manifest.get("status") != "complete":
             raise GameChangesConflictError(
@@ -332,24 +260,10 @@ class LocalGameChangesStore:
         status: str,
         details: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        """Atomically record one corrected game's processing outcome.
-
-        Args:
-            manifest_path: Completed correction-poll manifest.
-            game_pk: MLB game identifier to update.
-            status: One of `skipped`, `succeeded`, or `failed`.
-            details: Optional JSON-serializable outcome details.
-
-        Raises:
-            ValueError: If the outcome is unsupported.
-            GameChangesConflictError: If the manifest or game is invalid.
-            OSError: If the manifest cannot be read or written.
-        """
-
         if status not in GAME_CHANGE_PROCESSING_OUTCOMES:
             raise ValueError(f"unsupported changed-game outcome: {status}")
-        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
-        manifest = self._read_manifest(local_manifest_path)
+        resolved_manifest_path = resolve_artifact_path(self.storage_root, manifest_path)
+        manifest = self._read_manifest(resolved_manifest_path)
         if manifest.get("status") != "complete":
             raise GameChangesConflictError(
                 "changed games can be updated only in a complete poll"
@@ -393,24 +307,11 @@ class LocalGameChangesStore:
         manifest["processing_status"] = self._processing_status(processing_summary)
         manifest["processing_summary"] = processing_summary
         manifest["updated_at"] = recorded_at
-        atomic_write(local_manifest_path, encode_json(manifest))
+        atomic_write(resolved_manifest_path, encode_json(manifest))
 
     def finalize_processing(self, manifest_path: ArtifactReference) -> Dict[str, int]:
-        """Publish a correction manifest's derived processing status.
-
-        Args:
-            manifest_path: Completed correction-poll manifest.
-
-        Returns:
-            Counts for every changed-game processing status.
-
-        Raises:
-            GameChangesConflictError: If the manifest or games are invalid.
-            OSError: If the manifest cannot be read or written.
-        """
-
-        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
-        manifest = self._read_manifest(local_manifest_path)
+        resolved_manifest_path = resolve_artifact_path(self.storage_root, manifest_path)
+        manifest = self._read_manifest(resolved_manifest_path)
         if manifest.get("status") != "complete":
             raise GameChangesConflictError(
                 "changed games can be finalized only in a complete poll"
@@ -430,7 +331,7 @@ class LocalGameChangesStore:
                 manifest["processing_completed_at"] = updated_at
             else:
                 manifest.pop("processing_completed_at", None)
-            atomic_write(local_manifest_path, encode_json(manifest))
+            atomic_write(resolved_manifest_path, encode_json(manifest))
         return summary
 
     @staticmethod
@@ -438,20 +339,6 @@ class LocalGameChangesStore:
         page_values: List[Any],
         expected_page_count: int,
     ) -> List[Dict[str, Any]]:
-        """Validate the page sequence in a poll manifest.
-
-        Args:
-            page_values: Untrusted page entries loaded from the manifest.
-            expected_page_count: Required number of landed pages.
-
-        Returns:
-            Page entries narrowed to dictionaries.
-
-        Raises:
-            GameChangesConflictError: If pages are missing, malformed, or not
-                contiguous.
-        """
-
         if len(page_values) != expected_page_count:
             raise GameChangesConflictError(
                 "poll manifest does not contain every expected page"
@@ -475,19 +362,6 @@ class LocalGameChangesStore:
 
     @staticmethod
     def _manifest_timestamp(manifest: Dict[str, Any], key: str) -> datetime:
-        """Parse one timezone-aware timestamp from a poll manifest.
-
-        Args:
-            manifest: Poll manifest containing the timestamp.
-            key: Timestamp field to parse.
-
-        Returns:
-            Timestamp normalized to UTC.
-
-        Raises:
-            GameChangesConflictError: If the field is missing or invalid.
-        """
-
         value = manifest.get(key)
         if not isinstance(value, str):
             raise GameChangesConflictError(f"poll manifest {key} is invalid")
@@ -501,20 +375,6 @@ class LocalGameChangesStore:
 
     @staticmethod
     def _read_manifest(manifest_path: Path) -> Dict[str, Any]:
-        """Read a correction manifest and normalize invalid-data failures.
-
-        Args:
-            manifest_path: Existing correction manifest path.
-
-        Returns:
-            Parsed manifest object.
-
-        Raises:
-            GameChangesConflictError: If the file is invalid JSON or not an
-                object.
-            OSError: If the manifest cannot be read.
-        """
-
         try:
             return read_json_object(manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
@@ -524,19 +384,6 @@ class LocalGameChangesStore:
     def _validated_changed_games(
         manifest: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], ...]:
-        """Validate mutable changed-game entries in a poll manifest.
-
-        Args:
-            manifest: Parsed correction manifest.
-
-        Returns:
-            Validated changed-game objects.
-
-        Raises:
-            GameChangesConflictError: If entries, identifiers, seasons, links,
-                or processing states are malformed or duplicated.
-        """
-
         games_value = manifest.get("changed_games")
         if not isinstance(games_value, list):
             raise GameChangesConflictError("poll manifest changed games are invalid")
@@ -576,15 +423,6 @@ class LocalGameChangesStore:
     def _processing_summary(
         games: Tuple[Dict[str, Any], ...],
     ) -> Dict[str, int]:
-        """Count changed games by processing status.
-
-        Args:
-            games: Validated changed-game manifest entries.
-
-        Returns:
-            Count for every supported processing state.
-        """
-
         summary = {status: 0 for status in GAME_CHANGE_PROCESSING_STATUSES}
         for game in games:
             summary[game["processing_status"]] += 1
@@ -592,15 +430,6 @@ class LocalGameChangesStore:
 
     @staticmethod
     def _processing_status(summary: Dict[str, int]) -> str:
-        """Derive overall processing state from per-game counts.
-
-        Args:
-            summary: Counts for every changed-game processing state.
-
-        Returns:
-            `pending`, `failed`, or `complete`.
-        """
-
         if summary["pending"]:
             return "pending"
         if summary["failed"]:
@@ -614,23 +443,6 @@ class LocalGameChangesStore:
         run_id: UUID,
         observed_at: datetime,
     ) -> Dict[str, Any]:
-        """Load a compatible manifest or initialize a new one.
-
-        Args:
-            manifest_path: Poll manifest path.
-            request: Current page's poll request metadata.
-            run_id: Identifier for the poll run.
-            observed_at: Time at which this page was observed.
-
-        Returns:
-            A mutable poll manifest.
-
-        Raises:
-            GameChangesConflictError: If the existing manifest is malformed or
-                describes a different poll window.
-            OSError: If the manifest cannot be read.
-        """
-
         normalized_request = request.as_dict()
         if not manifest_path.exists():
             return {
@@ -679,25 +491,6 @@ class LocalGameChangesStore:
         response_checksum: str,
         observed_at: datetime,
     ) -> bool:
-        """Merge one page's provenance and games into a poll manifest.
-
-        Args:
-            manifest: Mutable poll manifest.
-            changes: Validated change-feed response.
-            request: Poll request metadata for this page.
-            response_path: Persisted raw response path.
-            metadata_path: Persisted page metadata path.
-            response_checksum: SHA-256 digest of the response bytes.
-            observed_at: Time at which this page was observed.
-
-        Returns:
-            Whether the manifest was changed.
-
-        Raises:
-            GameChangesConflictError: If the page number already describes a
-                different response.
-        """
-
         pages = manifest["pages"]
         assert isinstance(pages, list)
         existing_page: Optional[Dict[str, Any]] = None
@@ -754,13 +547,4 @@ class LocalGameChangesStore:
         return True
 
     def _relative_path(self, path: Path) -> str:
-        """Return a path relative to the configured data directory.
-
-        Args:
-            path: Persisted path under the configured data directory.
-
-        Returns:
-            Portable POSIX-style relative path.
-        """
-
-        return path.relative_to(self.data_dir).as_posix()
+        return path.relative_to(self.storage_root).as_posix()

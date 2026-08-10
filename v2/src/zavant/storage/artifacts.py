@@ -20,12 +20,6 @@ class ArtifactReference:
     uri: str
 
     def __post_init__(self) -> None:
-        """Validate the portable key and display URI.
-
-        Raises:
-            ValueError: If the key or URI is empty, absolute, or unsafe.
-        """
-
         if not self.key or "\\" in self.key:
             raise ValueError("artifact key must be a non-empty POSIX path")
         parsed_key = PurePosixPath(self.key)
@@ -39,10 +33,4 @@ class ArtifactReference:
             raise ValueError("artifact uri must not be empty")
 
     def __str__(self) -> str:
-        """Return the backend-specific location for operator output.
-
-        Returns:
-            Artifact URI or local path text.
-        """
-
         return self.uri

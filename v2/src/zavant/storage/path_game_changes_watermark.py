@@ -1,4 +1,4 @@
-"""Durable local watermark for MLB corrected-game polling."""
+"""Path-backed watermark for MLB corrected-game polling."""
 
 from datetime import datetime, timezone
 import json
@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID
 
-from zavant.storage._local_files import (
+from zavant.storage._path_io import (
     atomic_write,
     encode_json,
-    local_artifact_path,
-    local_artifact_reference,
+    resolve_artifact_path,
+    artifact_reference_for_path,
     read_json_object,
 )
 from zavant.storage.artifacts import ArtifactReference
@@ -22,48 +22,25 @@ Clock = Callable[[], datetime]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
-class LocalGameChangesWatermarkStore:
+class PathGameChangesWatermarkStore:
     """Persist the correction checkpoint as one atomic state document.
 
     Args:
-        data_dir: Root directory containing raw data and operational state.
+        storage_root: Root path containing raw data and operational state.
         clock: Function returning the current timezone-aware UTC time.
     """
 
-    def __init__(self, data_dir: Path, clock: Clock = utc_now) -> None:
-        """Initialize the local watermark store.
-
-        Args:
-            data_dir: Root directory containing raw data and operational state.
-            clock: Function returning the current timezone-aware UTC time.
-        """
-
-        self.data_dir = data_dir
+    def __init__(self, storage_root: Path, clock: Clock = utc_now) -> None:
+        self.storage_root = storage_root
         self.clock = clock
         self.path = (
-            data_dir / "state" / "mlb_stats_api" / "game_changes" / "watermark.json"
+            storage_root / "state" / "mlb_stats_api" / "game_changes" / "watermark.json"
         )
 
     def read(self) -> Optional[GameChangesWatermark]:
-        """Read and validate the current correction watermark.
-
-        Returns:
-            Current watermark state, or `None` before initialization.
-
-        Raises:
-            GameChangesWatermarkConflictError: If stored state is malformed.
-            OSError: If stored state cannot be read.
-        """
-
         if not self.path.exists():
             return None
         try:
@@ -82,26 +59,6 @@ class LocalGameChangesWatermarkStore:
         run_id: UUID,
         manifest_path: ArtifactReference,
     ) -> GameChangesWatermark:
-        """Compare the current checkpoint and atomically advance it.
-
-        Args:
-            expected_current: Stored checkpoint observed before polling, or
-                `None` when bootstrapping the state document.
-            advanced_from: Logical checkpoint used by the completed poll.
-            updated_since: New checkpoint captured at the poll's start.
-            run_id: Successful poll run advancing the checkpoint.
-            manifest_path: Completed manifest supporting the advancement.
-
-        Returns:
-            Newly persisted watermark state.
-
-        Raises:
-            ValueError: If timestamps, ordering, or the manifest path is invalid.
-            GameChangesWatermarkConflictError: If another writer changed the
-                checkpoint after it was read.
-            OSError: If state cannot be read or written.
-        """
-
         normalized_expected = self._normalize_optional_timestamp(
             expected_current, "expected_current"
         )
@@ -113,11 +70,11 @@ class LocalGameChangesWatermarkStore:
             raise ValueError("updated_since must be after advanced_from")
         if normalized_expected is not None and normalized_expected != normalized_from:
             raise ValueError("advanced_from must equal the expected current watermark")
-        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
-        if not local_manifest_path.exists():
+        resolved_manifest_path = resolve_artifact_path(self.storage_root, manifest_path)
+        if not resolved_manifest_path.exists():
             raise ValueError("manifest_path must identify a completed poll manifest")
         try:
-            manifest = read_json_object(local_manifest_path)
+            manifest = read_json_object(resolved_manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
             raise ValueError(
                 "manifest_path must contain a valid poll manifest"
@@ -162,18 +119,6 @@ class LocalGameChangesWatermarkStore:
         return watermark
 
     def _from_payload(self, payload: Dict[str, Any]) -> GameChangesWatermark:
-        """Validate and construct watermark state from stored JSON.
-
-        Args:
-            payload: Parsed state document.
-
-        Returns:
-            Validated watermark state.
-
-        Raises:
-            ValueError: If a required field is invalid.
-        """
-
         if payload.get("contract") != "mlb-stats-api-game-changes-watermark/v1":
             raise ValueError("watermark contract is unsupported")
         run_id_value = payload.get("run_id")
@@ -189,8 +134,8 @@ class LocalGameChangesWatermarkStore:
         updated_since = self._parse_timestamp(payload, "updated_since")
         if advanced_from >= updated_since:
             raise ValueError("watermark timestamps are not increasing")
-        manifest_path = self.data_dir / relative_manifest_path
-        manifest_reference = local_artifact_reference(self.data_dir, manifest_path)
+        manifest_path = self.storage_root / relative_manifest_path
+        manifest_reference = artifact_reference_for_path(self.storage_root, manifest_path)
         if not manifest_path.exists():
             raise ValueError("watermark manifest_path does not exist")
         return GameChangesWatermark(
@@ -203,19 +148,6 @@ class LocalGameChangesWatermarkStore:
 
     @classmethod
     def _parse_timestamp(cls, payload: Dict[str, Any], key: str) -> datetime:
-        """Parse one stored timestamp.
-
-        Args:
-            payload: State document containing the timestamp.
-            key: Timestamp field to parse.
-
-        Returns:
-            Timestamp normalized to UTC.
-
-        Raises:
-            ValueError: If the field is missing, malformed, or timezone-naive.
-        """
-
         value = payload.get(key)
         if not isinstance(value, str):
             raise ValueError(f"watermark {key} is invalid")
@@ -227,19 +159,6 @@ class LocalGameChangesWatermarkStore:
 
     @staticmethod
     def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        """Validate and normalize a timestamp to UTC.
-
-        Args:
-            value: Candidate timestamp.
-            name: Field name used in validation errors.
-
-        Returns:
-            Timezone-aware UTC timestamp.
-
-        Raises:
-            ValueError: If the timestamp is timezone-naive.
-        """
-
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError(f"{name} must include a UTC offset")
         return value.astimezone(timezone.utc)
@@ -250,17 +169,4 @@ class LocalGameChangesWatermarkStore:
         value: Optional[datetime],
         name: str,
     ) -> Optional[datetime]:
-        """Normalize an optional timestamp to UTC.
-
-        Args:
-            value: Candidate timestamp or `None`.
-            name: Field name used in validation errors.
-
-        Returns:
-            Normalized timestamp or `None`.
-
-        Raises:
-            ValueError: If a present timestamp is timezone-naive.
-        """
-
         return None if value is None else cls._normalize_timestamp(value, name)

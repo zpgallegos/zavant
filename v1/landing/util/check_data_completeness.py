@@ -24,26 +24,14 @@ PROC_PREFIX = "json"
 
 
 def include_game(game: dict):
-    """
-    -> True if the game should be included in the dataset
-    regular season games, finalized state
-
-    :param game: game object
-    :return: bool
-    """
+    """Include only finalized regular-season games."""
     state = game["status_codedGameState"]
     series = game["seriesDescription"]
     return state == "F" and series == "Regular Season"
 
 
 def get_season_dates(seasons: list[str]):
-    """
-    yield start/end dates for each month in each year in @seasons
-    ensures that the game limit isn't reached
-
-    :param seasons: list of years
-    :return: generator of (start, end) date tuples, pass to get_schedule_url
-    """
+    """Yield monthly date ranges to stay below the API's game limit."""
     for year in seasons:
         for month in range(1, 13):
             end = 31

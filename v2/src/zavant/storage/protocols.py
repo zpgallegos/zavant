@@ -1,4 +1,4 @@
-"""Behavioral interfaces implemented by local and cloud storage adapters."""
+"""Behavioral interfaces implemented by acquisition persistence stores."""
 
 from datetime import date, datetime
 from typing import Any, Dict, Mapping, Optional, Protocol, Tuple, runtime_checkable
@@ -10,13 +10,17 @@ from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.models import (
     ChangedGameWorkItem,
+    CurrentRawGameRevision,
     GameChangesWatermark,
     LandedGameChangesPage,
     LandedRawGame,
     LandedSchedule,
+    LoadedSeasonBackfillChanges,
     LoadedScheduleRun,
     ScheduleWatermark,
     StartedDailyRun,
+    StartedSeasonBackfillRun,
+    SeasonBackfillCheckpoint,
 )
 
 
@@ -55,6 +59,11 @@ class RawGameStore(Protocol):
         Returns:
             Current revision ID, or `None` when the game is not landed.
         """
+
+        ...
+
+    def current_revisions(self, season: int) -> Tuple[CurrentRawGameRevision, ...]:
+        """List current persisted revisions for one season."""
 
         ...
 
@@ -348,25 +357,84 @@ class DailyRunStore(Protocol):
         status: str,
         details: Dict[str, Any],
     ) -> None:
-        """Record one daily branch outcome.
-
-        Args:
-            manifest_path: Daily manifest artifact reference.
-            branch: Supported coordinator branch.
-            status: Complete, failed, or skipped.
-            details: JSON-serializable branch result or error.
-        """
+        """Record one daily branch outcome."""
 
         ...
 
     def finalize(self, manifest_path: ArtifactReference) -> Dict[str, str]:
-        """Finalize a daily run and return its branch statuses.
+        """Finalize a daily run and return its branch statuses."""
 
-        Args:
-            manifest_path: Daily manifest artifact reference.
+        ...
 
-        Returns:
-            Recorded status keyed by coordinator branch.
-        """
 
+@runtime_checkable
+class SeasonBackfillStore(Protocol):
+    """Backfill run evidence and season-scoped reconciliation state."""
+
+    def start(
+        self,
+        run_id: UUID,
+        started_at: datetime,
+        seasons: Tuple[int, ...],
+        mode: str,
+        dry_run: bool,
+        configuration: Dict[str, Any],
+    ) -> StartedSeasonBackfillRun:
+        ...
+
+    def record_season(
+        self,
+        manifest_path: ArtifactReference,
+        season: int,
+        status: str,
+        details: Dict[str, Any],
+    ) -> None:
+        ...
+
+    def finalize(self, manifest_path: ArtifactReference) -> Dict[int, str]:
+        ...
+
+    def land_changes_page(
+        self,
+        run_id: UUID,
+        season: int,
+        page_number: int,
+        changes: GameChangesResponse,
+        request: GameChangesRequest,
+        raw: bytes,
+    ) -> ArtifactReference:
+        ...
+
+    def complete_changes(
+        self,
+        run_id: UUID,
+        season: int,
+        updated_since: datetime,
+        window_end: datetime,
+        total_items: int,
+        response_paths: Tuple[ArtifactReference, ...],
+        changed_game_pks: Tuple[int, ...],
+    ) -> None:
+        ...
+
+    def load_changes(
+        self,
+        run_id: UUID,
+        season: int,
+        updated_since: datetime,
+        window_end: datetime,
+    ) -> Optional[LoadedSeasonBackfillChanges]:
+        ...
+
+    def read_checkpoint(self, season: int) -> Optional[SeasonBackfillCheckpoint]:
+        ...
+
+    def advance_checkpoint(
+        self,
+        season: int,
+        expected_current: Optional[datetime],
+        updated_since: datetime,
+        run_id: UUID,
+        manifest_path: ArtifactReference,
+    ) -> SeasonBackfillCheckpoint:
         ...

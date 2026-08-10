@@ -10,9 +10,9 @@ from zavant.contracts.game_changes import (
     GameChangesRequest,
     GameChangesResponse,
 )
-from zavant.storage.local_game_changes import (
+from zavant.storage.path_game_changes import (
     GameChangesConflictError,
-    LocalGameChangesStore,
+    PathGameChangesStore,
 )
 
 
@@ -25,11 +25,7 @@ RUN_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 class GameChangesContractTests(unittest.TestCase):
-    """Tests for validation at the MLB game-changes boundary."""
-
     def test_extracts_deduplicated_changed_games(self) -> None:
-        """Extract routing fields from a representative correction response."""
-
         changes = GameChangesResponse.from_bytes(SAMPLE_CHANGES.read_bytes())
 
         self.assertEqual(changes.total_items, 2)
@@ -42,8 +38,6 @@ class GameChangesContractTests(unittest.TestCase):
         )
 
     def test_rejects_game_without_live_feed_link(self) -> None:
-        """Reject a response that cannot route a changed game for retrieval."""
-
         payload = json.loads(SAMPLE_CHANGES.read_bytes())
         del payload["dates"][0]["games"][0]["link"]
 
@@ -51,8 +45,6 @@ class GameChangesContractTests(unittest.TestCase):
             GameChangesResponse.from_bytes(json.dumps(payload).encode())
 
     def test_request_requires_timezone_aware_boundaries(self) -> None:
-        """Reject a poll request whose watermark has no UTC offset."""
-
         with self.assertRaisesRegex(ValueError, "UTC offset"):
             GameChangesRequest(
                 updated_since=datetime(2026, 8, 8),
@@ -64,33 +56,19 @@ class GameChangesContractTests(unittest.TestCase):
             )
 
 
-class LocalGameChangesStoreTests(unittest.TestCase):
-    """Tests for immutable correction pages and their poll manifest."""
-
+class PathGameChangesStoreTests(unittest.TestCase):
     def setUp(self) -> None:
-        """Create an isolated change-feed store for each test."""
-
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
         self.raw = SAMPLE_CHANGES.read_bytes()
         self.changes = GameChangesResponse.from_bytes(self.raw)
-        self.store = LocalGameChangesStore(
+        self.store = PathGameChangesStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
 
     def request(self, page_number: int = 0, offset: int = 0) -> GameChangesRequest:
-        """Build request metadata for a test page.
-
-        Args:
-            page_number: Zero-based logical page number.
-            offset: API result offset represented by the page.
-
-        Returns:
-            Valid poll request metadata.
-        """
-
         return GameChangesRequest(
             updated_since=UPDATED_SINCE,
             window_end=WINDOW_END,
@@ -101,8 +79,6 @@ class LocalGameChangesStoreTests(unittest.TestCase):
         )
 
     def test_lands_page_metadata_and_deduplicated_manifest(self) -> None:
-        """Persist source bytes and create a routable poll manifest."""
-
         result = self.store.land_page(
             changes=self.changes,
             request=self.request(),
@@ -146,8 +122,6 @@ class LocalGameChangesStoreTests(unittest.TestCase):
         )
 
     def test_same_page_is_idempotent(self) -> None:
-        """Report an existing identical page without duplicating its manifest."""
-
         self.store.land_page(
             changes=self.changes,
             request=self.request(),
@@ -168,8 +142,6 @@ class LocalGameChangesStoreTests(unittest.TestCase):
         self.assertEqual(len(manifest["changed_games"]), 2)
 
     def test_multiple_pages_merge_and_deduplicate_games(self) -> None:
-        """Merge page provenance while retaining one entry per changed game."""
-
         first_result = self.store.land_page(
             changes=self.changes,
             request=self.request(),
@@ -191,8 +163,6 @@ class LocalGameChangesStoreTests(unittest.TestCase):
         self.assertEqual(len(manifest["changed_games"]), 2)
 
     def test_refuses_different_content_for_the_same_page(self) -> None:
-        """Protect an immutable poll page from conflicting response bytes."""
-
         self.store.land_page(
             changes=self.changes,
             request=self.request(),
@@ -213,8 +183,6 @@ class LocalGameChangesStoreTests(unittest.TestCase):
             )
 
     def test_refuses_conflicting_request_for_the_same_page(self) -> None:
-        """Protect immutable page provenance from a different request."""
-
         self.store.land_page(
             changes=self.changes,
             request=self.request(),
@@ -239,8 +207,6 @@ class LocalGameChangesStoreTests(unittest.TestCase):
             )
 
     def test_finalize_requires_every_expected_page(self) -> None:
-        """Keep a poll open when its expected page sequence is incomplete."""
-
         result = self.store.land_page(
             changes=self.changes,
             request=self.request(),

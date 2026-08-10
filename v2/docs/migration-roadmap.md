@@ -16,17 +16,25 @@ This is a sequence of independently demonstrable vertical slices, not a commitme
 - Retriable corrected-game processing into immutable raw revisions
 - Incremental schedule discovery with a rolling lookback and independent through-date
 - Durable daily coordinator with isolated schedule, correction-discovery, and correction-processing outcomes
+- Resumable multi-season backfill with explicit reconciliation modes, dry-run planning, monthly child manifests, and independent season checkpoints
 - Tests based on representative checked-in MLB responses
 - Target architecture and ADR process
 
-## 1. Acquisition — local workflow established
+## 1. Acquisition — application implementation established
 
-- Generalize local storage behavior into protocols before adding cloud adapters. Established in ADR 0008 with portable artifact references and conforming local adapters.
-- Add an S3 adapter and contract tests shared with the local adapter.
+- Generalize storage behavior into protocols and portable artifact references. Established in ADR 0008.
+- Back the established persistence state machines with conditionally written S3 objects. Established in ADR 0009.
+- Compose the same daily coordinator at a cached Lambda application boundary. Established in ADR 0009.
+- Define the acquisition bucket as code. Established in ADR 0010; deployment remains operator-controlled.
+- Define the Lambda execution role with prefix-scoped S3 access. Established in ADR 0011; deployment remains operator-controlled.
+- Package and define a manually invokable Lambda plus log retention. Established in ADR 0012; deployment remains operator-controlled.
+- Reconcile historical seasons from a local CLI against local or S3 storage. Established in ADR 0013.
+- Define EventBridge scheduling and alarms as code.
+- Run a real-AWS integration smoke test before enabling the schedule.
 
 Local exit demo established: bootstrap one daily run, acquire eligible schedule games, replay an MLB correction into a new revision, rerun safely, and inspect the schedule, correction, watermark, and coordinator manifests.
 
-Cloud exit demo: run the same workflow through storage protocols backed by S3 and verify behavioral parity with the local adapters.
+Cloud exit demo: deploy the infrastructure, run the Lambda workflow through S3, rerun it safely, and inspect CloudWatch status plus S3 evidence and watermarks.
 
 ## 2. Analytical storage
 

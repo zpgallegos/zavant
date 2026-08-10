@@ -12,16 +12,7 @@ class GameChangesContractError(ValueError):
 
 @dataclass(frozen=True)
 class ChangedGame:
-    """Game identified by MLB as having corrected non-Statcast data.
-
-    Attributes:
-        game_pk: MLB's primary identifier for the changed game.
-        official_date: Official date assigned to the game by MLB.
-        season: MLB season identifier used by raw storage.
-        status_code: MLB's coded game state at observation time.
-        detailed_state: Human-readable game state at observation time.
-        live_feed_link: Relative link to the game's complete live feed.
-    """
+    """Game identified by MLB as having corrected non-Statcast data."""
 
     game_pk: int
     official_date: date
@@ -31,12 +22,6 @@ class ChangedGame:
     live_feed_link: str
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable representation of the changed game.
-
-        Returns:
-            Changed-game fields suitable for a poll manifest.
-        """
-
         return {
             "detailed_state": self.detailed_state,
             "game_pk": self.game_pk,
@@ -50,14 +35,7 @@ class ChangedGame:
 
 @dataclass(frozen=True)
 class GameChangesResponse:
-    """Validated routing data plus an unmodified game-changes response.
-
-    Attributes:
-        changed_games: Deduplicated games identified by the response.
-        total_items: Number of items reported by MLB.
-        total_games: Number of games reported by MLB.
-        payload: Parsed but otherwise unmodified source response.
-    """
+    """Validated routing data plus an unmodified game-changes response."""
 
     changed_games: Tuple[ChangedGame, ...]
     total_items: int
@@ -66,12 +44,6 @@ class GameChangesResponse:
 
     @property
     def game_pks(self) -> Tuple[int, ...]:
-        """Return sorted, deduplicated game identifiers.
-
-        Returns:
-            Game identifiers included in the response.
-        """
-
         return tuple(game.game_pk for game in self.changed_games)
 
     @classmethod
@@ -137,19 +109,6 @@ class GameChangesResponse:
 
     @staticmethod
     def _parse_changed_game(value: Any, location: str) -> ChangedGame:
-        """Validate and parse one changed-game object.
-
-        Args:
-            value: Candidate changed-game value.
-            location: Human-readable JSON location for validation errors.
-
-        Returns:
-            A validated changed game.
-
-        Raises:
-            GameChangesContractError: If a required field is invalid.
-        """
-
         if not isinstance(value, dict):
             raise GameChangesContractError(f"{location} must be a JSON object")
 
@@ -208,16 +167,7 @@ class GameChangesResponse:
 
 @dataclass(frozen=True)
 class GameChangesRequest:
-    """Request metadata defining one page in a bounded correction poll.
-
-    Attributes:
-        updated_since: Inclusive lower watermark sent to MLB.
-        window_end: Durable checkpoint candidate captured before polling.
-        page_number: Zero-based logical page number within the poll.
-        limit: Requested maximum number of results.
-        offset: Requested result offset.
-        source_uri: Complete source URI used for the request.
-    """
+    """Request metadata defining one page in a bounded correction poll."""
 
     updated_since: datetime
     window_end: datetime
@@ -227,12 +177,6 @@ class GameChangesRequest:
     source_uri: str
 
     def __post_init__(self) -> None:
-        """Validate poll boundaries and pagination values.
-
-        Raises:
-            ValueError: If timestamps are naive or pagination is invalid.
-        """
-
         if self.updated_since.tzinfo is None or self.window_end.tzinfo is None:
             raise ValueError("poll timestamps must include a UTC offset")
         if self.updated_since > self.window_end:
@@ -247,12 +191,6 @@ class GameChangesRequest:
             raise ValueError("source_uri must not be empty")
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return normalized request metadata for persistence.
-
-        Returns:
-            JSON-serializable poll boundaries and pagination values.
-        """
-
         return {
             "limit": self.limit,
             "offset": self.offset,

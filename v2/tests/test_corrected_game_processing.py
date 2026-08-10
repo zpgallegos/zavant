@@ -14,8 +14,8 @@ from zavant.clients.mlb_stats_api import (
 )
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.contracts.raw_game import RawGameResponse
-from zavant.storage.local_game_changes import LocalGameChangesStore
-from zavant.storage.local_raw import LocalRawGameStore
+from zavant.storage.path_game_changes import PathGameChangesStore
+from zavant.storage.path_raw import PathRawGameStore
 from zavant.storage.artifacts import ArtifactReference
 
 
@@ -26,16 +26,6 @@ RUN_ID = UUID("00000000-0000-0000-0000-000000000020")
 
 
 def raw_game(game_pk: int, marker: str) -> bytes:
-    """Build a minimal valid live-game response revision.
-
-    Args:
-        game_pk: MLB game identifier embedded in the response.
-        marker: Meaningful source value distinguishing revisions.
-
-    Returns:
-        UTF-8 JSON bytes satisfying the raw-game contract.
-    """
-
     return json.dumps(
         {
             "gamePk": game_pk,
@@ -47,15 +37,6 @@ def raw_game(game_pk: int, marker: str) -> bytes:
 
 
 def changes_raw(game_pks: List[int]) -> bytes:
-    """Build a valid corrected-game response.
-
-    Args:
-        game_pks: Changed game identifiers included in the response.
-
-    Returns:
-        UTF-8 JSON bytes satisfying the correction contract.
-    """
-
     games = [
         {
             "gamePk": game_pk,
@@ -76,16 +57,6 @@ def changes_raw(game_pks: List[int]) -> bytes:
 
 
 def retrieved(body: bytes, game_pk: int) -> RetrievedResource:
-    """Build a successful fake live-game resource.
-
-    Args:
-        body: Exact response bytes.
-        game_pk: Game identifier included in source provenance.
-
-    Returns:
-        Successful retrieved resource.
-    """
-
     uri = f"https://statsapi.example.test/api/v1.1/game/{game_pk}/feed/live"
     return RetrievedResource(
         body=body,
@@ -98,32 +69,11 @@ def retrieved(body: bytes, game_pk: int) -> RetrievedResource:
 
 
 class FakeCorrectedGameApi:
-    """Queue live-game responses and failures by game identifier."""
-
     def __init__(self, outcomes: Dict[int, List[object]]) -> None:
-        """Initialize queued game outcomes.
-
-        Args:
-            outcomes: Responses or MLB client errors queued by game ID.
-        """
-
         self.outcomes = {key: list(value) for key, value in outcomes.items()}
         self.calls: List[int] = []
 
     def get_live_game(self, game_pk: int) -> RetrievedResource:
-        """Return or raise the next configured game outcome.
-
-        Args:
-            game_pk: Requested MLB game identifier.
-
-        Returns:
-            Configured successful response.
-
-        Raises:
-            MlbStatsApiError: If the next outcome is a configured client error.
-            AssertionError: If no valid outcome remains.
-        """
-
         self.calls.append(game_pk)
         outcomes = self.outcomes.get(game_pk)
         if not outcomes:
@@ -137,33 +87,20 @@ class FakeCorrectedGameApi:
 
 
 class CorrectedGameProcessorTests(unittest.TestCase):
-    """Tests for durable correction-manifest processing."""
-
     def setUp(self) -> None:
-        """Create isolated raw and correction stores."""
-
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
-        self.changes_store = LocalGameChangesStore(
+        self.changes_store = PathGameChangesStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.game_store = LocalRawGameStore(
+        self.game_store = PathRawGameStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
 
     def correction_manifest(self, game_pks: List[int]) -> ArtifactReference:
-        """Land and finalize one correction response manifest.
-
-        Args:
-            game_pks: Changed games included in the poll.
-
-        Returns:
-            Completed correction manifest path.
-        """
-
         raw = changes_raw(game_pks)
         changes = GameChangesResponse.from_bytes(raw)
         landed = self.changes_store.land_page(
@@ -188,13 +125,6 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         return landed.manifest_path
 
     def land_existing_game(self, game_pk: int, marker: str = "old") -> None:
-        """Seed a current raw revision for correction eligibility.
-
-        Args:
-            game_pk: MLB game identifier to seed.
-            marker: Content marker for the seeded revision.
-        """
-
         raw = raw_game(game_pk, marker)
         self.game_store.land(
             RawGameResponse.from_bytes(raw),
@@ -204,8 +134,6 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         )
 
     def test_lands_new_revision_and_completes_manifest(self) -> None:
-        """Retrieve an existing changed game into a new raw revision."""
-
         self.land_existing_game(823426)
         manifest_path = self.correction_manifest([823426])
         api = FakeCorrectedGameApi(
@@ -228,8 +156,6 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         )
 
     def test_skips_game_not_previously_landed(self) -> None:
-        """Leave initial portfolio inclusion to schedule discovery."""
-
         manifest_path = self.correction_manifest([823426])
         api = FakeCorrectedGameApi({})
 
@@ -247,8 +173,6 @@ class CorrectedGameProcessorTests(unittest.TestCase):
         )
 
     def test_retries_failed_game_on_next_invocation(self) -> None:
-        """Retry only failed correction work and preserve attempt history."""
-
         self.land_existing_game(823426)
         manifest_path = self.correction_manifest([823426])
         api = FakeCorrectedGameApi(

@@ -32,13 +32,7 @@ class CorrectedGameIdentityError(ValueError):
 
 @dataclass(frozen=True)
 class CorrectionManifestProcessingResult:
-    """Processing result for one completed correction manifest.
-
-    Attributes:
-        manifest_path: Correction manifest that supplied the work.
-        status: Derived processing status: complete or failed.
-        summary: Counts grouped by changed-game processing status.
-    """
+    """Processing result for one completed correction manifest."""
 
     manifest_path: ArtifactReference
     status: str
@@ -46,21 +40,9 @@ class CorrectionManifestProcessingResult:
 
     @property
     def successful(self) -> bool:
-        """Return whether every changed game reached a terminal success state.
-
-        Returns:
-            `True` when no game is pending or failed.
-        """
-
         return self.status == "complete"
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable manifest result.
-
-        Returns:
-            Manifest location, status, and processing counts.
-        """
-
         return {
             "manifest_path": str(self.manifest_path),
             "status": self.status,
@@ -70,13 +52,7 @@ class CorrectionManifestProcessingResult:
 
 @dataclass(frozen=True)
 class CorrectedGameProcessingResult:
-    """Aggregate result for all outstanding correction manifests.
-
-    Attributes:
-        manifests: Per-manifest processing results.
-        status: Derived aggregate status: complete or failed.
-        summary: Counts across every processed manifest.
-    """
+    """Aggregate result for all outstanding correction manifests."""
 
     manifests: Tuple[CorrectionManifestProcessingResult, ...]
     status: str
@@ -84,21 +60,9 @@ class CorrectedGameProcessingResult:
 
     @property
     def successful(self) -> bool:
-        """Return whether every processed manifest completed.
-
-        Returns:
-            `True` when the aggregate status is complete.
-        """
-
         return self.status == "complete"
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable aggregate result.
-
-        Returns:
-            Aggregate status, counts, and per-manifest outcomes.
-        """
-
         return {
             "manifests": [manifest.as_dict() for manifest in self.manifests],
             "status": self.status,
@@ -121,14 +85,6 @@ class CorrectedGameProcessor:
         changes_store: GameChangesStore,
         game_store: RawGameStore,
     ) -> None:
-        """Initialize the corrected-game processor.
-
-        Args:
-            api: MLB client supporting complete live-game retrieval.
-            changes_store: Store containing completed correction manifests.
-            game_store: Revision-aware raw-game store.
-        """
-
         self.api = api
         self.changes_store = changes_store
         self.game_store = game_store
@@ -248,18 +204,6 @@ class CorrectedGameProcessor:
     def _record_failure(
         self, manifest_path: ArtifactReference, game_pk: int, exc: Exception
     ) -> None:
-        """Record one corrected-game failure in its source manifest.
-
-        Args:
-            manifest_path: Correction manifest receiving the outcome.
-            game_pk: MLB game identifier that failed.
-            exc: Failure raised during lookup, retrieval, validation, or landing.
-
-        Raises:
-            GameChangesConflictError: If correction state is malformed.
-            OSError: If the failure cannot be persisted.
-        """
-
         self.changes_store.record_game_outcome(
             manifest_path=manifest_path,
             game_pk=game_pk,

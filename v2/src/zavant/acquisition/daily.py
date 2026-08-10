@@ -52,27 +52,12 @@ BRANCH_ERRORS = (
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True)
 class DailyAcquisitionResult:
-    """Aggregate result of one daily local acquisition run.
-
-    Attributes:
-        run_id: Unique coordinator run identifier.
-        started_at: UTC timestamp captured before any branch.
-        through_date: Inclusive schedule discovery end date.
-        manifest_path: Durable run manifest containing every branch outcome.
-        status: Complete only when every branch succeeds or is current.
-        branch_statuses: Status keyed by coordinator branch.
-    """
+    """Aggregate result of one daily acquisition run."""
 
     run_id: UUID
     started_at: datetime
@@ -83,21 +68,9 @@ class DailyAcquisitionResult:
 
     @property
     def successful(self) -> bool:
-        """Return whether the complete daily workflow succeeded.
-
-        Returns:
-            `True` only when the aggregate status is complete.
-        """
-
         return self.status == "complete"
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable daily run result.
-
-        Returns:
-            Run identity, status, branch states, and manifest location.
-        """
-
         return {
             "branch_statuses": self.branch_statuses,
             "manifest_path": str(self.manifest_path),
@@ -129,17 +102,6 @@ class DailyAcquisitionCoordinator:
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
-        """Initialize the daily acquisition coordinator.
-
-        Args:
-            changes_poller: Durable corrected-game discovery service.
-            corrected_game_processor: Processor for all outstanding corrections.
-            schedule_discoverer: Incremental schedule-to-game discovery service.
-            run_store: Durable coordinator run-manifest store.
-            clock: Function capturing the coordinator start time.
-            run_id_factory: Function generating coordinator run identifiers.
-        """
-
         self.changes_poller = changes_poller
         self.corrected_game_processor = corrected_game_processor
         self.schedule_discoverer = schedule_discoverer
@@ -249,17 +211,6 @@ class DailyAcquisitionCoordinator:
         overlap: timedelta,
         max_pages: int,
     ) -> None:
-        """Run and record the correction discovery branch.
-
-        Args:
-            manifest_path: Daily manifest receiving the outcome.
-            initial_watermark: Optional first-run correction checkpoint.
-            sport_id: MLB sport identifier.
-            limit: Correction source page size.
-            overlap: Correction query safety interval.
-            max_pages: Maximum pages allowed in the poll.
-        """
-
         try:
             result: GameChangesPollingResult = self.changes_poller.poll(
                 initial_watermark=initial_watermark,
@@ -279,12 +230,6 @@ class DailyAcquisitionCoordinator:
         )
 
     def _run_correction_processing(self, manifest_path: ArtifactReference) -> None:
-        """Run and record processing of all durable correction work.
-
-        Args:
-            manifest_path: Daily manifest receiving the outcome.
-        """
-
         try:
             result: CorrectedGameProcessingResult = (
                 self.corrected_game_processor.process_all()
@@ -307,16 +252,6 @@ class DailyAcquisitionCoordinator:
         lookback_days: int,
         sport_id: int,
     ) -> None:
-        """Run and record incremental schedule discovery.
-
-        Args:
-            manifest_path: Daily manifest receiving the outcome.
-            initial_start_date: Optional first-run schedule start date.
-            through_date: Inclusive schedule discovery end date.
-            lookback_days: Rolling schedule dates to reconsider.
-            sport_id: MLB sport identifier.
-        """
-
         try:
             result: ScheduleDiscoveryResult = self.schedule_discoverer.discover(
                 initial_start_date=initial_start_date,
@@ -339,14 +274,6 @@ class DailyAcquisitionCoordinator:
     def _record_error(
         self, manifest_path: ArtifactReference, branch: str, exc: Exception
     ) -> None:
-        """Record a bounded branch failure in the daily manifest.
-
-        Args:
-            manifest_path: Daily manifest receiving the failure.
-            branch: Coordinator branch that failed.
-            exc: Operational exception raised by the branch.
-        """
-
         self.run_store.record_branch(
             manifest_path,
             branch,
@@ -359,19 +286,6 @@ class DailyAcquisitionCoordinator:
 
     @staticmethod
     def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        """Validate and normalize one timestamp to UTC.
-
-        Args:
-            value: Candidate timestamp.
-            name: Field name used in validation errors.
-
-        Returns:
-            Timezone-aware UTC timestamp.
-
-        Raises:
-            ValueError: If the timestamp is timezone-naive.
-        """
-
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError(f"{name} must include a UTC offset")
         return value.astimezone(timezone.utc)

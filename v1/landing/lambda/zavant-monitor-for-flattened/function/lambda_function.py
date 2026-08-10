@@ -24,13 +24,6 @@ SEASONS = list(map(str, range(datetime.now().year, 2017, -1)))
 
 
 def check_file_exists(game_pk: int, prefix: str) -> bool:
-    """
-    check whether the flattened file exists for the given game and prefix
-
-    :param game_pk: int, game primary key
-    :param prefix: str, file prefix
-    :return: bool
-    """
     for season in SEASONS:
         key = f"json/{prefix}/{season}/{game_pk}.json"
         try:
@@ -41,16 +34,14 @@ def check_file_exists(game_pk: int, prefix: str) -> bool:
 
 
 def lambda_handler(event, context):
-    """
-    check whether the games downloaded from the API have been successfully flattened
-    before proceeding to the next step in the pipeline (Glue ETL)
+    """Report whether every downloaded game has all flattened datasets.
 
-    :param event: dict, expecting "downloaded_games" key with the list of games to wait for
+    Args:
+        event: Lambda event containing `downloaded_games`.
+        context: AWS Lambda invocation context.
 
-    :return: dict
-        ready: bool, whether the files are ready
-        stop: bool, whether to stop the pipeline
-        n_tries: int, number of tries the next try will be
+    Returns:
+        Readiness state for the next pipeline step.
     """
 
     downloaded_games = event["downloaded_games"]

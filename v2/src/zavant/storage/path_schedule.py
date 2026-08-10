@@ -1,4 +1,4 @@
-"""Local storage for immutable schedule snapshots and run manifests."""
+"""Path-backed storage for schedule snapshots and run manifests."""
 
 from datetime import datetime, timezone
 import json
@@ -7,11 +7,11 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 from uuid import UUID
 
 from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
-from zavant.storage._local_files import (
+from zavant.storage._path_io import (
     atomic_write,
     encode_json,
-    local_artifact_path,
-    local_artifact_reference,
+    resolve_artifact_path,
+    artifact_reference_for_path,
     read_json_object,
     sha256_bytes,
 )
@@ -32,32 +32,19 @@ SCHEDULE_GAME_OUTCOMES = SCHEDULE_GAME_STATUSES[1:]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
-class LocalScheduleStore:
+class PathScheduleStore:
     """Persist immutable schedule responses and discovered-game manifests.
 
     Args:
-        data_dir: Root directory under which raw objects are stored.
+        storage_root: Root path under which raw objects are stored.
         clock: Function returning the current timezone-aware UTC time.
     """
 
-    def __init__(self, data_dir: Path, clock: Clock = utc_now) -> None:
-        """Initialize the local store.
-
-        Args:
-            data_dir: Root directory under which raw objects are stored.
-            clock: Function returning the current timezone-aware UTC time.
-        """
-
-        self.data_dir = data_dir
+    def __init__(self, storage_root: Path, clock: Clock = utc_now) -> None:
+        self.storage_root = storage_root
         self.clock = clock
 
     def land(
@@ -67,23 +54,6 @@ class LocalScheduleStore:
         raw: bytes,
         run_id: UUID,
     ) -> LandedSchedule:
-        """Persist one immutable schedule response and its run manifest.
-
-        Args:
-            schedule: Validated schedule response.
-            request: Request boundaries and provenance.
-            raw: Unmodified API response bytes.
-            run_id: Unique identifier for the schedule request.
-
-        Returns:
-            Paths, identifiers, checksum, scheduled games, and creation status.
-
-        Raises:
-            ScheduleConflictError: If the run conflicts with previously stored
-                content or provenance.
-            OSError: If local persistence fails.
-        """
-
         request_date = request.requested_at.astimezone(timezone.utc).date().isoformat()
         run_directory = self._run_directory(request.requested_at, run_id)
         response_path = run_directory / "response.json"
@@ -133,9 +103,9 @@ class LocalScheduleStore:
         return LandedSchedule(
             run_id=run_id,
             request_date=request_date,
-            response_path=local_artifact_reference(self.data_dir, response_path),
-            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
-            manifest_path=local_artifact_reference(self.data_dir, manifest_path),
+            response_path=artifact_reference_for_path(self.storage_root, response_path),
+            metadata_path=artifact_reference_for_path(self.storage_root, metadata_path),
+            manifest_path=artifact_reference_for_path(self.storage_root, manifest_path),
             response_sha256=response_checksum,
             scheduled_game_pks=schedule.game_pks,
             created=created,
@@ -146,22 +116,6 @@ class LocalScheduleStore:
         requested_at: datetime,
         run_id: UUID,
     ) -> Optional[LoadedScheduleRun]:
-        """Load a complete stored schedule run for safe resumption.
-
-        Args:
-            requested_at: Original timezone-aware schedule request time.
-            run_id: Original schedule run identifier.
-
-        Returns:
-            Stored response and provenance, or `None` if no artifact exists.
-
-        Raises:
-            ValueError: If `requested_at` is timezone-naive.
-            ScheduleConflictError: If only part of the run exists or its
-                provenance is malformed or inconsistent.
-            OSError: If stored artifacts cannot be read.
-        """
-
         if requested_at.tzinfo is None or requested_at.utcoffset() is None:
             raise ValueError("requested_at must include a UTC offset")
         request_date = requested_at.astimezone(timezone.utc).date().isoformat()
@@ -209,27 +163,14 @@ class LocalScheduleStore:
             request_date=request_date,
             raw=raw,
             request=request,
-            response_path=local_artifact_reference(self.data_dir, response_path),
-            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
-            manifest_path=local_artifact_reference(self.data_dir, manifest_path),
+            response_path=artifact_reference_for_path(self.storage_root, response_path),
+            metadata_path=artifact_reference_for_path(self.storage_root, metadata_path),
+            manifest_path=artifact_reference_for_path(self.storage_root, manifest_path),
         )
 
     def game_statuses(self, manifest_path: ArtifactReference) -> Dict[int, str]:
-        """Read validated per-game processing states from a manifest.
-
-        Args:
-            manifest_path: Existing schedule manifest path.
-
-        Returns:
-            Mapping from game identifier to processing status.
-
-        Raises:
-            ScheduleConflictError: If the manifest or game states are invalid.
-            OSError: If the manifest cannot be read.
-        """
-
         manifest = self._read_manifest(
-            local_artifact_path(self.data_dir, manifest_path)
+            resolve_artifact_path(self.storage_root, manifest_path)
         )
         games = self._validated_manifest_games(manifest)
         return {game["game_pk"]: game["processing_status"] for game in games}
@@ -241,24 +182,10 @@ class LocalScheduleStore:
         status: str,
         details: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        """Atomically record one game's latest acquisition outcome.
-
-        Args:
-            manifest_path: Existing schedule manifest path.
-            game_pk: MLB game identifier to update.
-            status: One of `deferred`, `skipped`, `succeeded`, or `failed`.
-            details: Optional JSON-serializable outcome details.
-
-        Raises:
-            ValueError: If the requested outcome is unsupported.
-            ScheduleConflictError: If the manifest or target game is invalid.
-            OSError: If the manifest cannot be read or atomically written.
-        """
-
         if status not in SCHEDULE_GAME_OUTCOMES:
             raise ValueError(f"unsupported schedule game outcome: {status}")
-        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
-        manifest = self._read_manifest(local_manifest_path)
+        resolved_manifest_path = resolve_artifact_path(self.storage_root, manifest_path)
+        manifest = self._read_manifest(resolved_manifest_path)
         games = self._validated_manifest_games(manifest)
         matching_games = [game for game in games if game["game_pk"] == game_pk]
         if len(matching_games) != 1:
@@ -298,24 +225,11 @@ class LocalScheduleStore:
         manifest["updated_at"] = recorded_at
         manifest.pop("completed_at", None)
         manifest.pop("summary", None)
-        atomic_write(local_manifest_path, encode_json(manifest))
+        atomic_write(resolved_manifest_path, encode_json(manifest))
 
     def finalize_manifest(self, manifest_path: ArtifactReference) -> Dict[str, int]:
-        """Derive and atomically publish a schedule run's final status.
-
-        Args:
-            manifest_path: Existing schedule manifest path.
-
-        Returns:
-            Counts for every per-game processing status.
-
-        Raises:
-            ScheduleConflictError: If the manifest or game states are invalid.
-            OSError: If the manifest cannot be read or atomically written.
-        """
-
-        local_manifest_path = local_artifact_path(self.data_dir, manifest_path)
-        manifest = self._read_manifest(local_manifest_path)
+        resolved_manifest_path = resolve_artifact_path(self.storage_root, manifest_path)
+        manifest = self._read_manifest(resolved_manifest_path)
         games = self._validated_manifest_games(manifest)
         summary = {status: 0 for status in SCHEDULE_GAME_STATUSES}
         for game in games:
@@ -337,7 +251,7 @@ class LocalScheduleStore:
                 manifest["completed_at"] = finalized_at
             else:
                 manifest.pop("completed_at", None)
-            atomic_write(local_manifest_path, encode_json(manifest))
+            atomic_write(resolved_manifest_path, encode_json(manifest))
         return summary
 
     def _validate_existing_metadata(
@@ -345,17 +259,6 @@ class LocalScheduleStore:
         metadata_path: Path,
         expected: Dict[str, Any],
     ) -> None:
-        """Validate immutable provenance when metadata already exists.
-
-        Args:
-            metadata_path: Path to the schedule response metadata.
-            expected: Metadata values derived from the current landing request.
-
-        Raises:
-            ScheduleConflictError: If existing metadata is invalid or conflicts.
-            OSError: If the metadata cannot be read.
-        """
-
         if not metadata_path.exists():
             return
         try:
@@ -385,27 +288,6 @@ class LocalScheduleStore:
         response_checksum: str,
         observed_at: datetime,
     ) -> Dict[str, Any]:
-        """Load a compatible manifest or initialize a new one.
-
-        Args:
-            manifest_path: Schedule run manifest path.
-            schedule: Validated schedule response.
-            request: Normalized request metadata.
-            run_id: Unique identifier for the schedule request.
-            response_path: Raw response path.
-            metadata_path: Response provenance path.
-            response_checksum: SHA-256 digest of the response bytes.
-            observed_at: Time at which the response was observed.
-
-        Returns:
-            A compatible existing manifest or a new manifest.
-
-        Raises:
-            ScheduleConflictError: If an existing manifest is malformed or
-                describes different source evidence.
-            OSError: If the manifest cannot be read.
-        """
-
         if not manifest_path.exists():
             return {
                 "contract": "mlb-stats-api-schedule-manifest/v1",
@@ -444,20 +326,6 @@ class LocalScheduleStore:
 
     @staticmethod
     def _read_manifest(manifest_path: Path) -> Dict[str, Any]:
-        """Read a schedule manifest and normalize invalid-data failures.
-
-        Args:
-            manifest_path: Existing schedule manifest path.
-
-        Returns:
-            Parsed manifest object.
-
-        Raises:
-            ScheduleConflictError: If the manifest is invalid JSON or not an
-                object.
-            OSError: If the manifest cannot be read.
-        """
-
         try:
             return read_json_object(manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
@@ -467,19 +335,6 @@ class LocalScheduleStore:
     def _validated_manifest_games(
         manifest: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], ...]:
-        """Validate and return a manifest's mutable game entries.
-
-        Args:
-            manifest: Parsed schedule manifest.
-
-        Returns:
-            Validated game-entry objects.
-
-        Raises:
-            ScheduleConflictError: If games, identifiers, or statuses are
-                malformed or duplicated.
-        """
-
         games_value = manifest.get("games")
         if not isinstance(games_value, list):
             raise ScheduleConflictError("schedule manifest games are invalid")
@@ -503,19 +358,9 @@ class LocalScheduleStore:
         return tuple(games)
 
     def _run_directory(self, requested_at: datetime, run_id: UUID) -> Path:
-        """Build the local directory for a schedule run.
-
-        Args:
-            requested_at: Time at which the schedule request was made.
-            run_id: Unique identifier for the schedule request.
-
-        Returns:
-            Deterministic run directory below the configured data root.
-        """
-
         request_date = requested_at.astimezone(timezone.utc).date().isoformat()
         return (
-            self.data_dir
+            self.storage_root
             / "raw"
             / "mlb_stats_api"
             / "schedules"
@@ -524,13 +369,4 @@ class LocalScheduleStore:
         )
 
     def _relative_path(self, path: Path) -> str:
-        """Return a path relative to the configured data directory.
-
-        Args:
-            path: Persisted path under the configured data directory.
-
-        Returns:
-            Portable POSIX-style relative path.
-        """
-
-        return path.relative_to(self.data_dir).as_posix()
+        return path.relative_to(self.storage_root).as_posix()

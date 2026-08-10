@@ -17,12 +17,7 @@ class EligibilityDisposition(str, Enum):
 
 @dataclass(frozen=True)
 class GameEligibilityDecision:
-    """Decision produced by an initial-acquisition policy.
-
-    Attributes:
-        disposition: Whether to acquire, defer, or permanently skip the game.
-        reason: Stable machine-readable explanation for the decision.
-    """
+    """Decision produced by an initial-acquisition policy."""
 
     disposition: EligibilityDisposition
     reason: str
@@ -48,16 +43,6 @@ class FinalRegularSeasonGamePolicy:
     """Acquire finalized regular-season games and classify all others."""
 
     def evaluate(self, game: ScheduledGame) -> GameEligibilityDecision:
-        """Classify a scheduled game for the initial acquisition workflow.
-
-        Args:
-            game: Validated game discovered in a schedule response.
-
-        Returns:
-            Eligible for final regular-season games, deferred for unfinished
-            regular-season games, or skipped for other game types.
-        """
-
         if game.game_type != "R":
             return GameEligibilityDecision(
                 disposition=EligibilityDisposition.SKIPPED,

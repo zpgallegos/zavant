@@ -12,12 +12,12 @@ from zavant.acquisition.game_changes import (
     GameChangesWatermarkNotInitializedError,
 )
 from zavant.clients.mlb_stats_api import RetrievedResource
-from zavant.storage.local_game_changes import LocalGameChangesStore
-from zavant.storage._local_files import local_artifact_reference
+from zavant.storage.path_game_changes import PathGameChangesStore
+from zavant.storage._path_io import artifact_reference_for_path
 from zavant.storage.artifacts import ArtifactReference
-from zavant.storage.local_game_changes_watermark import (
+from zavant.storage.path_game_changes_watermark import (
     GameChangesWatermarkConflictError,
-    LocalGameChangesWatermarkStore,
+    PathGameChangesWatermarkStore,
 )
 
 
@@ -30,16 +30,6 @@ NEXT_RUN_ID = UUID("00000000-0000-0000-0000-000000000011")
 
 
 def game_changes_raw(game_pks: List[int], total_items: int) -> bytes:
-    """Build a valid corrected-game response page.
-
-    Args:
-        game_pks: Game identifiers included on this page.
-        total_items: Total result count reported for the query.
-
-    Returns:
-        UTF-8 JSON bytes satisfying the corrected-game contract.
-    """
-
     games = [
         {
             "gamePk": game_pk,
@@ -63,17 +53,6 @@ def game_changes_raw(game_pks: List[int], total_items: int) -> bytes:
 
 
 def retrieved(body: bytes, offset: int, attempts: int = 1) -> RetrievedResource:
-    """Build a successful source result for one fake page.
-
-    Args:
-        body: Exact corrected-game response bytes.
-        offset: Source offset represented by the response.
-        attempts: HTTP attempts represented by the response.
-
-    Returns:
-        Successful response bytes and HTTP provenance.
-    """
-
     source_uri = f"https://statsapi.example.test/api/v1/game/changes?offset={offset}"
     return RetrievedResource(
         body=body,
@@ -86,15 +65,7 @@ def retrieved(body: bytes, offset: int, attempts: int = 1) -> RetrievedResource:
 
 
 class FakeGameChangesApi:
-    """Deterministic paginated source for correction-polling tests."""
-
     def __init__(self, outcomes: Dict[int, object]) -> None:
-        """Initialize source outcomes keyed by requested offset.
-
-        Args:
-            outcomes: Successful resources or exceptions keyed by offset.
-        """
-
         self.outcomes = outcomes
         self.calls: List[Tuple[datetime, int, int, int]] = []
 
@@ -105,22 +76,6 @@ class FakeGameChangesApi:
         limit: int = 1000,
         offset: int = 0,
     ) -> RetrievedResource:
-        """Return or raise the configured outcome for an offset.
-
-        Args:
-            updated_since: Inclusive lower query boundary.
-            sport_id: Requested MLB sport identifier.
-            limit: Requested source page size.
-            offset: Requested source offset.
-
-        Returns:
-            Configured successful response.
-
-        Raises:
-            RuntimeError: If the configured outcome is a failure.
-            AssertionError: If the configured outcome is invalid or missing.
-        """
-
         self.calls.append((updated_since, sport_id, limit, offset))
         outcome = self.outcomes.get(offset)
         if isinstance(outcome, RuntimeError):
@@ -131,19 +86,15 @@ class FakeGameChangesApi:
 
 
 class GameChangesPollerTests(unittest.TestCase):
-    """Tests for complete-page landing and success-only checkpointing."""
-
     def setUp(self) -> None:
-        """Create isolated correction evidence and state stores."""
-
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
-        self.changes_store = LocalGameChangesStore(
+        self.changes_store = PathGameChangesStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.watermark_store = LocalGameChangesWatermarkStore(
+        self.watermark_store = PathGameChangesWatermarkStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
@@ -154,17 +105,6 @@ class GameChangesPollerTests(unittest.TestCase):
         poll_started_at: datetime = POLL_STARTED_AT,
         run_id: UUID = RUN_ID,
     ) -> GameChangesPoller:
-        """Build a poller using deterministic clocks and identifiers.
-
-        Args:
-            api: Fake paginated correction source.
-            poll_started_at: New watermark captured by the poll.
-            run_id: Identifier used for the immutable poll evidence.
-
-        Returns:
-            Configured corrected-game poller.
-        """
-
         return GameChangesPoller(
             api=api,
             changes_store=self.changes_store,
@@ -174,8 +114,6 @@ class GameChangesPollerTests(unittest.TestCase):
         )
 
     def test_lands_all_pages_then_advances_watermark(self) -> None:
-        """Complete a multipage first poll with an overlapped query boundary."""
-
         api = FakeGameChangesApi(
             {
                 0: retrieved(game_changes_raw([823426], total_items=2), 0),
@@ -231,8 +169,6 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertEqual(watermark.manifest_path, result.manifest_path)
 
     def test_empty_poll_still_advances_watermark(self) -> None:
-        """Record an empty page as evidence before moving the checkpoint."""
-
         api = FakeGameChangesApi({0: retrieved(game_changes_raw([], total_items=0), 0)})
 
         result = self.poller(api).poll(initial_watermark=INITIAL_WATERMARK)
@@ -244,8 +180,6 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertEqual(manifest["status"], "complete")
 
     def test_subsequent_poll_reads_stored_watermark(self) -> None:
-        """Use durable state without accepting another bootstrap checkpoint."""
-
         first_api = FakeGameChangesApi(
             {0: retrieved(game_changes_raw([], total_items=0), 0)}
         )
@@ -270,8 +204,6 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertEqual(watermark.updated_since, NEXT_POLL_STARTED_AT)
 
     def test_page_failure_leaves_watermark_unchanged(self) -> None:
-        """Keep the prior checkpoint when any required page fails."""
-
         initial_api = FakeGameChangesApi(
             {0: retrieved(game_changes_raw([], total_items=0), 0)}
         )
@@ -305,8 +237,6 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertEqual(len(failed_manifest["pages"]), 1)
 
     def test_requires_initial_watermark_for_first_poll(self) -> None:
-        """Refuse to invent an unsafe first-run checkpoint."""
-
         api = FakeGameChangesApi({})
 
         with self.assertRaises(GameChangesWatermarkNotInitializedError):
@@ -315,8 +245,6 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertEqual(api.calls, [])
 
     def test_rejects_initial_watermark_after_initialization(self) -> None:
-        """Prevent an operator value from replacing durable state."""
-
         api = FakeGameChangesApi({0: retrieved(game_changes_raw([], total_items=0), 0)})
         self.poller(api).poll(initial_watermark=INITIAL_WATERMARK)
 
@@ -326,8 +254,6 @@ class GameChangesPollerTests(unittest.TestCase):
             )
 
     def test_max_pages_guard_does_not_advance_watermark(self) -> None:
-        """Stop an unexpectedly large poll before publishing state."""
-
         api = FakeGameChangesApi(
             {0: retrieved(game_changes_raw([823426], total_items=3), 0)}
         )
@@ -342,8 +268,6 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertIsNone(self.watermark_store.read())
 
     def test_short_page_does_not_advance_watermark(self) -> None:
-        """Fail closed when source content cannot satisfy its reported total."""
-
         api = FakeGameChangesApi({0: retrieved(game_changes_raw([], total_items=1), 0)})
 
         with self.assertRaisesRegex(GameChangesPollingError, "expected 1"):
@@ -352,16 +276,12 @@ class GameChangesPollerTests(unittest.TestCase):
         self.assertIsNone(self.watermark_store.read())
 
 
-class LocalGameChangesWatermarkStoreTests(unittest.TestCase):
-    """Tests for durable checkpoint validation and compare-and-set behavior."""
-
+class PathGameChangesWatermarkStoreTests(unittest.TestCase):
     def setUp(self) -> None:
-        """Create an isolated watermark store."""
-
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
-        self.store = LocalGameChangesWatermarkStore(
+        self.store = PathGameChangesWatermarkStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
@@ -372,17 +292,6 @@ class LocalGameChangesWatermarkStoreTests(unittest.TestCase):
         watermark_before: datetime,
         window_end: datetime,
     ) -> ArtifactReference:
-        """Persist the minimum completed manifest required for advancement.
-
-        Args:
-            run_id: Poll run represented by the manifest.
-            watermark_before: Poll's logical prior checkpoint.
-            window_end: Poll's successful checkpoint candidate.
-
-        Returns:
-            Path to the completed manifest.
-        """
-
         path = self.data_dir / "raw" / str(run_id) / "manifest.json"
         path.parent.mkdir(parents=True)
         path.write_text(
@@ -396,11 +305,9 @@ class LocalGameChangesWatermarkStoreTests(unittest.TestCase):
                 }
             )
         )
-        return local_artifact_reference(self.data_dir, path)
+        return artifact_reference_for_path(self.data_dir, path)
 
     def test_compare_and_set_rejects_stale_expected_state(self) -> None:
-        """Reject a writer whose observed checkpoint is no longer current."""
-
         first_manifest = self.completed_manifest(
             RUN_ID,
             INITIAL_WATERMARK,

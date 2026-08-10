@@ -29,12 +29,6 @@ RunIdFactory = Callable[[], UUID]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
@@ -79,19 +73,7 @@ class GameIdentityError(ValueError):
 
 @dataclass(frozen=True)
 class BoundedGameAcquisitionResult:
-    """Summary of one bounded schedule-to-game acquisition run.
-
-    Attributes:
-        run_id: Unique identifier for the persisted schedule run.
-        requested_at: UTC timestamp partitioning and identifying the run.
-        manifest_path: Path containing durable per-game outcomes.
-        status: Derived run status: complete, failed, or incomplete.
-        summary: Counts grouped by per-game processing status.
-        schedule_created: Whether this invocation first landed the schedule.
-        resumed: Whether the workflow used a previously landed schedule.
-        schedule_http_attempts: Attempts used to fetch a new schedule, or zero
-            when resuming stored source evidence.
-    """
+    """Summary of one bounded schedule-to-game acquisition run."""
 
     run_id: UUID
     requested_at: datetime
@@ -104,21 +86,9 @@ class BoundedGameAcquisitionResult:
 
     @property
     def successful(self) -> bool:
-        """Return whether every discovered game reached a non-failure outcome.
-
-        Returns:
-            `True` only for a complete run.
-        """
-
         return self.status == "complete"
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable acquisition summary.
-
-        Returns:
-            Run identity, manifest location, and processing counts.
-        """
-
         return {
             "manifest_path": str(self.manifest_path),
             "requested_at": self.requested_at.isoformat(),
@@ -136,8 +106,8 @@ class BoundedGameAcquirer:
 
     Args:
         api: MLB client supporting schedule and live-game retrieval.
-        schedule_store: Local schedule evidence and manifest store.
-        game_store: Local revision-aware raw-game store.
+        schedule_store: Schedule evidence and manifest store.
+        game_store: Revision-aware raw-game store.
         eligibility_policy: Explicit policy classifying scheduled games.
         clock: Function returning the current timezone-aware UTC time.
         run_id_factory: Function generating a new run identifier.
@@ -152,17 +122,6 @@ class BoundedGameAcquirer:
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
-        """Initialize the bounded acquisition service.
-
-        Args:
-            api: MLB client supporting schedule and live-game retrieval.
-            schedule_store: Schedule evidence and manifest store.
-            game_store: Revision-aware raw-game store.
-            eligibility_policy: Explicit policy classifying scheduled games.
-            clock: Function returning the current timezone-aware UTC time.
-            run_id_factory: Function generating a new run identifier.
-        """
-
         self.api = api
         self.schedule_store = schedule_store
         self.game_store = game_store
@@ -316,18 +275,6 @@ class BoundedGameAcquirer:
     def _acquire_game(
         self, manifest_path: ArtifactReference, game_pk: int, season: int
     ) -> None:
-        """Retrieve, validate, land, and record one eligible game.
-
-        Args:
-            manifest_path: Schedule manifest receiving the outcome.
-            game_pk: Expected MLB game identifier.
-            season: Expected MLB season partition.
-
-        Raises:
-            OSError: If the manifest outcome cannot be recorded.
-            ScheduleConflictError: If the manifest cannot accept the outcome.
-        """
-
         try:
             current_revision_id = self.game_store.current_revision_id(
                 season=season,
@@ -396,19 +343,6 @@ class BoundedGameAcquirer:
         sport_id: int,
         requested_at: datetime,
     ) -> None:
-        """Ensure resume arguments identify the stored schedule request.
-
-        Args:
-            stored_request: Request provenance loaded from schedule metadata.
-            start_date: Requested inclusive start date.
-            end_date: Requested inclusive end date.
-            sport_id: Requested MLB sport identifier.
-            requested_at: Original normalized request time.
-
-        Raises:
-            ScheduleConflictError: If a resume argument differs from storage.
-        """
-
         expected = {
             "end_date": end_date.isoformat(),
             "requested_at": requested_at.isoformat(),

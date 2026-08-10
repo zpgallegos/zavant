@@ -4,18 +4,16 @@ import matplotlib.pyplot as plt
 
 
 class StrikeZone:
-    """
-    define landmarks of the strike zone (catcher's view)
-    - width is constant at the width of the plate (17 inches)
-        - in Statcast, this corresponds to a value of ~0.83 * 2 in whatever units they use for px/pz
-        - => the sides of the plate are at -/+ 0.83
-    - height depends on the batter's height
-        - Statcast gives the top and bottom of the strike zone on each pitch...multiple distinct per game
-        - game info also provides a top/bottom for each batter
+    """Model catcher-view strike-zone landmarks and surrounding regions.
 
-    :param top: top of the strike zone
-    :param bottom: bottom of the strike zone
-    :param n: number of rows/columns to divide the zone
+    The plate-width boundary is constant, while the vertical boundary uses the
+    batter-specific top and bottom values supplied by Statcast.
+
+    Args:
+        top: Top of the strike zone.
+        bottom: Bottom of the strike zone.
+        batside_code: Batter-side orientation used when assigning zones.
+        n: Number of rows and columns inside the strike zone.
     """
 
     conv = 0.09754885882352941  # 1 inch in Statcast units

@@ -9,7 +9,7 @@ description = "An end-to-end, local-first MLB analytics platform"
 readme = "readme.md"
 requires-python = ">=3.9"
 authors = [{name = "Zavant contributors"}]
-dependencies = []
+dependencies = ["boto3>=1.40,<2"]
 
 [project.scripts]
 zavant = "zavant.cli:main"

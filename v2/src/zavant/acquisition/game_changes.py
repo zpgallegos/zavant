@@ -16,12 +16,6 @@ RunIdFactory = Callable[[], UUID]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
@@ -60,19 +54,7 @@ class GameChangesWatermarkNotInitializedError(GameChangesPollingError):
 
 @dataclass(frozen=True)
 class GameChangesPollingResult:
-    """Summary of one completed correction poll.
-
-    Attributes:
-        run_id: Unique identifier for the immutable poll evidence.
-        watermark_before: Logical checkpoint used to begin the poll.
-        query_updated_since: Overlapped lower boundary sent to MLB.
-        watermark_after: New durable checkpoint captured at run start.
-        manifest_path: Completed manifest of pending changed games.
-        page_count: Number of immutable response pages landed.
-        source_item_count: Item count reported by the first response.
-        changed_game_count: Deduplicated pending games in the manifest.
-        http_attempts: Total HTTP attempts across all response pages.
-    """
+    """Summary of one completed correction poll."""
 
     run_id: UUID
     watermark_before: datetime
@@ -85,12 +67,6 @@ class GameChangesPollingResult:
     http_attempts: int
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable poll summary.
-
-        Returns:
-            Run identity, watermark boundaries, paths, and counts.
-        """
-
         return {
             "changed_game_count": self.changed_game_count,
             "http_attempts": self.http_attempts,
@@ -123,16 +99,6 @@ class GameChangesPoller:
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
-        """Initialize the corrected-game polling service.
-
-        Args:
-            api: MLB client supporting corrected-game retrieval.
-            changes_store: Store for immutable response pages and the run manifest.
-            watermark_store: Store for the durable success checkpoint.
-            clock: Function capturing the poll's upper checkpoint before requests.
-            run_id_factory: Function generating a poll run identifier.
-        """
-
         self.api = api
         self.changes_store = changes_store
         self.watermark_store = watermark_store
@@ -293,18 +259,6 @@ class GameChangesPoller:
         overlap: timedelta,
         max_pages: int,
     ) -> None:
-        """Validate poll configuration.
-
-        Args:
-            sport_id: Candidate MLB sport identifier.
-            limit: Candidate source page size.
-            overlap: Candidate query safety interval.
-            max_pages: Candidate source-page guard.
-
-        Raises:
-            ValueError: If any option is outside its supported range.
-        """
-
         if type(sport_id) is not int or sport_id <= 0:
             raise ValueError("sport_id must be a positive integer")
         if type(limit) is not int or limit <= 0:
@@ -316,19 +270,6 @@ class GameChangesPoller:
 
     @staticmethod
     def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        """Validate and normalize one timestamp to UTC.
-
-        Args:
-            value: Candidate timestamp.
-            name: Field name used in validation errors.
-
-        Returns:
-            Timezone-aware UTC timestamp.
-
-        Raises:
-            ValueError: If the timestamp is timezone-naive.
-        """
-
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError(f"{name} must include a UTC offset")
         return value.astimezone(timezone.utc)

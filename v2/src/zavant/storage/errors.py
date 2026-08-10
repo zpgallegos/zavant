@@ -1,4 +1,4 @@
-"""Storage errors shared by local and cloud adapters."""
+"""Errors shared by acquisition persistence stores."""
 
 
 class RawGameConflictError(RuntimeError):
@@ -23,3 +23,7 @@ class GameChangesWatermarkConflictError(RuntimeError):
 
 class DailyRunConflictError(RuntimeError):
     """Raised when a daily run manifest is malformed or conflicts."""
+
+
+class SeasonBackfillConflictError(RuntimeError):
+    """Raised when season-backfill evidence or state conflicts."""

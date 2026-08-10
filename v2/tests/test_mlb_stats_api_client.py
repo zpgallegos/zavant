@@ -23,23 +23,13 @@ TEST_BASE_URL = "https://statsapi.example.test"
 
 @dataclass(frozen=True)
 class TransportCall:
-    """Arguments recorded for one fake transport request."""
-
     url: str
     headers: Mapping[str, str]
     timeout_seconds: float
 
 
 class FakeTransport:
-    """Deterministic transport returning queued responses or failures."""
-
     def __init__(self, outcomes: List[object]) -> None:
-        """Initialize the fake transport.
-
-        Args:
-            outcomes: Ordered `HttpResponse` or exception values.
-        """
-
         self.outcomes = list(outcomes)
         self.calls: List[TransportCall] = []
 
@@ -49,21 +39,6 @@ class FakeTransport:
         headers: Mapping[str, str],
         timeout_seconds: float,
     ) -> HttpResponse:
-        """Record a request and return its queued outcome.
-
-        Args:
-            url: Fully qualified request URL.
-            headers: Request headers.
-            timeout_seconds: Per-attempt timeout.
-
-        Returns:
-            Queued HTTP response.
-
-        Raises:
-            MlbStatsApiTransportError: When that failure is queued.
-            AssertionError: If no outcome remains or one has an invalid type.
-        """
-
         self.calls.append(
             TransportCall(
                 url=url,
@@ -87,18 +62,6 @@ def response(
     headers: Optional[Mapping[str, str]] = None,
     url: str = TEST_BASE_URL,
 ) -> HttpResponse:
-    """Build a transport response for client tests.
-
-    Args:
-        status_code: HTTP response status.
-        body: Exact response bytes.
-        headers: Optional HTTP response headers.
-        url: Final response URL.
-
-    Returns:
-        Transport response value.
-    """
-
     return HttpResponse(
         status_code=status_code,
         body=body,
@@ -108,11 +71,7 @@ def response(
 
 
 class MlbStatsApiClientRequestTests(unittest.TestCase):
-    """Tests for typed resource request construction."""
-
     def test_builds_bounded_schedule_request(self) -> None:
-        """Encode schedule dates and MLB sport ID in the request URL."""
-
         transport = FakeTransport([response(body=SAMPLE_SCHEDULE.read_bytes())])
         client = MlbStatsApiClient(
             base_url=TEST_BASE_URL,
@@ -143,8 +102,6 @@ class MlbStatsApiClientRequestTests(unittest.TestCase):
         self.assertEqual(retrieved.source_uri, call.url)
 
     def test_builds_paginated_game_changes_request(self) -> None:
-        """Encode a UTC watermark and pagination arguments."""
-
         transport = FakeTransport([response()])
         client = MlbStatsApiClient(base_url=TEST_BASE_URL, transport=transport)
         pacific_time = timezone(timedelta(hours=-7))
@@ -168,8 +125,6 @@ class MlbStatsApiClientRequestTests(unittest.TestCase):
         )
 
     def test_builds_complete_live_game_request(self) -> None:
-        """Route a game identifier to its complete v1.1 live feed."""
-
         transport = FakeTransport([response()])
         client = MlbStatsApiClient(base_url=TEST_BASE_URL, transport=transport)
 
@@ -181,8 +136,6 @@ class MlbStatsApiClientRequestTests(unittest.TestCase):
         )
 
     def test_returns_bytes_for_a_contract_to_validate(self) -> None:
-        """Keep HTTP retrieval separate from schedule schema validation."""
-
         transport = FakeTransport([response(body=SAMPLE_SCHEDULE.read_bytes())])
         client = MlbStatsApiClient(base_url=TEST_BASE_URL, transport=transport)
 
@@ -195,8 +148,6 @@ class MlbStatsApiClientRequestTests(unittest.TestCase):
         self.assertEqual(schedule.game_pks, (823514, 824726))
 
     def test_rejects_naive_change_watermark_before_transport(self) -> None:
-        """Reject an ambiguous correction watermark without making a request."""
-
         transport = FakeTransport([])
         client = MlbStatsApiClient(base_url=TEST_BASE_URL, transport=transport)
 
@@ -207,11 +158,7 @@ class MlbStatsApiClientRequestTests(unittest.TestCase):
 
 
 class MlbStatsApiClientRetryTests(unittest.TestCase):
-    """Tests for bounded retries and failure classification."""
-
     def test_retries_transient_response_and_honors_retry_after(self) -> None:
-        """Retry a 503 and bound MLB's requested delay by policy."""
-
         transport = FakeTransport(
             [
                 response(status_code=503, headers={"Retry-After": "2"}),
@@ -237,8 +184,6 @@ class MlbStatsApiClientRetryTests(unittest.TestCase):
         self.assertEqual(delays, [1.0])
 
     def test_retries_transport_failure(self) -> None:
-        """Retry when no HTTP response is obtained."""
-
         transport = FakeTransport(
             [MlbStatsApiTransportError("connection reset"), response()]
         )
@@ -260,8 +205,6 @@ class MlbStatsApiClientRetryTests(unittest.TestCase):
         self.assertEqual(delays, [0.25])
 
     def test_does_not_retry_non_transient_response(self) -> None:
-        """Fail immediately for a permanent client response such as 404."""
-
         transport = FakeTransport([response(status_code=404)])
         delays: List[float] = []
         client = MlbStatsApiClient(
@@ -278,8 +221,6 @@ class MlbStatsApiClientRetryTests(unittest.TestCase):
         self.assertEqual(delays, [])
 
     def test_stops_after_configured_response_attempts(self) -> None:
-        """Raise the final response error after bounded retries."""
-
         transport = FakeTransport(
             [
                 response(status_code=503),
@@ -306,8 +247,6 @@ class MlbStatsApiClientRetryTests(unittest.TestCase):
         self.assertEqual(delays, [0.25, 0.5])
 
     def test_classifies_exhausted_transport_failures_as_unavailable(self) -> None:
-        """Distinguish transport exhaustion from an HTTP response failure."""
-
         transport = FakeTransport(
             [
                 MlbStatsApiTransportError("timeout"),

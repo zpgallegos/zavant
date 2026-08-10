@@ -12,14 +12,7 @@ class RawGameContractError(ValueError):
 
 @dataclass(frozen=True)
 class RawGameResponse:
-    """Validated routing fields plus the unmodified source payload.
-
-    Attributes:
-        game_pk: MLB's primary identifier for the game.
-        official_date: Official date assigned to the game by MLB.
-        feed_timecode: MLB timecode for the source feed revision, when present.
-        payload: Parsed but otherwise unmodified source response.
-    """
+    """Validated routing fields plus the unmodified source payload."""
 
     game_pk: int
     official_date: date
@@ -28,12 +21,6 @@ class RawGameResponse:
 
     @property
     def season(self) -> int:
-        """Return the season used to partition the game.
-
-        Returns:
-            The year component of the official game date.
-        """
-
         return self.official_date.year
 
     @classmethod

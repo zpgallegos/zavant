@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Durable storage and execution permissions for Zavant acquisition.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment used for resource tags.
+  AcquisitionPrefix:
+    Type: String
+    Default: lake
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    Description: S3 key prefix reserved for the acquisition application.
+  LambdaCodeS3Key:
+    Type: String
+    Default: ""
+    Description: Content-addressed deployment package key; empty omits Lambda.
+  InitialScheduleDate:
+    Type: String
+    Default: "2026-08-03"
+    AllowedPattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    Description: First schedule date used while no schedule watermark exists.
+  InitialCorrectionWatermark:
+    Type: String
+    Default: "2026-08-03T00:00:00Z"
+    Description: First correction boundary used while no correction watermark exists.
+
+Conditions:
+  HasLambdaCode: !Not [!Equals [!Ref LambdaCodeS3Key, ""]]
+
+Resources:
+  AcquisitionBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+      VersioningConfiguration:
+        Status: Enabled
+
+  AcquisitionBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref AcquisitionBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt AcquisitionBucket.Arn
+              - !Sub "${AcquisitionBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  AcquisitionLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Executes the Zavant daily acquisition Lambda function.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AcquisitionPrefixAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListAcquisitionPrefix
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt AcquisitionBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - !Ref AcquisitionPrefix
+                      - !Sub "${AcquisitionPrefix}/*"
+              - Sid: ReadWriteAcquisitionObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub "${AcquisitionBucket.Arn}/${AcquisitionPrefix}/*"
+        - PolicyName: AcquisitionLogDelivery
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: WriteFunctionLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/zavant-acquisition-daily-${EnvironmentName}:*"
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  AcquisitionLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: HasLambdaCode
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/zavant-acquisition-daily-${EnvironmentName}"
+      RetentionInDays: 30
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  AcquisitionLambdaFunction:
+    Type: AWS::Lambda::Function
+    Condition: HasLambdaCode
+    DependsOn: AcquisitionLambdaLogGroup
+    Properties:
+      FunctionName: !Sub "zavant-acquisition-daily-${EnvironmentName}"
+      Description: Runs schedule discovery and correction-aware MLB acquisition.
+      Architectures:
+        - arm64
+      Code:
+        S3Bucket: !Ref AcquisitionBucket
+        S3Key: !Ref LambdaCodeS3Key
+      Environment:
+        Variables:
+          ZAVANT_INITIAL_CORRECTION_WATERMARK: !Ref InitialCorrectionWatermark
+          ZAVANT_INITIAL_SCHEDULE_DATE: !Ref InitialScheduleDate
+          ZAVANT_S3_BUCKET: !Ref AcquisitionBucket
+          ZAVANT_S3_PREFIX: !Ref AcquisitionPrefix
+      Handler: zavant.lambda_handler.lambda_handler
+      LoggingConfig:
+        ApplicationLogLevel: INFO
+        LogFormat: JSON
+        SystemLogLevel: WARN
+      MemorySize: 512
+      Role: !GetAtt AcquisitionLambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 900
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+  AcquisitionBucketArn:
+    Description: ARN used by future least-privilege IAM policies.
+    Value: !GetAtt AcquisitionBucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AcquisitionBucketArn"
+  AcquisitionBucketName:
+    Description: Value to supply as ZAVANT_S3_BUCKET.
+    Value: !Ref AcquisitionBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-AcquisitionBucketName"
+  AcquisitionPrefix:
+    Description: S3 prefix granted to the acquisition Lambda execution role.
+    Value: !Ref AcquisitionPrefix
+    Export:
+      Name: !Sub "${AWS::StackName}-AcquisitionPrefix"
+  AcquisitionLambdaExecutionRoleArn:
+    Description: ARN for the future daily acquisition Lambda function.
+    Value: !GetAtt AcquisitionLambdaExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AcquisitionLambdaExecutionRoleArn"
+  AcquisitionLambdaExecutionRoleName:
+    Description: Generated name of the daily acquisition Lambda execution role.
+    Value: !Ref AcquisitionLambdaExecutionRole
+  AcquisitionLambdaFunctionArn:
+    Condition: HasLambdaCode
+    Description: ARN of the manually invokable daily acquisition function.
+    Value: !GetAtt AcquisitionLambdaFunction.Arn
+  AcquisitionLambdaFunctionName:
+    Condition: HasLambdaCode
+    Description: Name of the manually invokable daily acquisition function.
+    Value: !Ref AcquisitionLambdaFunction

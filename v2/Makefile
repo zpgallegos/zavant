@@ -1,20 +1,38 @@
 PYTHON ?= python3
+AWS ?= aws
+AWS_REGION ?= us-east-1
+EXPECTED_AWS_ACCOUNT_ID ?= 995283862400
 VENV := .venv
 VENV_PYTHON := $(VENV)/bin/python
+INFRASTRUCTURE_TEMPLATE := infrastructure/template.yaml
+STACK_NAME ?= zavant-acquisition-prod
+ENVIRONMENT ?= prod
+S3_PREFIX ?= lake
+INITIAL_SCHEDULE_DATE ?= 2026-08-03
+INITIAL_CORRECTION_WATERMARK ?= 2026-08-03T00:00:00Z
+LAMBDA_BUILD_DIR := build/lambda
+LAMBDA_ARCHIVE := build/zavant-lambda.zip
+LAMBDA_CONSTRAINTS := infrastructure/lambda-constraints.txt
+LAMBDA_CODE_PREFIX := deployments/lambda
+LAMBDA_EVENT_FILE ?= infrastructure/manual-event.json
+LAMBDA_RESPONSE_FILE ?= build/lambda-response.json
 
-.PHONY: bootstrap test check ingest-sample ingest-schedule-sample ingest-changes-sample help
+.PHONY: bootstrap test check infra-check-account infra-validate infra-bootstrap lambda-package infra-deploy lambda-invoke help
 
 help:
 	@echo "bootstrap      create the local Python environment"
 	@echo "test           run the unit test suite"
 	@echo "check          run all local quality checks"
-	@echo "ingest-sample  land the checked-in MLB game fixture locally"
-	@echo "ingest-schedule-sample  land the checked-in schedule fixture"
-	@echo "ingest-changes-sample  land the checked-in correction-feed fixture"
+	@echo "infra-validate validate the CloudFormation template"
+	@echo "infra-bootstrap  create the bucket and execution role on a new stack"
+	@echo "lambda-package   build the Lambda zip with locked application dependencies"
+	@echo "infra-deploy     package and deploy the production Lambda infrastructure"
+	@echo "lambda-invoke    manually invoke the deployed function"
 
 bootstrap:
 	@$(PYTHON) -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9+ is required"'
 	@test -x $(VENV_PYTHON) || $(PYTHON) -m venv $(VENV)
+	@$(VENV_PYTHON) -m pip install --editable .
 	@$(VENV_PYTHON) -c 'import sys; print(f"ready: {sys.executable} ({sys.version.split()[0]})")'
 
 test:
@@ -24,11 +42,68 @@ check:
 	@PYTHONPATH=src $(VENV_PYTHON) -m compileall -q src tests
 	@$(MAKE) test
 
-ingest-sample:
-	@PYTHONPATH=src ZAVANT_DATA_DIR=$${ZAVANT_DATA_DIR:-.local/lake} $(VENV_PYTHON) -m zavant land-game-file tests/fixtures/example-game-raw.json --trigger initial
+infra-validate:
+	@$(AWS) cloudformation validate-template \
+		--region $(AWS_REGION) \
+		--template-body file://$(abspath $(INFRASTRUCTURE_TEMPLATE))
 
-ingest-schedule-sample:
-	@PYTHONPATH=src ZAVANT_DATA_DIR=$${ZAVANT_DATA_DIR:-.local/lake} $(VENV_PYTHON) -m zavant land-schedule-file tests/fixtures/example-schedule.json --start-date 2026-08-08 --end-date 2026-08-08 --requested-at 2026-08-09T00:00:00Z --run-id 00000000-0000-0000-0000-000000000002
+infra-check-account:
+	@actual_account="$$( $(AWS) sts get-caller-identity --region $(AWS_REGION) --query Account --output text )"; \
+	if [ "$$actual_account" != "$(EXPECTED_AWS_ACCOUNT_ID)" ]; then \
+		echo "Refusing deployment: expected AWS account $(EXPECTED_AWS_ACCOUNT_ID), received $$actual_account" >&2; \
+		exit 1; \
+	fi
 
-ingest-changes-sample:
-	@PYTHONPATH=src ZAVANT_DATA_DIR=$${ZAVANT_DATA_DIR:-.local/lake} $(VENV_PYTHON) -m zavant land-changes-file tests/fixtures/example-game-changes.json --updated-since 2026-08-08T00:00:00Z --window-end 2026-08-09T00:00:00Z --run-id 00000000-0000-0000-0000-000000000001
+infra-bootstrap: infra-check-account
+	@$(AWS) cloudformation deploy \
+		--region $(AWS_REGION) \
+		--template-file $(INFRASTRUCTURE_TEMPLATE) \
+		--stack-name $(STACK_NAME) \
+		--capabilities CAPABILITY_IAM \
+		--parameter-overrides \
+			EnvironmentName=$(ENVIRONMENT) \
+			AcquisitionPrefix=$(S3_PREFIX) \
+		--tags Project=zavant Component=acquisition Environment=$(ENVIRONMENT) ManagedBy=cloudformation
+
+lambda-package:
+	@rm -rf $(LAMBDA_BUILD_DIR) $(LAMBDA_ARCHIVE)
+	@mkdir -p $(LAMBDA_BUILD_DIR)
+	@$(VENV_PYTHON) -m pip install --quiet --no-compile \
+		--constraint $(LAMBDA_CONSTRAINTS) \
+		--target $(LAMBDA_BUILD_DIR) \
+		.
+	@(cd $(LAMBDA_BUILD_DIR) && zip -q -r -X $(abspath $(LAMBDA_ARCHIVE)) .)
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=$(LAMBDA_BUILD_DIR) $(VENV_PYTHON) -S -c 'from zavant.lambda_handler import lambda_handler; assert callable(lambda_handler)'
+
+infra-deploy: infra-check-account lambda-package
+	@bucket="$$($(AWS) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`AcquisitionBucketName`].OutputValue | [0]' \
+		--output text)"; \
+	digest="$$(shasum -a 256 $(LAMBDA_ARCHIVE) | cut -d ' ' -f 1)"; \
+	code_key="$(LAMBDA_CODE_PREFIX)/$$digest.zip"; \
+	$(AWS) s3 cp $(LAMBDA_ARCHIVE) "s3://$$bucket/$$code_key" \
+		--region $(AWS_REGION) \
+		--only-show-errors; \
+	$(AWS) cloudformation deploy \
+		--region $(AWS_REGION) \
+		--template-file $(INFRASTRUCTURE_TEMPLATE) \
+		--stack-name $(STACK_NAME) \
+		--capabilities CAPABILITY_IAM \
+		--parameter-overrides \
+			EnvironmentName=$(ENVIRONMENT) \
+			AcquisitionPrefix=$(S3_PREFIX) \
+			InitialScheduleDate=$(INITIAL_SCHEDULE_DATE) \
+			InitialCorrectionWatermark=$(INITIAL_CORRECTION_WATERMARK) \
+			LambdaCodeS3Key="$$code_key" \
+		--tags Project=zavant Component=acquisition Environment=$(ENVIRONMENT) ManagedBy=cloudformation
+
+lambda-invoke: infra-check-account
+	@mkdir -p $(dir $(LAMBDA_RESPONSE_FILE))
+	@$(AWS) lambda invoke \
+		--region $(AWS_REGION) \
+		--function-name zavant-acquisition-daily-$(ENVIRONMENT) \
+		--cli-binary-format raw-in-base64-out \
+		--payload fileb://$(LAMBDA_EVENT_FILE) \
+		$(LAMBDA_RESPONSE_FILE)

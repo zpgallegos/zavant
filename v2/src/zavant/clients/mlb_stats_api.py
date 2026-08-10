@@ -32,23 +32,9 @@ class MlbStatsApiUnavailableError(MlbStatsApiError):
 
 
 class MlbStatsApiResponseError(MlbStatsApiError):
-    """Raised when MLB returns a non-successful HTTP response.
-
-    Attributes:
-        status_code: HTTP status returned by MLB.
-        url: Final response URL.
-        attempts: Number of HTTP attempts made.
-    """
+    """Raised when MLB returns a non-successful HTTP response."""
 
     def __init__(self, status_code: int, url: str, attempts: int) -> None:
-        """Initialize the response failure.
-
-        Args:
-            status_code: HTTP status returned by MLB.
-            url: Final response URL.
-            attempts: Number of HTTP attempts made.
-        """
-
         self.status_code = status_code
         self.url = url
         self.attempts = attempts
@@ -60,14 +46,7 @@ class MlbStatsApiResponseError(MlbStatsApiError):
 
 @dataclass(frozen=True)
 class HttpResponse:
-    """Transport-level HTTP response.
-
-    Attributes:
-        status_code: HTTP response status.
-        body: Exact response body bytes.
-        headers: Response headers.
-        url: Final URL after redirects.
-    """
+    """Transport-level HTTP response."""
 
     status_code: int
     body: bytes
@@ -157,14 +136,7 @@ class UrllibHttpTransport:
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    """Bounded exponential retry behavior for transient failures.
-
-    Attributes:
-        max_attempts: Total attempts, including the initial request.
-        base_delay_seconds: Delay after the first retryable failure.
-        max_delay_seconds: Maximum delay between attempts.
-        retryable_status_codes: HTTP statuses treated as transient.
-    """
+    """Bounded exponential retry behavior for transient failures."""
 
     max_attempts: int = 3
     base_delay_seconds: float = 0.5
@@ -172,12 +144,6 @@ class RetryPolicy:
     retryable_status_codes: Tuple[int, ...] = RETRYABLE_STATUS_CODES
 
     def __post_init__(self) -> None:
-        """Validate retry limits.
-
-        Raises:
-            ValueError: If retry attempts or delays are invalid.
-        """
-
         if type(self.max_attempts) is not int or self.max_attempts <= 0:
             raise ValueError("max_attempts must be a positive integer")
         if self.base_delay_seconds < 0:
@@ -216,15 +182,6 @@ class RetryPolicy:
     def _retry_after_seconds(
         response_headers: Optional[Mapping[str, str]],
     ) -> Optional[float]:
-        """Extract a numeric Retry-After delay from response headers.
-
-        Args:
-            response_headers: Response headers, if an HTTP response exists.
-
-        Returns:
-            A non-negative delay or `None` when no numeric value is present.
-        """
-
         if response_headers is None:
             return None
         retry_after_value = next(
@@ -246,16 +203,7 @@ class RetryPolicy:
 
 @dataclass(frozen=True)
 class RetrievedResource:
-    """Successful source response returned to contracts and persistence.
-
-    Attributes:
-        body: Exact response bytes.
-        request_url: Fully qualified URL requested by the client.
-        response_url: Final URL after redirects.
-        status_code: Successful HTTP response status.
-        headers: Response headers.
-        attempts: Number of attempts required to obtain the response.
-    """
+    """Successful source response returned to contracts and persistence."""
 
     body: bytes
     request_url: str
@@ -266,12 +214,6 @@ class RetrievedResource:
 
     @property
     def source_uri(self) -> str:
-        """Return the exact request URI to record as source provenance.
-
-        Returns:
-            Fully qualified request URL.
-        """
-
         return self.request_url
 
 
@@ -296,20 +238,6 @@ class MlbStatsApiClient:
         sleeper: Sleeper = time.sleep,
         user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
-        """Initialize the MLB Stats API client.
-
-        Args:
-            base_url: MLB Stats API server without a query or fragment.
-            timeout_seconds: Per-attempt HTTP timeout.
-            retry_policy: Bounded retry behavior for transient failures.
-            transport: Injectable HTTP transport. Defaults to `urllib`.
-            sleeper: Injectable delay function used between attempts.
-            user_agent: HTTP User-Agent identifying this client.
-
-        Raises:
-            ValueError: If URL, timeout, or user-agent configuration is invalid.
-        """
-
         normalized_base_url = base_url.rstrip("/")
         parsed_base_url = urlsplit(normalized_base_url)
         if (
@@ -483,30 +411,11 @@ class MlbStatsApiClient:
 
     @staticmethod
     def _format_utc_timestamp(value: datetime) -> str:
-        """Format a timezone-aware timestamp for an MLB query parameter.
-
-        Args:
-            value: Timezone-aware timestamp.
-
-        Returns:
-            UTC ISO-8601 timestamp using an explicit `Z` suffix.
-        """
-
         normalized = value.astimezone(timezone.utc)
         timespec = "microseconds" if normalized.microsecond else "seconds"
         return normalized.isoformat(timespec=timespec).replace("+00:00", "Z")
 
     @staticmethod
     def _validate_positive_integer(value: int, name: str) -> None:
-        """Validate a positive integer API argument.
-
-        Args:
-            value: Candidate integer value.
-            name: Argument name used in validation errors.
-
-        Raises:
-            ValueError: If the value is not a positive integer.
-        """
-
         if type(value) is not int or value <= 0:
             raise ValueError(f"{name} must be a positive integer")

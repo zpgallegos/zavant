@@ -10,14 +10,14 @@ from zavant.acquisition.corrected_games import CorrectedGameProcessor
 from zavant.acquisition.daily import DailyAcquisitionCoordinator
 from zavant.acquisition.game_changes import GameChangesPoller
 from zavant.acquisition.schedule_discovery import ScheduleDiscoverer
-from zavant.storage.local_daily_runs import LocalDailyRunStore
-from zavant.storage.local_game_changes import LocalGameChangesStore
-from zavant.storage.local_game_changes_watermark import (
-    LocalGameChangesWatermarkStore,
+from zavant.storage.path_daily_runs import PathDailyRunStore
+from zavant.storage.path_game_changes import PathGameChangesStore
+from zavant.storage.path_game_changes_watermark import (
+    PathGameChangesWatermarkStore,
 )
-from zavant.storage.local_raw import LocalRawGameStore
-from zavant.storage.local_schedule import LocalScheduleStore
-from zavant.storage.local_schedule_watermark import LocalScheduleWatermarkStore
+from zavant.storage.path_raw import PathRawGameStore
+from zavant.storage.path_schedule import PathScheduleStore
+from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
 from tests.test_bounded_game_acquisition import (
     FakeMlbGameAcquisitionApi,
     raw_game,
@@ -45,50 +45,37 @@ SECOND_SCHEDULE_RUN_ID = UUID("00000000-0000-0000-0000-000000000045")
 
 
 def corrected_raw_game(game_pk: int) -> bytes:
-    """Build a changed revision from the bounded-acquisition test response.
-
-    Args:
-        game_pk: MLB game identifier embedded in the response.
-
-    Returns:
-        UTF-8 JSON bytes with meaningfully changed live data.
-    """
-
     payload = json.loads(raw_game(game_pk))
     payload["liveData"]["correction"] = "published"
     return json.dumps(payload).encode()
 
 
 class DailyAcquisitionCoordinatorTests(unittest.TestCase):
-    """End-to-end local tests for the coordinated daily acquisition loop."""
-
     def setUp(self) -> None:
-        """Create shared isolated stores for consecutive daily runs."""
-
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.data_dir = Path(self.temporary_directory.name)
-        self.schedule_store = LocalScheduleStore(
+        self.schedule_store = PathScheduleStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.changes_store = LocalGameChangesStore(
+        self.changes_store = PathGameChangesStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.game_store = LocalRawGameStore(
+        self.game_store = PathRawGameStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.schedule_watermark_store = LocalScheduleWatermarkStore(
+        self.schedule_watermark_store = PathScheduleWatermarkStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.changes_watermark_store = LocalGameChangesWatermarkStore(
+        self.changes_watermark_store = PathGameChangesWatermarkStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
-        self.daily_run_store = LocalDailyRunStore(
+        self.daily_run_store = PathDailyRunStore(
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
@@ -102,20 +89,6 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
         poll_run_id: UUID,
         schedule_run_id: UUID,
     ) -> DailyAcquisitionCoordinator:
-        """Build a deterministic coordinator over the shared local stores.
-
-        Args:
-            changes_api: Fake corrected-game discovery source.
-            game_api: Fake schedule and live-game source.
-            started_at: Shared logical daily-run timestamp.
-            daily_run_id: Coordinator manifest identifier.
-            poll_run_id: Correction poll identifier.
-            schedule_run_id: Schedule acquisition identifier.
-
-        Returns:
-            Configured daily acquisition coordinator.
-        """
-
         return DailyAcquisitionCoordinator(
             changes_poller=GameChangesPoller(
                 api=changes_api,
@@ -146,8 +119,6 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
         )
 
     def test_consecutive_runs_acquire_new_games_then_correct_a_revision(self) -> None:
-        """Exercise both discovery watermarks through the complete local loop."""
-
         first_changes_api = FakeGameChangesApi(
             {0: retrieved_changes(game_changes_raw([], total_items=0), 0)}
         )
@@ -224,8 +195,6 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
         self.assertEqual(daily_manifest["status"], "complete")
 
     def test_branch_failure_does_not_prevent_other_discovery(self) -> None:
-        """Record independent outcomes when correction bootstrap is missing."""
-
         changes_api = FakeGameChangesApi({})
         game_api = FakeMlbGameAcquisitionApi(
             schedule_raw=SAMPLE_SCHEDULE.read_bytes(),

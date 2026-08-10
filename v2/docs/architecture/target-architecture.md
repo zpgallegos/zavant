@@ -27,9 +27,9 @@ Acquisition begins with a bounded schedule snapshot. The exact response and its 
 
 Acquisition also includes a correction loop. The poller captures a run-start checkpoint, queries MLB's corrected-game feed from the prior durable watermark with a small safety overlap, and produces immutable response pages plus a deduplicated run manifest. The watermark advances to the captured checkpoint only after every expected page is durable and the manifest is marked complete. Each pending changed game is then retrieved from its complete live-feed link and landed as a new content-addressed revision when its meaningful JSON content differs. The prior revision remains available, while a small pointer identifies the revision downstream processing should currently use.
 
-Local daily operation coordinates three independently recorded branches: correction discovery, correction processing, and schedule discovery. The correction processor retries pending and failed work from every completed poll but re-downloads only games already present in raw storage; schedules own initial portfolio inclusion. Schedule discovery maintains a separate successful through-date, queries a rolling lookback to reconsider recent deferred games, and avoids another live-feed request when an eligible game is already landed. One branch failure does not suppress the others or roll back their successful checkpoints.
+Daily operation coordinates three independently recorded branches: correction discovery, correction processing, and schedule discovery. The correction processor retries pending and failed work from every completed poll but re-downloads only games already present in raw storage; schedules own initial portfolio inclusion. Schedule discovery maintains a separate successful through-date, queries a rolling lookback to reconsider recent deferred games, and avoids another live-feed request when an eligible game is already landed. One branch failure does not suppress the others or roll back their successful checkpoints.
 
-The same logical boundaries must work locally and in the cloud. Local development uses the filesystem first; production storage will use S3 behind the same interface. Cloud services must not be required to run unit tests or exercise a representative vertical slice.
+The same logical boundaries work locally and in the cloud. Local development uses atomic filesystem publication. Production uses the same logical keys and persistence state machines over S3, with ETag preconditions protecting mutable objects. A scheduled Lambda composes the complete daily run once per invocation; it is not a second cloud-specific workflow. Cloud services are not required to run unit tests or exercise a representative vertical slice.
 
 ## Layers and responsibilities
 
@@ -54,10 +54,11 @@ The same logical boundaries must work locally and in the cloud. Local developmen
 - Corrected-game polls retain their page responses and deduplicate work in a run manifest.
 - Correction polling uses an independent success-only watermark; overlapped queries favor harmless duplicate work over missed updates.
 - Schedule discovery uses an independent through-date and rolling lookback; current raw pointers prevent redundant game downloads.
-- Daily coordinator manifests link all local acquisition evidence without coupling branch checkpoint advancement.
+- Daily coordinator manifests link all acquisition evidence without coupling branch checkpoint advancement.
 - Object paths are deterministic and include named partitions.
 - Every landed object has provenance metadata and a checksum.
-- Local adapters are first-class, not mocks of the cloud implementation.
+- Filesystem-backed execution is first-class, not a mock of the cloud implementation.
+- Production acquisition runs as one scheduled Lambda over a conditionally written S3 prefix.
 - Infrastructure will be defined as code before a new production deployment.
 
 The orchestrator, production query engine, semantic-layer implementation, and presentation framework remain deliberate decision points. They should be selected with a thin vertical slice and recorded as ADRs rather than inherited accidentally from the legacy stack.
@@ -66,7 +67,7 @@ The orchestrator, production query engine, semantic-layer implementation, and pr
 
 - **Test:** temporary isolated storage and recorded fixtures; no network or cloud credentials.
 - **Local:** `.local/` data, developer-selected dates or games, and the same contracts used in production.
-- **Production:** managed object storage, scheduled orchestration, catalog/query engine, secrets management, and centralized telemetry.
+- **Production:** S3 raw/state storage, scheduled Lambda acquisition, a catalog/query engine, least-privilege IAM, and centralized telemetry.
 
 Configuration enters at process boundaries through environment variables or explicit command options. Domain and transformation code must not contain account IDs, bucket names, seasons, or credentials.
 

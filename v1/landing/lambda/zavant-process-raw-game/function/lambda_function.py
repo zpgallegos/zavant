@@ -17,15 +17,7 @@ s3 = boto3.client("s3")
 
 
 def write(client, data: dict | list[dict], dname: str, key: str):
-    """
-    write the flattened data @obj to its destination file
-    bucket is determined by @dname
-
-    :param obj: the flattened data
-    :param dname: the destination bucket name prefix
-    :param key: the original file key from the trigger
-    :return: None
-    """
+    """Write one flattened dataset as newline-delimited JSON."""
     if isinstance(data, dict):
         data = [data]
 

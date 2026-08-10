@@ -1,53 +1,40 @@
-"""Local implementation of revision-aware raw-game storage."""
+"""Path-backed implementation of revision-aware raw-game storage."""
 
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
 from zavant.contracts.raw_game import RawGameResponse
-from zavant.storage._local_files import (
+from zavant.storage._path_io import (
     atomic_write,
     canonical_json_sha256,
     encode_json,
-    local_artifact_reference,
+    artifact_reference_for_path,
     read_json_object,
     sha256_bytes,
 )
 from zavant.storage.errors import RawGameConflictError
-from zavant.storage.models import LandedRawGame
+from zavant.storage.models import CurrentRawGameRevision, LandedRawGame
 
 
 Clock = Callable[[], datetime]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
-class LocalRawGameStore:
-    """Persist immutable source revisions using a deterministic local layout.
+class PathRawGameStore:
+    """Persist immutable source revisions using a deterministic path layout.
 
     Args:
-        data_dir: Root directory under which raw objects are stored.
+        storage_root: Root path under which raw objects are stored.
         clock: Function returning the current timezone-aware UTC time.
     """
 
-    def __init__(self, data_dir: Path, clock: Clock = utc_now) -> None:
-        """Initialize the local store.
-
-        Args:
-            data_dir: Root directory under which raw objects are stored.
-            clock: Function returning the current timezone-aware UTC time.
-        """
-
-        self.data_dir = data_dir
+    def __init__(self, storage_root: Path, clock: Clock = utc_now) -> None:
+        self.storage_root = storage_root
         self.clock = clock
 
     def land(
@@ -57,28 +44,11 @@ class LocalRawGameStore:
         source_uri: str,
         trigger: str = "manual",
     ) -> LandedRawGame:
-        """Persist a raw game as an immutable, content-addressed revision.
-
-        Args:
-            game: Validated routing fields for the source response.
-            raw: Unmodified MLB response bytes.
-            source_uri: URI describing where the response came from.
-            trigger: Reason the response was retrieved.
-
-        Returns:
-            Revision paths, hashes, identifiers, and creation status.
-
-        Raises:
-            RawGameConflictError: If an existing revision contains content
-                inconsistent with its revision identifier.
-            OSError: If local persistence fails.
-        """
-
         raw_checksum = sha256_bytes(raw)
         canonical_checksum = canonical_json_sha256(game.payload)
         revision_id = canonical_checksum
         game_directory = (
-            self.data_dir
+            self.storage_root
             / "raw"
             / "mlb_stats_api"
             / "games"
@@ -167,10 +137,10 @@ class LocalRawGameStore:
             season=game.season,
             revision_id=revision_id,
             previous_revision_id=revision_previous_id,
-            object_path=local_artifact_reference(self.data_dir, object_path),
-            metadata_path=local_artifact_reference(self.data_dir, metadata_path),
-            current_pointer_path=local_artifact_reference(
-                self.data_dir, current_pointer_path
+            object_path=artifact_reference_for_path(self.storage_root, object_path),
+            metadata_path=artifact_reference_for_path(self.storage_root, metadata_path),
+            current_pointer_path=artifact_reference_for_path(
+                self.storage_root, current_pointer_path
             ),
             raw_sha256=stored_raw_checksum,
             canonical_sha256=canonical_checksum,
@@ -178,27 +148,12 @@ class LocalRawGameStore:
         )
 
     def current_revision_id(self, season: int, game_pk: int) -> Optional[str]:
-        """Return the current revision for one season and game.
-
-        Args:
-            season: MLB season partition containing the game.
-            game_pk: MLB's primary game identifier.
-
-        Returns:
-            Current revision identifier, or `None` if the game is not landed.
-
-        Raises:
-            ValueError: If the season or game identifier is invalid.
-            RawGameConflictError: If the current pointer is malformed.
-            OSError: If the current pointer cannot be read.
-        """
-
         if type(season) is not int or season <= 0:
             raise ValueError("season must be a positive integer")
         if type(game_pk) is not int or game_pk <= 0:
             raise ValueError("game_pk must be a positive integer")
         current_pointer_path = (
-            self.data_dir
+            self.storage_root
             / "raw"
             / "mlb_stats_api"
             / "games"
@@ -208,21 +163,64 @@ class LocalRawGameStore:
         )
         return self._read_current_revision(current_pointer_path)
 
+    def current_revisions(self, season: int) -> Tuple[CurrentRawGameRevision, ...]:
+        if type(season) is not int or season <= 0:
+            raise ValueError("season must be a positive integer")
+        season_directory = (
+            self.storage_root
+            / "raw"
+            / "mlb_stats_api"
+            / "games"
+            / f"season={season}"
+        )
+        revisions: List[CurrentRawGameRevision] = []
+        for pointer_path in season_directory.glob("game_pk=*/current.json"):
+            relative = pointer_path.relative_to(season_directory)
+            game_partition = relative.parts[0]
+            try:
+                game_pk = int(game_partition.removeprefix("game_pk="))
+                pointer = read_json_object(pointer_path)
+                revision_id = pointer["revision_id"]
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise RawGameConflictError(
+                    f"invalid current revision below season {season}"
+                ) from exc
+            if not isinstance(revision_id, str) or not revision_id:
+                raise RawGameConflictError("current revision pointer is invalid")
+            metadata_path = (
+                season_directory
+                / game_partition
+                / f"revision={revision_id}"
+                / "metadata.json"
+            )
+            try:
+                metadata = read_json_object(metadata_path)
+                observed_at = datetime.fromisoformat(str(metadata["observed_at"]))
+            except (
+                FileNotFoundError,
+                KeyError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise RawGameConflictError(
+                    f"current revision metadata is invalid for game {game_pk}"
+                ) from exc
+            if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+                raise RawGameConflictError(
+                    f"current revision metadata is timezone-naive for game {game_pk}"
+                )
+            revisions.append(
+                CurrentRawGameRevision(
+                    game_pk=game_pk,
+                    season=season,
+                    revision_id=revision_id,
+                    observed_at=observed_at.astimezone(timezone.utc),
+                )
+            )
+        return tuple(sorted(revisions, key=lambda revision: revision.game_pk))
+
     @staticmethod
     def _read_current_revision(current_pointer_path: Path) -> Optional[str]:
-        """Read the current revision identifier when a pointer exists.
-
-        Args:
-            current_pointer_path: Path to the game's current-revision pointer.
-
-        Returns:
-            The current revision identifier, or `None` when no pointer exists.
-
-        Raises:
-            RawGameConflictError: If the pointer is malformed.
-            OSError: If the pointer cannot be read.
-        """
-
         if not current_pointer_path.exists():
             return None
 

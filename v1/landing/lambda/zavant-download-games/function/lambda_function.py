@@ -13,25 +13,13 @@ s3 = boto3.client("s3")
 
 
 def include_game(game: dict):
-    """
-    -> True if the game should be included in the dataset
-    regular season games, finalized state
-
-    :param game: game object
-    :return: bool
-    """
+    """Include only finalized regular-season games."""
     state = game["status_codedGameState"]
     series = game["seriesDescription"]
     return state == "F" and series == "Regular Season"
 
 
 def to_game_str(game: dict):
-    """
-    string representation of a game, just for logging
-
-    :param game: game object
-    :return: str
-    """
     return (
         f"{game['officialDate']}: "
         f"{game['teams_home_team_name']} vs {game['teams_away_team_name']} "
@@ -40,13 +28,7 @@ def to_game_str(game: dict):
 
 
 def get_season_dates(seasons: list[str]):
-    """
-    yield start/end dates for each month in each year in @seasons
-    ensures that the game limit isn't reached
-
-    :param seasons: list of years
-    :return: generator of (start, end) date tuples, pass to get_schedule_url
-    """
+    """Yield monthly date ranges to stay below the API's game limit."""
     for year in seasons:
         for month in range(1, 13):
             end = 31
@@ -60,16 +42,16 @@ def get_season_dates(seasons: list[str]):
 
 
 def lambda_handler(event, context):
-    """
-    download games from the MLB API
-    routine routines will only incrementally download games occurring in the current season
-    use the "past_seasons" parameter to download games from past seasons
+    """Download missing games for the current and requested past seasons.
 
-    :param event: dict: event data
-        past_seasons: list[int] of seasons to download in addition to the current season
-    :param context: object: context object
-    :return: dict: response
+    Args:
+        event: Lambda event whose optional `past_seasons` value adds seasons.
+        context: AWS Lambda invocation context.
+
+    Returns:
+        Lambda response containing the downloaded game identifiers.
     """
+
     games = []
     game_keys = set()
 

@@ -2,50 +2,44 @@
 
 import argparse
 from datetime import date, datetime, timedelta, timezone
+from importlib import import_module
 import json
 from pathlib import Path
-from typing import Optional, Sequence
-from uuid import UUID, uuid4
+from typing import Any, Optional, Sequence, cast
+from uuid import UUID
 
 from zavant.acquisition.bounded_games import BoundedGameAcquirer
-from zavant.acquisition.corrected_games import CorrectedGameProcessor
-from zavant.acquisition.daily import DailyAcquisitionCoordinator
 from zavant.acquisition.game_changes import (
     GameChangesPoller,
     GameChangesPollingError,
 )
-from zavant.acquisition.schedule_discovery import ScheduleDiscoverer
+from zavant.acquisition.season_backfill import SeasonBackfillMode
+from zavant.application import (
+    build_daily_coordinator,
+    build_season_backfill_coordinator,
+)
 from zavant.clients.mlb_stats_api import (
     DEFAULT_TIMEOUT_SECONDS,
     MlbStatsApiClient,
     MlbStatsApiError,
     RetryPolicy,
 )
-from zavant.contracts.game_changes import (
-    GameChangesContractError,
-    GameChangesRequest,
-    GameChangesResponse,
-)
-from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
-from zavant.contracts.schedule import (
-    ScheduleContractError,
-    ScheduleRequest,
-    ScheduleResponse,
-)
+from zavant.contracts.game_changes import GameChangesContractError
+from zavant.contracts.schedule import ScheduleContractError
 from zavant.settings import Settings
 from zavant.storage.errors import (
     DailyRunConflictError,
     GameChangesConflictError,
     GameChangesWatermarkConflictError,
-    RawGameConflictError,
     ScheduleConflictError,
+    SeasonBackfillConflictError,
 )
-from zavant.storage.local_daily_runs import LocalDailyRunStore
-from zavant.storage.local_game_changes import LocalGameChangesStore
-from zavant.storage.local_game_changes_watermark import LocalGameChangesWatermarkStore
-from zavant.storage.local_raw import LocalRawGameStore
-from zavant.storage.local_schedule import LocalScheduleStore
-from zavant.storage.local_schedule_watermark import LocalScheduleWatermarkStore
+from zavant.storage.bundles import (
+    AcquisitionStorage,
+    local_acquisition_storage,
+    s3_acquisition_storage,
+)
+from zavant.storage.s3_objects import S3Client
 
 
 def parse_iso_date(value: str) -> date:
@@ -91,12 +85,6 @@ def parse_utc_datetime(value: str) -> datetime:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the Zavant command-line parser.
-
-    Returns:
-        The configured top-level argument parser.
-    """
-
     parser = argparse.ArgumentParser(
         prog="zavant", description="Develop and operate the Zavant data platform"
     )
@@ -175,88 +163,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="override ZAVANT_DATA_DIR for this invocation",
     )
 
-    land_game = subparsers.add_parser(
-        "land-game-file", help="validate and land an MLB live-game JSON file"
+    backfill = subparsers.add_parser(
+        "backfill-seasons",
+        help="reconcile every eligible game in one or more MLB seasons",
     )
-    land_game.add_argument("path", type=Path)
-    land_game.add_argument(
+    backfill.add_argument("seasons", nargs="+", type=int)
+    backfill.add_argument(
+        "--mode",
+        choices=tuple(mode.value for mode in SeasonBackfillMode),
+        default=SeasonBackfillMode.RECONCILE.value,
+    )
+    backfill.add_argument("--dry-run", action="store_true")
+    backfill.add_argument("--sport-id", type=int, default=1)
+    backfill.add_argument("--correction-limit", type=int, default=1000)
+    backfill.add_argument("--correction-overlap-seconds", type=float, default=300.0)
+    backfill.add_argument("--correction-max-pages", type=int, default=100)
+    backfill.add_argument("--run-id", type=UUID, default=None)
+    backfill.add_argument("--started-at", type=parse_utc_datetime, default=None)
+    backfill.add_argument(
+        "--storage",
+        choices=("auto", "local", "s3"),
+        default="auto",
+        help="auto uses S3 when a bucket is configured, otherwise local",
+    )
+    backfill.add_argument("--bucket", help="override ZAVANT_S3_BUCKET")
+    backfill.add_argument("--prefix", help="override ZAVANT_S3_PREFIX")
+    backfill.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+    )
+    backfill.add_argument("--max-attempts", type=int, default=3)
+    backfill.add_argument(
         "--data-dir",
         type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
-    land_game.add_argument(
-        "--source-uri",
-        help="record the payload's source; defaults to the input file URI",
-    )
-    land_game.add_argument(
-        "--trigger",
-        default="manual",
-        choices=("initial", "game_changes", "manual", "reconciliation"),
-        help="record why the game was retrieved",
+        help="override ZAVANT_DATA_DIR for local storage",
     )
 
-    land_schedule = subparsers.add_parser(
-        "land-schedule-file",
-        help="validate and land one recorded schedule response",
-    )
-    land_schedule.add_argument("path", type=Path)
-    land_schedule.add_argument("--start-date", required=True, type=parse_iso_date)
-    land_schedule.add_argument("--end-date", required=True, type=parse_iso_date)
-    land_schedule.add_argument(
-        "--requested-at",
-        required=True,
-        type=parse_utc_datetime,
-    )
-    land_schedule.add_argument("--sport-id", type=int, default=1)
-    land_schedule.add_argument("--run-id", type=UUID, default=None)
-    land_schedule.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
-    land_schedule.add_argument(
-        "--source-uri",
-        help="record the payload's source; defaults to the input file URI",
-    )
-
-    land_changes = subparsers.add_parser(
-        "land-changes-file",
-        help="validate and land one recorded game-changes response page",
-    )
-    land_changes.add_argument("path", type=Path)
-    land_changes.add_argument("--updated-since", required=True, type=parse_utc_datetime)
-    land_changes.add_argument("--window-end", required=True, type=parse_utc_datetime)
-    land_changes.add_argument("--run-id", type=UUID, default=None)
-    land_changes.add_argument("--page-number", type=int, default=0)
-    land_changes.add_argument("--limit", type=int, default=1000)
-    land_changes.add_argument("--offset", type=int, default=0)
-    land_changes.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
-    land_changes.add_argument(
-        "--source-uri",
-        help="record the payload's source; defaults to the input file URI",
-    )
     return parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """Run a Zavant command.
-
-    Args:
-        argv: Optional arguments excluding the executable name. Defaults to
-            process arguments when omitted.
-
-    Returns:
-        The process exit status.
-    """
-
     parser = build_parser()
     args = parser.parse_args(argv)
     settings = Settings.from_environment()
     data_dir = args.data_dir or settings.data_dir
+    storage = local_acquisition_storage(data_dir)
 
     if args.command == "acquire-games":
         if (args.run_id is None) != (args.requested_at is None):
@@ -271,8 +223,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             acquisition = BoundedGameAcquirer(
                 api=client,
-                schedule_store=LocalScheduleStore(data_dir),
-                game_store=LocalRawGameStore(data_dir),
+                schedule_store=storage.schedules,
+                game_store=storage.raw_games,
             ).acquire(
                 start_date=args.start_date,
                 end_date=args.end_date,
@@ -299,30 +251,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 timeout_seconds=args.timeout_seconds,
                 retry_policy=RetryPolicy(max_attempts=args.max_attempts),
             )
-            schedule_store = LocalScheduleStore(data_dir)
-            changes_store = LocalGameChangesStore(data_dir)
-            game_store = LocalRawGameStore(data_dir)
-            daily_result = DailyAcquisitionCoordinator(
-                changes_poller=GameChangesPoller(
-                    api=client,
-                    changes_store=changes_store,
-                    watermark_store=LocalGameChangesWatermarkStore(data_dir),
-                ),
-                corrected_game_processor=CorrectedGameProcessor(
-                    api=client,
-                    changes_store=changes_store,
-                    game_store=game_store,
-                ),
-                schedule_discoverer=ScheduleDiscoverer(
-                    acquirer=BoundedGameAcquirer(
-                        api=client,
-                        schedule_store=schedule_store,
-                        game_store=game_store,
-                    ),
-                    watermark_store=LocalScheduleWatermarkStore(data_dir),
-                ),
-                run_store=LocalDailyRunStore(data_dir),
-            ).run(
+            daily_result = build_daily_coordinator(client, storage).run(
                 initial_schedule_date=args.initial_schedule_date,
                 initial_correction_watermark=args.initial_correction_watermark,
                 through_date=args.through_date,
@@ -347,8 +276,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             poll = GameChangesPoller(
                 api=client,
-                changes_store=LocalGameChangesStore(data_dir),
-                watermark_store=LocalGameChangesWatermarkStore(data_dir),
+                changes_store=storage.game_changes,
+                watermark_store=storage.game_changes_watermark,
             ).poll(
                 initial_watermark=args.initial_watermark,
                 sport_id=args.sport_id,
@@ -370,81 +299,62 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(json.dumps(poll.as_dict(), indent=2, sort_keys=True))
         return 0
 
-    source_path = args.path.resolve()
-    source_uri = args.source_uri or source_path.as_uri()
-
-    if args.command == "land-game-file":
+    if args.command == "backfill-seasons":
+        if (args.run_id is None) != (args.started_at is None):
+            parser.error("--run-id and --started-at must be supplied together")
         try:
-            raw = source_path.read_bytes()
-            game = RawGameResponse.from_bytes(raw)
-            landed_game = LocalRawGameStore(data_dir).land(
-                game=game,
-                raw=raw,
-                source_uri=source_uri,
-                trigger=args.trigger,
+            backfill_storage = _backfill_storage(args, settings, data_dir)
+            client = MlbStatsApiClient(
+                base_url=settings.mlb_api_base_url,
+                timeout_seconds=args.timeout_seconds,
+                retry_policy=RetryPolicy(max_attempts=args.max_attempts),
             )
-        except (OSError, RawGameContractError, RawGameConflictError) as exc:
-            parser.error(str(exc))
-
-        print(json.dumps(landed_game.as_dict(), indent=2, sort_keys=True))
-        return 0
-
-    if args.command == "land-schedule-file":
-        try:
-            raw = source_path.read_bytes()
-            schedule = ScheduleResponse.from_bytes(raw)
-            request = ScheduleRequest(
-                start_date=args.start_date,
-                end_date=args.end_date,
+            result = build_season_backfill_coordinator(
+                client, backfill_storage
+            ).run(
+                seasons=tuple(args.seasons),
+                mode=SeasonBackfillMode(args.mode),
+                dry_run=args.dry_run,
                 sport_id=args.sport_id,
-                requested_at=args.requested_at,
-                source_uri=source_uri,
-            )
-            landed_schedule = LocalScheduleStore(data_dir).land(
-                schedule=schedule,
-                request=request,
-                raw=raw,
-                run_id=args.run_id or uuid4(),
+                correction_limit=args.correction_limit,
+                correction_overlap=timedelta(
+                    seconds=args.correction_overlap_seconds
+                ),
+                correction_max_pages=args.correction_max_pages,
+                run_id=args.run_id,
+                started_at=args.started_at,
             )
         except (
+            MlbStatsApiError,
             OSError,
-            ScheduleContractError,
-            ScheduleConflictError,
+            SeasonBackfillConflictError,
             ValueError,
         ) as exc:
             parser.error(str(exc))
 
-        print(json.dumps(landed_schedule.as_dict(), indent=2, sort_keys=True))
-        return 0
-
-    if args.command == "land-changes-file":
-        try:
-            raw = source_path.read_bytes()
-            changes = GameChangesResponse.from_bytes(raw)
-            request = GameChangesRequest(
-                updated_since=args.updated_since,
-                window_end=args.window_end,
-                page_number=args.page_number,
-                limit=args.limit,
-                offset=args.offset,
-                source_uri=source_uri,
-            )
-            landed_changes = LocalGameChangesStore(data_dir).land_page(
-                changes=changes,
-                request=request,
-                raw=raw,
-                run_id=args.run_id or uuid4(),
-            )
-        except (
-            OSError,
-            GameChangesContractError,
-            GameChangesConflictError,
-            ValueError,
-        ) as exc:
-            parser.error(str(exc))
-
-        print(json.dumps(landed_changes.as_dict(), indent=2, sort_keys=True))
-        return 0
+        print(json.dumps(result.as_dict(), indent=2, sort_keys=True))
+        return 0 if result.successful else 1
 
     parser.error(f"unsupported command: {args.command}")
     return 2
+
+
+def _backfill_storage(
+    args: Any,
+    settings: Settings,
+    data_dir: Path,
+) -> AcquisitionStorage:
+    bucket = args.bucket or settings.s3_bucket
+    use_s3 = args.storage == "s3" or (args.storage == "auto" and bucket is not None)
+    if not use_s3:
+        return local_acquisition_storage(data_dir)
+    if not bucket:
+        raise ValueError("S3 backfill storage requires --bucket or ZAVANT_S3_BUCKET")
+    boto3 = import_module("boto3")
+    client_factory = getattr(boto3, "client")
+    client = cast(S3Client, client_factory("s3"))
+    return s3_acquisition_storage(
+        client=client,
+        bucket=bucket,
+        prefix=args.prefix if args.prefix is not None else settings.s3_prefix,
+    )

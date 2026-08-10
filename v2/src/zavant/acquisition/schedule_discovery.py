@@ -17,12 +17,6 @@ RunIdFactory = Callable[[], UUID]
 
 
 def utc_now() -> datetime:
-    """Return the current UTC time.
-
-    Returns:
-        A timezone-aware UTC timestamp.
-    """
-
     return datetime.now(timezone.utc)
 
 
@@ -32,16 +26,7 @@ class ScheduleWatermarkNotInitializedError(RuntimeError):
 
 @dataclass(frozen=True)
 class ScheduleDiscoveryResult:
-    """Summary of one incremental schedule-discovery invocation.
-
-    Attributes:
-        status: Complete, failed, or skipped when already current.
-        start_date: Inclusive schedule query start, if a query was needed.
-        through_date: Requested and successfully eligible end date.
-        watermark_before: Prior durable through-date, if initialized.
-        watermark_after: Durable through-date after this invocation.
-        acquisition: Bounded acquisition result, if a query was needed.
-    """
+    """Summary of one incremental schedule-discovery invocation."""
 
     status: str
     start_date: Optional[date]
@@ -52,21 +37,9 @@ class ScheduleDiscoveryResult:
 
     @property
     def successful(self) -> bool:
-        """Return whether discovery completed or required no work.
-
-        Returns:
-            `True` for complete and skipped invocations.
-        """
-
         return self.status in {"complete", "skipped"}
 
     def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable discovery result.
-
-        Returns:
-            Query boundaries, watermark state, and acquisition details.
-        """
-
         return {
             "acquisition": (
                 self.acquisition.as_dict() if self.acquisition is not None else None
@@ -100,15 +73,6 @@ class ScheduleDiscoverer:
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
-        """Initialize incremental schedule discovery.
-
-        Args:
-            acquirer: Existing bounded schedule-to-game workflow.
-            watermark_store: Durable schedule through-date store.
-            clock: Function capturing the discovery request timestamp.
-            run_id_factory: Function generating schedule run identifiers.
-        """
-
         self.acquirer = acquirer
         self.watermark_store = watermark_store
         self.clock = clock
@@ -124,8 +88,8 @@ class ScheduleDiscoverer:
         """Discover and acquire games through a bounded calendar date.
 
         A rolling lookback reconsiders recent deferred or changed schedule
-        entries. Previously landed final games are resolved locally by the
-        bounded acquirer and do not cause another live-feed request.
+        entries. Previously landed final games are resolved from persisted
+        state by the bounded acquirer and do not cause another live-feed request.
 
         Args:
             initial_start_date: Required first-run inclusive schedule date.
@@ -218,19 +182,6 @@ class ScheduleDiscoverer:
 
     @staticmethod
     def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        """Validate and normalize one timestamp to UTC.
-
-        Args:
-            value: Candidate timestamp.
-            name: Field name used in validation errors.
-
-        Returns:
-            Timezone-aware UTC timestamp.
-
-        Raises:
-            ValueError: If the timestamp is timezone-naive.
-        """
-
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError(f"{name} must include a UTC offset")
         return value.astimezone(timezone.utc)

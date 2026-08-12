@@ -133,6 +133,34 @@ class GameProjectionTests(unittest.TestCase):
         self.assertEqual(projection.event_kind_counts["future_event"], 1)
         self.assertEqual(projection.play_events[0]["event_kind"], "future_event")
 
+    def test_discards_stale_duplicate_boxscore_roster_entry(self) -> None:
+        payload = json.loads(self.raw)
+        boxscore_teams = payload["liveData"]["boxscore"]["teams"]
+        participating_player = boxscore_teams["away"]["players"]["ID669257"]
+        boxscore_teams["home"]["players"]["ID669257"] = {
+            "person": participating_player["person"],
+            "parentTeamId": 120,
+            "stats": {"batting": {}, "pitching": {}, "fielding": {}},
+            "gameStatus": {"isOnBench": True},
+        }
+        game = RawGameResponse.from_bytes(json.dumps(payload).encode())
+        source = ProjectionSource(
+            game=game,
+            revision_id=canonical_json_sha256(game.payload),
+            observed_at=OBSERVED_AT,
+            source_uri="fixture://stale-duplicate-player",
+            raw_object_uri="file:///stale-duplicate-player.json",
+        )
+
+        projection = project_game(source, RUN_ID, PROJECTED_AT)
+
+        player = next(
+            row for row in projection.tables()["players"] if row["player_id"] == 669257
+        )
+        self.assertEqual(player["team_id"], 119)
+        self.assertEqual(player["team_side"], "away")
+        self.assertEqual(player["batting_order"], "400")
+
     def test_rejects_duplicate_event_natural_key(self) -> None:
         projection = project_game(self.source, RUN_ID, PROJECTED_AT)
         duplicate = projection.play_events[0]

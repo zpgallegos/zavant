@@ -21,7 +21,7 @@ from zavant.contracts.schedule import (
 )
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import RawGameConflictError, ScheduleConflictError
-from zavant.storage.protocols import RawGameStore, ScheduleStore
+from zavant.storage.protocols import DeferredGameStore, RawGameStore, ScheduleStore
 
 
 Clock = Callable[[], datetime]
@@ -118,14 +118,20 @@ class BoundedGameAcquirer:
         api: MlbGameAcquisitionApi,
         schedule_store: ScheduleStore,
         game_store: RawGameStore,
-        eligibility_policy: GameEligibilityPolicy = FinalRegularSeasonGamePolicy(),
+        eligibility_policy: Optional[GameEligibilityPolicy] = None,
+        deferred_game_store: Optional[DeferredGameStore] = None,
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
         self.api = api
         self.schedule_store = schedule_store
         self.game_store = game_store
-        self.eligibility_policy = eligibility_policy
+        self.eligibility_policy = (
+            eligibility_policy
+            if eligibility_policy is not None
+            else FinalRegularSeasonGamePolicy()
+        )
+        self.deferred_game_store = deferred_game_store
         self.clock = clock
         self.run_id_factory = run_id_factory
 
@@ -238,6 +244,7 @@ class BoundedGameAcquirer:
                     status="skipped",
                     details={"reason": decision.reason},
                 )
+                self._resolve_deferred(scheduled_game.game_pk)
                 continue
             if decision.disposition == EligibilityDisposition.DEFERRED:
                 self.schedule_store.record_game_outcome(
@@ -246,13 +253,17 @@ class BoundedGameAcquirer:
                     status="deferred",
                     details={"reason": decision.reason},
                 )
+                if self.deferred_game_store is not None:
+                    self.deferred_game_store.defer(scheduled_game)
                 continue
 
-            self._acquire_game(
+            acquired = self._acquire_game(
                 manifest_path=manifest_path,
                 game_pk=scheduled_game.game_pk,
                 season=scheduled_game.season,
             )
+            if acquired:
+                self._resolve_deferred(scheduled_game.game_pk)
 
         summary = self.schedule_store.finalize_manifest(manifest_path)
         if summary["pending"]:
@@ -274,7 +285,7 @@ class BoundedGameAcquirer:
 
     def _acquire_game(
         self, manifest_path: ArtifactReference, game_pk: int, season: int
-    ) -> None:
+    ) -> bool:
         try:
             current_revision_id = self.game_store.current_revision_id(
                 season=season,
@@ -291,7 +302,7 @@ class BoundedGameAcquirer:
                         "revision_id": current_revision_id,
                     },
                 )
-                return
+                return True
             retrieved_game = self.api.get_live_game(game_pk)
             game = RawGameResponse.from_bytes(retrieved_game.body)
             if game.game_pk != game_pk:
@@ -321,7 +332,7 @@ class BoundedGameAcquirer:
                     "error_type": type(exc).__name__,
                 },
             )
-            return
+            return False
 
         self.schedule_store.record_game_outcome(
             manifest_path=manifest_path,
@@ -334,6 +345,11 @@ class BoundedGameAcquirer:
                 "source_uri": retrieved_game.source_uri,
             },
         )
+        return True
+
+    def _resolve_deferred(self, game_pk: int) -> None:
+        if self.deferred_game_store is not None:
+            self.deferred_game_store.resolve(game_pk)
 
     @staticmethod
     def _validate_resumed_request(

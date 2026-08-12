@@ -119,16 +119,23 @@ Resources:
       DefinitionString: !Sub |
         {
           "Comment": "Acquire MLB data, then reconcile current revisions into Iceberg.",
-          "StartAt": "Run daily acquisition",
+          "StartAt": "Prepare workflow input",
           "States": {
+            "Prepare workflow input": {
+              "Type": "Pass",
+              "Parameters": {
+                "request.$": "$"
+              },
+              "Next": "Run daily acquisition"
+            },
             "Run daily acquisition": {
               "Type": "Task",
               "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
               "Parameters": {
                 "FunctionName": "${AcquisitionLambdaArn}",
-                "Payload.$": "$"
+                "Payload.$": "$.request"
               },
-              "ResultPath": null,
+              "ResultPath": "$.acquisition_result",
               "TimeoutSeconds": 960,
               "Retry": [
                 {
@@ -143,6 +150,13 @@ Resources:
                   "BackoffRate": 2
                 }
               ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.acquisition_error",
+                  "Next": "Run analytical projection"
+                }
+              ],
               "Next": "Run analytical projection"
             },
             "Run analytical projection": {
@@ -151,9 +165,28 @@ Resources:
               "Parameters": {
                 "JobName": "${AnalyticalProjectionJobName}"
               },
-              "ResultPath": null,
+              "ResultPath": "$.projection_result",
               "TimeoutSeconds": 11400,
-              "End": true
+              "Next": "Did acquisition fail"
+            },
+            "Did acquisition fail": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.acquisition_error",
+                  "IsPresent": true,
+                  "Next": "Report acquisition failure"
+                }
+              ],
+              "Default": "Workflow complete"
+            },
+            "Report acquisition failure": {
+              "Type": "Fail",
+              "Error": "ZavantDailyAcquisitionFailed",
+              "Cause": "Acquisition failed; analytical projection still reconciled durable revisions."
+            },
+            "Workflow complete": {
+              "Type": "Succeed"
             }
           }
         }

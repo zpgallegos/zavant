@@ -10,6 +10,7 @@ from zavant.contracts.raw_game import RawGameResponse
 from zavant.projection.contracts import TABLE_CONTRACTS
 from zavant.projection.glue_job import (
     GlueProjectionConfiguration,
+    _schema_drift_details,
     run_glue_projection,
 )
 from zavant.projection.iceberg import create_table_sql, merge_table_sql
@@ -86,6 +87,16 @@ class S3ProjectionSourceTests(unittest.TestCase):
 
 
 class IcebergDefinitionTests(unittest.TestCase):
+    def test_schema_drift_reports_actionable_column_differences(self) -> None:
+        details = _schema_drift_details(
+            (("game_pk", "bigint", False), ("old_name", "string", True)),
+            (("game_pk", "bigint", False), ("new_name", "string", True)),
+        )
+
+        self.assertIn("missing=['new_name']", details)
+        self.assertIn("unexpected=['old_name']", details)
+        self.assertIn("incompatible={}", details)
+
     def test_creates_format_v2_partitioned_table_from_contract(self) -> None:
         sql = create_table_sql(
             "glue_catalog",

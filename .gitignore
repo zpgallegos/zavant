@@ -11,4 +11,12 @@ __pycache__/
 htmlcov/
 .DS_Store
 /test_scripts/
-logs/
+/monitoring_scripts/
+
+# dbt-generated and machine-local state
+/dbt/dbt_packages/
+/dbt/logs/
+/dbt/target/
+/dbt/profiles.yml
+/dbt/.user.yml
+/logs/

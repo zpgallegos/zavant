@@ -4,6 +4,7 @@ import unittest
 from uuid import UUID
 
 from zavant.contracts.raw_game import RawGameResponse
+from zavant.contracts.schedule import ScheduleResponse
 from zavant.storage.s3_objects import (
     S3ObjectBackend,
     S3ObjectWriteConflictError,
@@ -14,6 +15,7 @@ from tests.fake_s3 import FakeS3Client
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 RAW_GAME_FIXTURE = REPOSITORY_ROOT / "tests" / "fixtures" / "example-game-raw.json"
+SCHEDULE_FIXTURE = REPOSITORY_ROOT / "tests" / "fixtures" / "example-schedule.json"
 OBSERVED_AT = datetime(2026, 8, 9, tzinfo=timezone.utc)
 
 
@@ -58,6 +60,30 @@ class S3ObjectBackendTests(unittest.TestCase):
 
 
 class S3AcquisitionStorageTests(unittest.TestCase):
+    def test_deferred_game_state_reuses_s3_state_machine(self) -> None:
+        client = FakeS3Client()
+        first = s3_acquisition_storage(
+            client=client,
+            bucket="example-bucket",
+            prefix="portfolio/lake",
+            clock=lambda: OBSERVED_AT,
+        )
+        game = ScheduleResponse.from_bytes(
+            SCHEDULE_FIXTURE.read_bytes()
+        ).scheduled_games[0]
+
+        first.deferred_games.defer(game)
+        second = s3_acquisition_storage(
+            client=client,
+            bucket="example-bucket",
+            prefix="portfolio/lake",
+            clock=lambda: OBSERVED_AT,
+        )
+
+        self.assertEqual(second.deferred_games.pending()[0].game_pk, game.game_pk)
+        second.deferred_games.resolve(game.game_pk)
+        self.assertEqual(first.deferred_games.pending(), ())
+
     def test_raw_game_landing_reuses_revision_state_machine(self) -> None:
         client = FakeS3Client()
         storage = s3_acquisition_storage(

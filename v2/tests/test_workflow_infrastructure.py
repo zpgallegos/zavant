@@ -48,18 +48,30 @@ class DailyWorkflowInfrastructureTests(unittest.TestCase):
     def test_state_machine_definition_sequences_lambda_then_synchronous_glue(self) -> None:
         definition = _state_machine_definition(WORKFLOW_TEMPLATE.read_text())
 
-        self.assertEqual(definition["StartAt"], "Run daily acquisition")
+        self.assertEqual(definition["StartAt"], "Prepare workflow input")
+        preparation = definition["States"]["Prepare workflow input"]
         acquisition = definition["States"]["Run daily acquisition"]
         projection = definition["States"]["Run analytical projection"]
+        decision = definition["States"]["Did acquisition fail"]
+        self.assertEqual(preparation["Next"], "Run daily acquisition")
         self.assertEqual(
             acquisition["Resource"], "arn:aws:states:::lambda:invoke"
         )
-        self.assertEqual(acquisition["Parameters"]["Payload.$"], "$")
+        self.assertEqual(acquisition["Parameters"]["Payload.$"], "$.request")
         self.assertEqual(acquisition["Next"], "Run analytical projection")
+        self.assertEqual(
+            acquisition["Catch"][0]["Next"],
+            "Run analytical projection",
+        )
         self.assertEqual(
             projection["Resource"], "arn:aws:states:::glue:startJobRun.sync"
         )
-        self.assertTrue(projection["End"])
+        self.assertEqual(projection["Next"], "Did acquisition fail")
+        self.assertEqual(decision["Default"], "Workflow complete")
+        self.assertEqual(
+            decision["Choices"][0]["Next"],
+            "Report acquisition failure",
+        )
 
     def test_workflow_role_can_monitor_and_stop_the_glue_job(self) -> None:
         template = WORKFLOW_TEMPLATE.read_text()

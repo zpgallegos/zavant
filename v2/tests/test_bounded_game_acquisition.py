@@ -19,6 +19,7 @@ from zavant.clients.mlb_stats_api import (
 )
 from zavant.contracts.schedule import ScheduleResponse
 from zavant.storage.path_raw import PathRawGameStore
+from zavant.storage.path_deferred_games import PathDeferredGameStore
 from zavant.storage.path_schedule import PathScheduleStore, ScheduleConflictError
 
 
@@ -143,12 +144,17 @@ class BoundedGameAcquirerTests(unittest.TestCase):
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
+        self.deferred_game_store = PathDeferredGameStore(
+            self.data_dir,
+            clock=lambda: OBSERVED_AT,
+        )
 
     def acquirer(self, api: FakeMlbGameAcquisitionApi) -> BoundedGameAcquirer:
         return BoundedGameAcquirer(
             api=api,
             schedule_store=self.schedule_store,
             game_store=self.game_store,
+            deferred_game_store=self.deferred_game_store,
             clock=lambda: REQUESTED_AT,
             run_id_factory=lambda: RUN_ID,
         )
@@ -208,6 +214,8 @@ class BoundedGameAcquirerTests(unittest.TestCase):
         self.assertEqual(result.summary["skipped"], 1)
         self.assertEqual(result.summary["deferred"], 1)
         self.assertEqual(api.game_calls, [])
+        pending = self.deferred_game_store.pending()
+        self.assertEqual([game.game_pk for game in pending], [824726])
         manifest = json.loads(Path(result.manifest_path.uri).read_text())
         self.assertEqual(manifest["games"][0]["reason"], "unsupported_game_type")
         self.assertEqual(manifest["games"][1]["reason"], "game_not_final")

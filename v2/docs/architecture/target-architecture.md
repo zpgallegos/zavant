@@ -27,9 +27,29 @@ Acquisition begins with a bounded schedule snapshot. The exact response and its 
 
 Acquisition also includes a correction loop. The poller captures a run-start checkpoint, queries MLB's corrected-game feed from the prior durable watermark with a small safety overlap, and produces immutable response pages plus a deduplicated run manifest. The watermark advances to the captured checkpoint only after every expected page is durable and the manifest is marked complete. Each pending changed game is then retrieved from its complete live-feed link and landed as a new content-addressed revision when its meaningful JSON content differs. The prior revision remains available, while a small pointer identifies the revision downstream processing should currently use.
 
-Daily operation coordinates three independently recorded branches: correction discovery, correction processing, and schedule discovery. The correction processor retries pending and failed work from every completed poll but re-downloads only games already present in raw storage; schedules own initial portfolio inclusion. Schedule discovery maintains a separate successful through-date, queries a rolling lookback to reconsider recent deferred games, and avoids another live-feed request when an eligible game is already landed. One branch failure does not suppress the others or roll back their successful checkpoints.
+Daily operation coordinates four independently recorded branches: correction
+discovery, correction processing, durable deferred-game processing, and schedule
+discovery. The correction processor retries pending and failed work from every
+completed poll but re-downloads only games already present in raw storage;
+schedules own initial portfolio inclusion. Schedule discovery maintains a
+separate successful through-date and a rolling lookback for cheap discovery.
+Non-final regular-season games also enter a durable worklist and are checked
+daily until final or cancelled, so completeness does not depend on the lookback
+window. One branch failure does not suppress the others or roll back successful
+checkpoints.
 
-The same logical boundaries work locally and in the cloud. Local development uses atomic filesystem publication. Production uses the same logical keys and persistence state machines over S3, with ETag preconditions protecting mutable objects. A Lambda composes the acquisition run; explicit Python mappings project current source revisions into revision-aware analytical tables. Local Parquet runs exercise those contracts without AWS. A Glue Spark job independently reconciles every current pointer against its completed-revision registry and merges missing revisions into Iceberg v2. EventBridge Scheduler starts one Standard Step Functions execution that invokes acquisition and waits for Glue projection, rather than invoking either component on an independent schedule.
+The same logical boundaries work locally and in the cloud. Local development
+uses atomic filesystem publication. Production uses the same logical keys and
+persistence state machines over S3, with ETag preconditions protecting mutable
+objects. A Lambda composes the acquisition run; explicit Python mappings project
+current source revisions into revision-aware analytical tables. Local Parquet
+runs exercise those contracts without AWS. A Glue Spark job independently
+reconciles every current pointer against its completed-revision registry and
+merges missing revisions into Iceberg v2. EventBridge Scheduler starts one
+Standard Step Functions execution that invokes acquisition and waits for Glue
+projection, rather than invoking either component on an independent schedule.
+Glue reconciliation still runs when acquisition partially fails, after which
+the workflow reports the retained acquisition error.
 
 ## Layers and responsibilities
 
@@ -53,7 +73,9 @@ The same logical boundaries work locally and in the cloud. Local development use
 - Bounded schedule responses are retained as immutable discovery snapshots with per-run manifests.
 - Corrected-game polls retain their page responses and deduplicate work in a run manifest.
 - Correction polling uses an independent success-only watermark; overlapped queries favor harmless duplicate work over missed updates.
-- Schedule discovery uses an independent through-date and rolling lookback; current raw pointers prevent redundant game downloads.
+- Schedule discovery uses an independent through-date and rolling lookback;
+  durable deferred-game state guarantees later reconsideration, and current raw
+  pointers prevent redundant game downloads.
 - Daily coordinator manifests link all acquisition evidence without coupling branch checkpoint advancement.
 - Object paths are deterministic and include named partitions.
 - Every landed object has provenance metadata and a checksum.

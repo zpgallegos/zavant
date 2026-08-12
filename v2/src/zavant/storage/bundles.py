@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, cast
 
 from zavant.storage.path_daily_runs import PathDailyRunStore
+from zavant.storage.path_deferred_games import PathDeferredGameStore
 from zavant.storage.path_game_changes import PathGameChangesStore
 from zavant.storage.path_game_changes_watermark import (
     PathGameChangesWatermarkStore,
@@ -16,6 +17,7 @@ from zavant.storage.path_season_backfills import PathSeasonBackfillStore
 from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
 from zavant.storage.protocols import (
     DailyRunStore,
+    DeferredGameStore,
     GameChangesStore,
     GameChangesWatermarkStore,
     RawGameStore,
@@ -39,6 +41,7 @@ class AcquisitionStorage:
 
     raw_games: RawGameStore
     schedules: ScheduleStore
+    deferred_games: DeferredGameStore
     game_changes: GameChangesStore
     schedule_watermark: ScheduleWatermarkStore
     game_changes_watermark: GameChangesWatermarkStore
@@ -54,6 +57,7 @@ def local_acquisition_storage(
     return AcquisitionStorage(
         raw_games=PathRawGameStore(data_dir, clock=clock),
         schedules=PathScheduleStore(data_dir, clock=clock),
+        deferred_games=PathDeferredGameStore(data_dir, clock=clock),
         game_changes=PathGameChangesStore(data_dir, clock=clock),
         schedule_watermark=PathScheduleWatermarkStore(data_dir, clock=clock),
         game_changes_watermark=PathGameChangesWatermarkStore(data_dir, clock=clock),
@@ -89,6 +93,7 @@ def s3_acquisition_storage(
     return AcquisitionStorage(
         raw_games=PathRawGameStore(root, clock=clock),
         schedules=PathScheduleStore(root, clock=clock),
+        deferred_games=PathDeferredGameStore(root, clock=clock),
         game_changes=PathGameChangesStore(root, clock=clock),
         schedule_watermark=PathScheduleWatermarkStore(root, clock=clock),
         game_changes_watermark=PathGameChangesWatermarkStore(root, clock=clock),

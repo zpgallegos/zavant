@@ -6,6 +6,7 @@ import unittest
 
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.path_daily_runs import PathDailyRunStore
+from zavant.storage.path_deferred_games import PathDeferredGameStore
 from zavant.storage.path_game_changes import PathGameChangesStore
 from zavant.storage.path_game_changes_watermark import (
     PathGameChangesWatermarkStore,
@@ -16,6 +17,7 @@ from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
 from zavant.storage.path_season_backfills import PathSeasonBackfillStore
 from zavant.storage.protocols import (
     DailyRunStore,
+    DeferredGameStore,
     GameChangesStore,
     GameChangesWatermarkStore,
     RawGameStore,
@@ -63,6 +65,7 @@ class PathStorageProtocolTests(unittest.TestCase):
             PathGameChangesWatermarkStore(self.data_dir)
         )
         daily_run_store: DailyRunStore = PathDailyRunStore(self.data_dir)
+        deferred_game_store: DeferredGameStore = PathDeferredGameStore(self.data_dir)
         backfill_store: SeasonBackfillStore = PathSeasonBackfillStore(self.data_dir)
 
         self.assertIsInstance(raw_store, RawGameStore)
@@ -71,6 +74,7 @@ class PathStorageProtocolTests(unittest.TestCase):
         self.assertIsInstance(schedule_watermark_store, ScheduleWatermarkStore)
         self.assertIsInstance(changes_watermark_store, GameChangesWatermarkStore)
         self.assertIsInstance(daily_run_store, DailyRunStore)
+        self.assertIsInstance(deferred_game_store, DeferredGameStore)
         self.assertIsInstance(backfill_store, SeasonBackfillStore)
 
 

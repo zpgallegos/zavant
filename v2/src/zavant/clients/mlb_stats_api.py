@@ -233,7 +233,7 @@ class MlbStatsApiClient:
         self,
         base_url: str = DEFAULT_BASE_URL,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-        retry_policy: RetryPolicy = RetryPolicy(),
+        retry_policy: Optional[RetryPolicy] = None,
         transport: Optional[HttpTransport] = None,
         sleeper: Sleeper = time.sleep,
         user_agent: str = DEFAULT_USER_AGENT,
@@ -254,7 +254,7 @@ class MlbStatsApiClient:
 
         self.base_url = normalized_base_url
         self.timeout_seconds = timeout_seconds
-        self.retry_policy = retry_policy
+        self.retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self.transport = transport or UrllibHttpTransport()
         self.sleeper = sleeper
         self.request_headers = {

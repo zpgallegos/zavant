@@ -411,7 +411,7 @@ def _backfill_storage(
             "S3 backfill storage requires ZAVANT_AWS_ACCOUNT_ID"
         )
     boto3 = import_module("boto3")
-    client_factory = getattr(boto3, "client")
+    client_factory = boto3.client
     sts_client = cast(StsClient, client_factory("sts"))
     try:
         identity = sts_client.get_caller_identity()

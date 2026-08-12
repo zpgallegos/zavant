@@ -10,6 +10,10 @@ from zavant.acquisition.corrected_games import (
     CorrectedGameProcessingResult,
     CorrectedGameProcessor,
 )
+from zavant.acquisition.deferred_games import (
+    DeferredGameProcessingResult,
+    DeferredGameProcessor,
+)
 from zavant.acquisition.game_changes import (
     GameChangesPoller,
     GameChangesPollingError,
@@ -25,6 +29,7 @@ from zavant.contracts.game_changes import GameChangesContractError
 from zavant.contracts.schedule import ScheduleContractError
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import (
+    DeferredGameConflictError,
     GameChangesConflictError,
     GameChangesWatermarkConflictError,
     RawGameConflictError,
@@ -38,6 +43,7 @@ Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
 LOGGER = logging.getLogger(__name__)
 BRANCH_ERRORS = (
+    DeferredGameConflictError,
     GameChangesContractError,
     GameChangesConflictError,
     GameChangesPollingError,
@@ -89,6 +95,7 @@ class DailyAcquisitionCoordinator:
     Args:
         changes_poller: Durable corrected-game discovery service.
         corrected_game_processor: Processor for all outstanding corrections.
+        deferred_game_processor: Processor for unfinished scheduled games.
         schedule_discoverer: Incremental schedule-to-game discovery service.
         run_store: Durable coordinator run-manifest store.
         clock: Function capturing the coordinator start time.
@@ -99,6 +106,7 @@ class DailyAcquisitionCoordinator:
         self,
         changes_poller: GameChangesPoller,
         corrected_game_processor: CorrectedGameProcessor,
+        deferred_game_processor: DeferredGameProcessor,
         schedule_discoverer: ScheduleDiscoverer,
         run_store: DailyRunStore,
         clock: Clock = utc_now,
@@ -106,6 +114,7 @@ class DailyAcquisitionCoordinator:
     ) -> None:
         self.changes_poller = changes_poller
         self.corrected_game_processor = corrected_game_processor
+        self.deferred_game_processor = deferred_game_processor
         self.schedule_discoverer = schedule_discoverer
         self.run_store = run_store
         self.clock = clock
@@ -188,6 +197,7 @@ class DailyAcquisitionCoordinator:
             max_pages=correction_max_pages,
         )
         self._run_correction_processing(started_run.manifest_path)
+        self._run_deferred_game_processing(started_run.manifest_path)
         self._run_schedule_discovery(
             manifest_path=started_run.manifest_path,
             initial_start_date=initial_schedule_date,
@@ -297,6 +307,30 @@ class DailyAcquisitionCoordinator:
             result.status
             if result.status == "skipped"
             else ("complete" if result.successful else "failed"),
+        )
+
+    def _run_deferred_game_processing(
+        self,
+        manifest_path: ArtifactReference,
+    ) -> None:
+        LOGGER.info("daily branch started branch=deferred_game_processing")
+        try:
+            result: DeferredGameProcessingResult = (
+                self.deferred_game_processor.process_all()
+            )
+        except BRANCH_ERRORS as exc:
+            self._record_error(manifest_path, "deferred_game_processing", exc)
+            return
+        status = "complete" if result.successful else "failed"
+        self.run_store.record_branch(
+            manifest_path,
+            "deferred_game_processing",
+            status,
+            result.as_dict(),
+        )
+        LOGGER.info(
+            "daily branch finished branch=deferred_game_processing status=%s",
+            status,
         )
 
     def _record_error(

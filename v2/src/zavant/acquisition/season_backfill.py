@@ -88,21 +88,26 @@ class SeasonBackfillCoordinator:
         schedule_store: ScheduleStore,
         game_store: RawGameStore,
         backfill_store: SeasonBackfillStore,
-        eligibility_policy: GameEligibilityPolicy = FinalRegularSeasonGamePolicy(),
+        eligibility_policy: Optional[GameEligibilityPolicy] = None,
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
     ) -> None:
+        resolved_policy = (
+            eligibility_policy
+            if eligibility_policy is not None
+            else FinalRegularSeasonGamePolicy()
+        )
         self.game_store = game_store
         self.backfill_store = backfill_store
         self.clock = clock
         self.run_id_factory = run_id_factory
         self.month_processor = BackfillMonthProcessor(
-            api, schedule_store, game_store, eligibility_policy
+            api, schedule_store, game_store, resolved_policy
         )
         self.correction_discoverer = SeasonCorrectionDiscoverer(
             api, backfill_store
         )
-        self.eligibility_policy = eligibility_policy
+        self.eligibility_policy = resolved_policy
 
     def run(
         self,

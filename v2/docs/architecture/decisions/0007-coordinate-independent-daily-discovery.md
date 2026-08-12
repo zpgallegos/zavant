@@ -47,5 +47,7 @@ The first daily invocation requires both an initial schedule date and an initial
 - Recent schedule state is reconsidered with one bounded request while existing raw games avoid redundant live-feed calls.
 - Correction failures remain explicitly retriable even after the discovery watermark advances.
 - Every daily run explains all branch outcomes and links to their detailed manifests.
-- The seven-day lookback is a practical default, not a guarantee for indefinitely suspended games. Explicit bounded acquisition or a future reconciliation job remains appropriate for exceptional long-range cases.
+- The original seven-day correctness limitation is superseded by ADR 0019's
+  durable deferred-game worklist. The lookback remains a schedule-discovery
+  optimization.
 - This completes local raw acquisition, not analytical publication, transformation, semantic modeling, or presentation.

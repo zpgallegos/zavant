@@ -9,6 +9,10 @@ class ScheduleConflictError(RuntimeError):
     """Raised when a schedule run conflicts with stored content."""
 
 
+class DeferredGameConflictError(RuntimeError):
+    """Raised when durable deferred-game state is malformed or conflicts."""
+
+
 class GameChangesConflictError(RuntimeError):
     """Raised when a correction poll conflicts with stored content."""
 

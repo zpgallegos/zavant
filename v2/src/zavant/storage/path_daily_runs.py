@@ -19,7 +19,12 @@ from zavant.storage.models import StartedDailyRun
 
 
 Clock = Callable[[], datetime]
-DAILY_BRANCHES = ("correction_discovery", "correction_processing", "schedule_discovery")
+DAILY_BRANCHES = (
+    "correction_discovery",
+    "correction_processing",
+    "deferred_game_processing",
+    "schedule_discovery",
+)
 DAILY_BRANCH_STATUSES = ("complete", "failed", "skipped")
 
 
@@ -53,7 +58,7 @@ class PathDailyRunStore:
         manifest = {
             "branches": {},
             "configuration": configuration,
-            "contract": "zavant-daily-acquisition-run/v1",
+            "contract": "zavant-daily-acquisition-run/v2",
             "created_at": normalized_started_at.isoformat(),
             "run_id": str(run_id),
             "started_at": normalized_started_at.isoformat(),
@@ -140,7 +145,7 @@ class PathDailyRunStore:
             manifest = read_json_object(manifest_path)
         except (ValueError, json.JSONDecodeError) as exc:
             raise DailyRunConflictError("daily run manifest is invalid") from exc
-        if manifest.get("contract") != "zavant-daily-acquisition-run/v1":
+        if manifest.get("contract") != "zavant-daily-acquisition-run/v2":
             raise DailyRunConflictError("daily run manifest contract is invalid")
         return manifest
 

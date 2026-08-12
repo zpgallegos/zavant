@@ -6,11 +6,12 @@ from uuid import UUID
 
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.contracts.raw_game import RawGameResponse
-from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
+from zavant.contracts.schedule import ScheduledGame, ScheduleRequest, ScheduleResponse
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.models import (
     ChangedGameWorkItem,
     CurrentRawGameRevision,
+    DeferredScheduledGame,
     GameChangesWatermark,
     LandedGameChangesPage,
     LandedRawGame,
@@ -152,6 +153,26 @@ class ScheduleStore(Protocol):
         Returns:
             Counts grouped by schedule processing status.
         """
+
+        ...
+
+
+@runtime_checkable
+class DeferredGameStore(Protocol):
+    """Durable worklist for scheduled games that are not yet final."""
+
+    def pending(self) -> Tuple[DeferredScheduledGame, ...]:
+        """Return every game that still requires terminal-state evaluation."""
+
+        ...
+
+    def defer(self, game: ScheduledGame) -> None:
+        """Add or refresh a non-final regular-season game."""
+
+        ...
+
+    def resolve(self, game_pk: int) -> None:
+        """Remove a game after it is landed or becomes terminally ineligible."""
 
         ...
 

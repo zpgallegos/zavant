@@ -7,7 +7,7 @@
 
 EventBridge Scheduler originally invoked the acquisition Lambda directly. The
 production analytical projector is now an independently reconciling Glue job
-that must run only after acquisition completes successfully. Two unrelated
+that must run after acquisition has had its daily opportunity. Two unrelated
 schedules would permit projection to race acquisition and would not provide one
 durable status for the daily cloud workflow.
 
@@ -20,9 +20,13 @@ other.
 
 Define a Standard Step Functions state machine in a separate
 `zavant-daily-workflow-{environment}` CloudFormation stack. It invokes the
-existing acquisition Lambda and, after success, starts the existing analytical
-Glue job with the `.sync` integration so the state machine waits for projection
-to finish.
+existing acquisition Lambda and then starts the existing analytical Glue job
+with the `.sync` integration so the state machine waits for projection to
+finish. An acquisition error is retained in workflow state rather than ending
+execution immediately. Projection still runs because it reconciles all durable
+current pointers and does not consume the acquisition response. After a
+successful projection, the workflow reports the retained acquisition failure;
+the overall execution therefore remains red and alertable.
 
 The state-machine input is passed directly to Lambda, preserving manual
 `through_date` execution. Lambda service and throttling failures receive a small
@@ -51,8 +55,10 @@ acquisition, analytical projection, then workflow and schedule.
 ## Consequences
 
 One execution history now records acquisition and analytical publication.
-Acquisition failure prevents projection; projection failure leaves raw data
-safe and unregistered revisions are retried by a later successful workflow.
+Acquisition failure does not strand revisions successfully committed by another
+acquisition branch. Projection failure leaves raw data safe and unregistered
+revisions are retried by a later workflow. A partial acquisition remains an
+overall workflow failure even when projection succeeds.
 Future dbt execution can be added as another state without coupling it to either
 application.
 

@@ -146,13 +146,22 @@ Then run the same workflow daily without bootstrap arguments:
 PYTHONPATH=src .venv/bin/python -m zavant run-daily
 ```
 
-Each invocation records three independent branches in `runs/daily/.../manifest.json`:
+Each invocation records four independent branches in `runs/daily/.../manifest.json`:
 
 1. Poll and durably checkpoint corrected-game discovery.
 2. Retry all pending or failed corrected games that already exist in storage.
-3. Discover the schedule through the current UTC date and acquire newly final regular-season games.
+3. Reconsider every game in the durable deferred-game worklist.
+4. Discover the schedule through the current UTC date and acquire newly final regular-season games.
 
-The schedule branch keeps its own successful through-date and, by default, re-queries a rolling seven-day window. This reconsideration catches recent deferred, postponed, or changed schedule entries. Final games that already have a current raw revision are resolved from persisted state without another live-feed request. Use `--schedule-lookback-days` to tune the window and `--through-date` for a deterministic local run.
+The schedule branch keeps its own successful through-date and, by default,
+re-queries a rolling seven-day window. That window cheaply discovers recent
+schedule changes. It is not the correctness boundary for unfinished games:
+every deferred regular-season game is also retained in
+`state/mlb_stats_api/schedules/deferred_games.json` and its live feed is checked
+on each daily run until the game is final or cancelled. Final games that already
+have a current raw revision are resolved from persisted state without another
+live-feed request. Use `--schedule-lookback-days` to tune the discovery window
+and `--through-date` for a deterministic local run.
 
 A failure in one branch does not prevent the others from running. The command exits with status 1 if any branch fails, while each successful discovery watermark advances independently. An immediate rerun therefore retries only the state that remains outstanding. If only one checkpoint was initialized during a partially successful bootstrap, supply only the missing branch's bootstrap argument on the next run.
 
@@ -235,7 +244,9 @@ only the configured prefix and read or write only its objects; it cannot delete
 data or administer the bucket. The
 [daily workflow stack](infrastructure/daily-workflow.md) owns EventBridge
 Scheduler, its start-execution role, and the Step Functions state machine that
-invokes acquisition and waits for Glue. The schedule defaults to 6:00 AM
+invokes acquisition and waits for Glue. Glue still reconciles durable revisions
+after a partial acquisition failure, and the workflow then reports that retained
+failure. The schedule defaults to 6:00 AM
 `America/Los_Angeles` and follows daylight-saving time. Credentials are supplied
 by execution roles, never environment variables.
 

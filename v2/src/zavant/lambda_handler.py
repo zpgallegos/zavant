@@ -232,7 +232,7 @@ def lambda_handler(event: Mapping[str, Any], context: object) -> Dict[str, Any]:
 
 def _boto3_s3_client() -> S3Client:
     boto3 = import_module("boto3")
-    client_factory = getattr(boto3, "client")
+    client_factory = boto3.client
     return cast(S3Client, client_factory("s3"))
 
 

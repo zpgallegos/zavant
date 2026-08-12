@@ -35,6 +35,13 @@ further optional extension of a pitch. Player tables contain game statistics,
 not the mutable season-to-date snapshots embedded in each response. Every row
 includes the source revision ID and projection contract version.
 
+Preserve MLB's precomputed rate values such as batting average, OPS, ERA, WHIP,
+and `inningsPitched` as informational source strings. Treat integer counting
+statistics—including hits, at-bats, walks, total bases, earned runs, and outs—as
+the canonical analytical measures. Aggregated rates must be derived from summed
+counts; in particular, pitched innings are represented canonically by outs
+rather than interpreting baseball notation such as `5.2` as a decimal.
+
 Implement the source-to-row mapping as a pure Python projection core. A local
 adapter discovers only revisions selected by persisted `current.json` pointers,
 validates their content hashes and metadata, and atomically publishes explicit

@@ -94,6 +94,7 @@ Resources:
               - Sid: ReadCatalog
                 Effect: Allow
                 Action:
+                  - glue:GetCatalog
                   - glue:GetDatabase
                   - glue:GetDatabases
                 Resource:

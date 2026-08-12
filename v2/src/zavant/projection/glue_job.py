@@ -132,9 +132,7 @@ def run_glue_projection(
                 projected_at_utc,
             )
         )
-        storage_level = getattr(
-            import_module("pyspark"), "StorageLevel"
-        ).MEMORY_AND_DISK
+        storage_level = import_module("pyspark").StorageLevel.MEMORY_AND_DISK
         projection_rdd.persist(storage_level)
         try:
             projected_count = projection_rdd.count()
@@ -208,9 +206,7 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> None:
     parser.add_argument("--max-projection-partitions", type=int, default=64)
     arguments, _ = parser.parse_known_args(argv)
 
-    spark_session = getattr(
-        import_module("pyspark.sql"), "SparkSession"
-    ).builder.getOrCreate()
+    spark_session = import_module("pyspark.sql").SparkSession.builder.getOrCreate()
     boto3 = import_module("boto3")
     configuration = GlueProjectionConfiguration(
         bucket=arguments.bucket,
@@ -278,9 +274,42 @@ def _validate_table_schema(
         for column in contract.columns
     )
     if observed != expected:
+        details = _schema_drift_details(observed, expected)
         raise RuntimeError(
-            f"Iceberg table {contract.name} does not match its projection contract"
+            f"Iceberg table {contract.name} does not match its projection contract: "
+            f"{details}. Apply the reviewed Iceberg schema migration before "
+            "deploying this projection contract"
         )
+
+
+def _schema_drift_details(
+    observed: Sequence[tuple[str, str, bool]],
+    expected: Sequence[tuple[str, str, bool]],
+) -> str:
+    observed_by_name = {name: (kind, nullable) for name, kind, nullable in observed}
+    expected_by_name = {name: (kind, nullable) for name, kind, nullable in expected}
+    missing = sorted(set(expected_by_name) - set(observed_by_name))
+    unexpected = sorted(set(observed_by_name) - set(expected_by_name))
+    incompatible = {
+        name: {
+            "observed": observed_by_name[name],
+            "expected": expected_by_name[name],
+        }
+        for name in sorted(set(observed_by_name).intersection(expected_by_name))
+        if observed_by_name[name] != expected_by_name[name]
+    }
+    details = [
+        f"missing={missing}",
+        f"unexpected={unexpected}",
+        f"incompatible={incompatible}",
+    ]
+    if not missing and not unexpected and not incompatible and observed != expected:
+        details.append(
+            "column_order_changed="
+            f"observed={[name for name, _, _ in observed]} "
+            f"expected={[name for name, _, _ in expected]}"
+        )
+    return " ".join(details)
 
 
 def _completed_projections(

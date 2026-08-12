@@ -6,6 +6,7 @@ from typing import Callable, Protocol
 from zavant.acquisition.bounded_games import BoundedGameAcquirer, MlbGameAcquisitionApi
 from zavant.acquisition.corrected_games import CorrectedGameProcessor, MlbCorrectedGameApi
 from zavant.acquisition.daily import DailyAcquisitionCoordinator, utc_now
+from zavant.acquisition.deferred_games import DeferredGameProcessor, MlbDeferredGameApi
 from zavant.acquisition.game_changes import GameChangesPoller, MlbGameChangesApi
 from zavant.acquisition.schedule_discovery import ScheduleDiscoverer
 from zavant.acquisition.season_backfill import (
@@ -21,6 +22,7 @@ Clock = Callable[[], datetime]
 class MlbDailyApi(
     MlbGameAcquisitionApi,
     MlbCorrectedGameApi,
+    MlbDeferredGameApi,
     MlbGameChangesApi,
     Protocol,
 ):
@@ -36,6 +38,7 @@ def build_daily_coordinator(
         api=api,
         schedule_store=storage.schedules,
         game_store=storage.raw_games,
+        deferred_game_store=storage.deferred_games,
         clock=clock,
     )
     return DailyAcquisitionCoordinator(
@@ -48,6 +51,11 @@ def build_daily_coordinator(
         corrected_game_processor=CorrectedGameProcessor(
             api=api,
             changes_store=storage.game_changes,
+            game_store=storage.raw_games,
+        ),
+        deferred_game_processor=DeferredGameProcessor(
+            api=api,
+            deferred_game_store=storage.deferred_games,
             game_store=storage.raw_games,
         ),
         schedule_discoverer=ScheduleDiscoverer(

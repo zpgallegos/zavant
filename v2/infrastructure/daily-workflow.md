@@ -11,14 +11,18 @@ The scheduled state machine runs:
 ```text
 EventBridge Scheduler
     -> Run daily acquisition Lambda
-    -> wait for success
+    -> retain any acquisition error
     -> start analytical Glue job with .sync
     -> wait for success
+    -> report retained acquisition error, otherwise succeed
 ```
 
-An acquisition failure prevents Glue from starting. A Glue failure leaves the
-execution failed and the affected revisions absent from the completed
-projection registry, so the next successful workflow reconciles them again.
+An acquisition failure does not prevent Glue from reconciling revisions that
+another acquisition branch committed successfully. After Glue succeeds, the
+workflow still fails if acquisition failed, preserving the original red signal
+and error details in execution state. A Glue failure leaves the execution
+failed and the affected revisions absent from the completed projection
+registry, so the next workflow reconciles them again.
 
 ## Daily schedule
 

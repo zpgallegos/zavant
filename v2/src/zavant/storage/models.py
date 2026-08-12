@@ -49,6 +49,18 @@ class CurrentRawGameRevision:
 
 
 @dataclass(frozen=True)
+class DeferredScheduledGame:
+    """Regular-season game retained until it reaches a terminal state."""
+
+    game_pk: int
+    season: int
+    official_date: date
+    live_feed_link: str
+    first_deferred_at: datetime
+    last_evaluated_at: datetime
+
+
+@dataclass(frozen=True)
 class LandedSchedule:
     """Result of landing one bounded schedule snapshot."""
 

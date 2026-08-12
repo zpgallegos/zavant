@@ -15,7 +15,8 @@ This is a sequence of independently demonstrable vertical slices, not a commitme
 - Paginated corrected-game polling with safety overlap, completed-run validation, and success-only durable watermark advancement
 - Retriable corrected-game processing into immutable raw revisions
 - Incremental schedule discovery with a rolling lookback and independent through-date
-- Durable daily coordinator with isolated schedule, correction-discovery, and correction-processing outcomes
+- Durable deferred-game worklist independent of the rolling schedule window
+- Durable daily coordinator with isolated schedule, deferred-game, correction-discovery, and correction-processing outcomes
 - Resumable multi-season backfill with explicit reconciliation modes, dry-run planning, monthly child manifests, and independent season checkpoints
 - Tests based on representative checked-in MLB responses
 - Target architecture and ADR process

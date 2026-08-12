@@ -8,9 +8,11 @@ from uuid import UUID
 from zavant.acquisition.bounded_games import BoundedGameAcquirer
 from zavant.acquisition.corrected_games import CorrectedGameProcessor
 from zavant.acquisition.daily import DailyAcquisitionCoordinator
+from zavant.acquisition.deferred_games import DeferredGameProcessor
 from zavant.acquisition.game_changes import GameChangesPoller
 from zavant.acquisition.schedule_discovery import ScheduleDiscoverer
 from zavant.storage.path_daily_runs import PathDailyRunStore
+from zavant.storage.path_deferred_games import PathDeferredGameStore
 from zavant.storage.path_game_changes import PathGameChangesStore
 from zavant.storage.path_game_changes_watermark import (
     PathGameChangesWatermarkStore,
@@ -79,6 +81,10 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
             self.data_dir,
             clock=lambda: OBSERVED_AT,
         )
+        self.deferred_game_store = PathDeferredGameStore(
+            self.data_dir,
+            clock=lambda: OBSERVED_AT,
+        )
 
     def coordinator(
         self,
@@ -102,11 +108,17 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
                 changes_store=self.changes_store,
                 game_store=self.game_store,
             ),
+            deferred_game_processor=DeferredGameProcessor(
+                api=game_api,
+                deferred_game_store=self.deferred_game_store,
+                game_store=self.game_store,
+            ),
             schedule_discoverer=ScheduleDiscoverer(
                 acquirer=BoundedGameAcquirer(
                     api=game_api,
                     schedule_store=self.schedule_store,
                     game_store=self.game_store,
+                    deferred_game_store=self.deferred_game_store,
                     clock=lambda: started_at,
                 ),
                 watermark_store=self.schedule_watermark_store,
@@ -177,6 +189,7 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
             {
                 "correction_discovery": "complete",
                 "correction_processing": "complete",
+                "deferred_game_processing": "complete",
                 "schedule_discovery": "complete",
             },
         )
@@ -219,5 +232,6 @@ class DailyAcquisitionCoordinatorTests(unittest.TestCase):
         self.assertFalse(result.successful)
         self.assertEqual(result.branch_statuses["correction_discovery"], "failed")
         self.assertEqual(result.branch_statuses["correction_processing"], "complete")
+        self.assertEqual(result.branch_statuses["deferred_game_processing"], "complete")
         self.assertEqual(result.branch_statuses["schedule_discovery"], "complete")
         self.assertEqual(game_api.game_calls, [823514, 824726])

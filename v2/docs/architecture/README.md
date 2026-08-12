@@ -17,10 +17,10 @@ This directory records why Zavant is built the way it is. The target architectur
 | Daily acquisition | One season-wide scan inside a Lambda invocation | Independent correction discovery, correction processing, and rolling schedule discovery with a durable coordinator manifest | Accepted in ADR 0007; local workflow implemented |
 | Historical acquisition | Ad hoc season-wide reruns with no revision audit state | Resumable monthly schedule children, explicit reconciliation modes, and season-scoped correction checkpoints | Accepted in ADR 0013; local and S3-backed CLI implemented |
 | Storage boundary | Acquisition imports concrete filesystem stores and exchanges `Path` values | Shared persistence state machines behind domain protocols, with local files or conditionally written S3 objects | Accepted in ADRs 0008–0009; local and S3 composition implemented |
-| Analytical format | Flattened JSON followed by Glue-written Parquet | Explicit datasets and locally testable Parquet publication | To decide in slice 2 |
+| Analytical format | Flattened JSON followed by Glue-written Parquet | Explicit revision-aware datasets, locally inspectable Parquet, and production Iceberg v2 tables | Accepted in ADRs 0015–0016; local projection and production Glue publication implemented |
 | Transformation | dbt on Athena | Retain dbt; reassess engine and model design independently | Partially accepted |
-| Production orchestration | AWS Step Functions plus S3 events | One EventBridge Scheduler invocation of the established daily coordinator | Accepted in ADRs 0009 and 0014; scheduled boundary implemented |
-| Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with a retained bucket, scoped roles, packaged Lambda, controlled log retention, and a daily schedule | Accepted in ADRs 0010–0012 and 0014; scheduled function implemented |
+| Production orchestration | AWS Step Functions plus S3 events | A workflow-owned EventBridge schedule starts one daily Standard workflow that sequences acquisition, batch projection, and later dbt | Accepted in ADR 0017; schedule plus acquisition and projection states implemented |
+| Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with separate acquisition, analytical, and workflow stacks, scoped roles, packaged compute, controlled log retention, and one explicit schedule | Accepted in ADRs 0010–0012 and 0014–0017; Lambda, Glue, and Step Functions definitions implemented |
 | Semantics | Presentation-specific SQL and exported files | Central metric and entity definitions | Open |
 | Presentation | Create React App consuming generated artifacts | Select from product requirements after semantics | Open |
 

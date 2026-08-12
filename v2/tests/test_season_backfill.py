@@ -50,7 +50,18 @@ def raw_game(game_pk: int, marker: int = 1) -> bytes:
     ).encode()
 
 
-def schedule(games: Tuple[int, ...], deferred_games: Tuple[int, ...] = ()) -> bytes:
+def schedule(
+    games: Tuple[int, ...],
+    deferred_games: Tuple[int, ...] = (),
+    canceled_games: Tuple[int, ...] = (),
+) -> bytes:
+    def status(game_pk: int) -> Dict[str, str]:
+        if game_pk in canceled_games:
+            return {"codedGameState": "C", "detailedState": "Cancelled"}
+        if game_pk in deferred_games:
+            return {"codedGameState": "S", "detailedState": "Scheduled"}
+        return {"codedGameState": "F", "detailedState": "Final"}
+
     entries = [
         {
             "gamePk": game_pk,
@@ -59,10 +70,7 @@ def schedule(games: Tuple[int, ...], deferred_games: Tuple[int, ...] = ()) -> by
             "season": "2024",
             "gameType": "R",
             "link": f"/api/v1.1/game/{game_pk}/feed/live",
-            "status": {
-                "codedGameState": "S" if game_pk in deferred_games else "F",
-                "detailedState": "Scheduled" if game_pk in deferred_games else "Final",
-            },
+            "status": status(game_pk),
         }
         for game_pk in games
     ]
@@ -100,6 +108,7 @@ class FakeBackfillApi:
         changed_games: Tuple[int, ...] = (),
         scheduled_games_by_month: Optional[Dict[int, Tuple[int, ...]]] = None,
         deferred_games: Tuple[int, ...] = (),
+        canceled_games: Tuple[int, ...] = (),
     ) -> None:
         self.game_responses = game_responses
         self.changed_games = changed_games
@@ -109,6 +118,7 @@ class FakeBackfillApi:
             else {4: (1, 2)}
         )
         self.deferred_games = deferred_games
+        self.canceled_games = canceled_games
         self.schedule_calls: List[Tuple[date, date, int]] = []
         self.game_calls: List[int] = []
         self.change_calls: List[Tuple[datetime, int, int, int]] = []
@@ -119,7 +129,7 @@ class FakeBackfillApi:
         self.schedule_calls.append((start_date, end_date, sport_id))
         games = self.scheduled_games_by_month.get(start_date.month, ())
         return retrieved(
-            schedule(games, self.deferred_games),
+            schedule(games, self.deferred_games, self.canceled_games),
             "https://example.test/api/v1/schedule",
         )
 
@@ -396,6 +406,33 @@ class SeasonBackfillCoordinatorTests(unittest.TestCase):
         details = manifest["season_runs"][0]["details"]
         self.assertEqual(details["unresolved_deferred"], 1)
         self.assertEqual(details["unresolved_deferred_game_pks"], [1])
+
+    def test_canceled_game_is_skipped_and_does_not_prevent_completion(self) -> None:
+        api = FakeBackfillApi(
+            {1: raw_game(1)},
+            scheduled_games_by_month={4: (1, 2)},
+            canceled_games=(2,),
+        )
+
+        result = self.coordinator(api).run((SEASON,))
+
+        self.assertTrue(result.successful)
+        self.assertEqual(api.game_calls, [1])
+        checkpoint = self.backfill_store.read_checkpoint(SEASON)
+        self.assertIsNotNone(checkpoint)
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
+        details = manifest["season_runs"][0]["details"]
+        self.assertEqual(details["skipped"], 1)
+        self.assertEqual(details["deferred"], 0)
+        self.assertEqual(details["unresolved_deferred"], 0)
+        april_manifest = json.loads(
+            Path(details["schedule_manifests"][3]).read_text()
+        )
+        canceled = next(
+            game for game in april_manifest["games"] if game["game_pk"] == 2
+        )
+        self.assertEqual(canceled["processing_status"], "skipped")
+        self.assertEqual(canceled["reason"], "canceled_game")
 
 
 if __name__ == "__main__":

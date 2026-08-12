@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Protocol, Sequence, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from zavant.acquisition.bounded_games import BoundedGameAcquirer
 from zavant.acquisition.game_changes import (
@@ -208,6 +208,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="override ZAVANT_DATA_DIR for local storage",
     )
 
+    project_local = subparsers.add_parser(
+        "project-local",
+        help="project current local game revisions into inspectable Parquet tables",
+    )
+    project_local.add_argument(
+        "--season",
+        action="append",
+        dest="seasons",
+        type=int,
+        help="limit projection to a season; repeat to select multiple seasons",
+    )
+    project_local.add_argument("--run-id", type=UUID)
+    project_local.add_argument("--projected-at", type=parse_utc_datetime)
+    project_local.add_argument(
+        "--output-dir",
+        type=Path,
+        help="new output directory; defaults to a run below the local lake",
+    )
+    project_local.add_argument(
+        "--data-dir",
+        type=Path,
+        help="override ZAVANT_DATA_DIR for this invocation",
+    )
+
     return parser
 
 
@@ -217,6 +241,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     settings = Settings.from_environment()
     data_dir = args.data_dir or settings.data_dir
     storage = local_acquisition_storage(data_dir)
+
+    if args.command == "project-local":
+        from zavant.projection.local import run_local_projection
+
+        run_id = args.run_id or uuid4()
+        output_dir = args.output_dir or (
+            data_dir / "analytical" / "projection_runs" / f"run_id={run_id}"
+        )
+        try:
+            result = run_local_projection(
+                data_dir=data_dir,
+                output_dir=output_dir,
+                run_id=run_id,
+                projected_at=args.projected_at,
+                seasons=args.seasons,
+            )
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(json.dumps(result.as_dict(), indent=2, sort_keys=True))
+        return 0
 
     if args.command == "acquire-games":
         if (args.run_id is None) != (args.requested_at is None):
@@ -364,7 +408,7 @@ def _backfill_storage(
     expected_account_id = settings.expected_aws_account_id
     if not expected_account_id:
         raise ValueError(
-            "S3 backfill storage requires ZAVANT_EXPECTED_AWS_ACCOUNT_ID"
+            "S3 backfill storage requires ZAVANT_AWS_ACCOUNT_ID"
         )
     boto3 = import_module("boto3")
     client_factory = getattr(boto3, "client")

@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "https://statsapi.mlb.com"
 DEFAULT_TIMEOUT_SECONDS = 10.0
-DEFAULT_USER_AGENT = "zavant/0.7.0"
+DEFAULT_USER_AGENT = "zavant/0.11.0"
 RETRYABLE_STATUS_CODES = (408, 425, 429, 500, 502, 503, 504)
 
 Sleeper = Callable[[float], None]

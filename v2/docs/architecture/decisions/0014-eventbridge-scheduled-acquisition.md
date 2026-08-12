@@ -1,6 +1,6 @@
 # ADR 0014: Invoke daily acquisition with EventBridge Scheduler
 
-- Status: Accepted
+- Status: Superseded by ADR 0017
 - Date: 2026-08-10
 
 ## Context

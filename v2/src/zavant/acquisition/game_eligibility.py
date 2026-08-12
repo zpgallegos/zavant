@@ -48,6 +48,11 @@ class FinalRegularSeasonGamePolicy:
                 disposition=EligibilityDisposition.SKIPPED,
                 reason="unsupported_game_type",
             )
+        if game.status_code == "C":
+            return GameEligibilityDecision(
+                disposition=EligibilityDisposition.SKIPPED,
+                reason="canceled_game",
+            )
         if game.status_code != "F":
             return GameEligibilityDecision(
                 disposition=EligibilityDisposition.DEFERRED,

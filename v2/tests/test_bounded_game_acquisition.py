@@ -115,6 +115,14 @@ class FinalRegularSeasonGamePolicyTests(unittest.TestCase):
         self.assertEqual(decision.disposition, EligibilityDisposition.DEFERRED)
         self.assertEqual(decision.reason, "game_not_final")
 
+    def test_skips_canceled_regular_season_game(self) -> None:
+        decision = self.policy.evaluate(
+            replace(self.game, status_code="C", detailed_state="Cancelled")
+        )
+
+        self.assertEqual(decision.disposition, EligibilityDisposition.SKIPPED)
+        self.assertEqual(decision.reason, "canceled_game")
+
     def test_skips_non_regular_season_game(self) -> None:
         decision = self.policy.evaluate(replace(self.game, game_type="S"))
 

@@ -31,6 +31,8 @@ Represent the prefix as the `AcquisitionPrefix` stack parameter, defaulting to `
 
 - The role matches the current S3 adapter's complete AWS API surface.
 - A new required S3 operation must be reviewed and added explicitly rather than inheriting broad access.
-- Changing the acquisition prefix through `make infra-deploy S3_PREFIX=...` updates the role policy; the future Lambda environment must consume the same stack parameter.
+- Changing the acquisition prefix through
+  `make acquisition-infra-deploy ACQUISITION_S3_PREFIX=...` updates the role
+  policy; the Lambda environment consumes the same stack parameter.
 - CloudWatch logging is scoped to the explicit retention-controlled function log group.
 - A real Lambda-to-S3 smoke test remains necessary after packaging and function deployment.

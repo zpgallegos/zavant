@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Durable storage and scheduled execution for Zavant acquisition.
+Description: Durable storage and Lambda execution for Zavant acquisition.
 
 Parameters:
   EnvironmentName:
@@ -28,21 +28,6 @@ Parameters:
     Type: String
     Default: ""
     Description: First correction boundary used while no correction watermark exists.
-  DailyScheduleExpression:
-    Type: String
-    Default: "cron(0 6 * * ? *)"
-    Description: EventBridge Scheduler expression for daily acquisition.
-  DailyScheduleTimezone:
-    Type: String
-    Default: America/Los_Angeles
-    Description: IANA timezone used to interpret the daily schedule expression.
-  DailyScheduleState:
-    Type: String
-    Default: ENABLED
-    AllowedValues:
-      - ENABLED
-      - DISABLED
-    Description: Whether EventBridge Scheduler invokes daily acquisition.
 
 Conditions:
   HasLambdaCode: !Not [!Equals [!Ref LambdaCodeS3Key, ""]]
@@ -207,62 +192,6 @@ Resources:
         - Key: ManagedBy
           Value: cloudformation
 
-  AcquisitionScheduleExecutionRole:
-    Type: AWS::IAM::Role
-    Condition: HasLambdaCode
-    Properties:
-      Description: Allows EventBridge Scheduler to invoke daily acquisition.
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: scheduler.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-              ArnLike:
-                aws:SourceArn: !Sub "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/default"
-      Policies:
-        - PolicyName: InvokeDailyAcquisition
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: InvokeDailyAcquisition
-                Effect: Allow
-                Action: lambda:InvokeFunction
-                Resource: !GetAtt AcquisitionLambdaFunction.Arn
-      Tags:
-        - Key: Project
-          Value: zavant
-        - Key: Component
-          Value: acquisition
-        - Key: Environment
-          Value: !Ref EnvironmentName
-        - Key: ManagedBy
-          Value: cloudformation
-
-  AcquisitionDailySchedule:
-    Type: AWS::Scheduler::Schedule
-    Condition: HasLambdaCode
-    Properties:
-      Description: Invokes the complete Zavant daily acquisition workflow.
-      FlexibleTimeWindow:
-        Mode: "OFF"
-      GroupName: default
-      Name: !Sub "zavant-acquisition-daily-${EnvironmentName}"
-      ScheduleExpression: !Ref DailyScheduleExpression
-      ScheduleExpressionTimezone: !Ref DailyScheduleTimezone
-      State: !Ref DailyScheduleState
-      Target:
-        Arn: !GetAtt AcquisitionLambdaFunction.Arn
-        Input: "{}"
-        RetryPolicy:
-          MaximumEventAgeInSeconds: 3600
-          MaximumRetryAttempts: 2
-        RoleArn: !GetAtt AcquisitionScheduleExecutionRole.Arn
-
 Outputs:
   AcquisitionBucketArn:
     Description: ARN used by future least-privilege IAM policies.
@@ -289,17 +218,9 @@ Outputs:
     Value: !Ref AcquisitionLambdaExecutionRole
   AcquisitionLambdaFunctionArn:
     Condition: HasLambdaCode
-    Description: ARN of the scheduled daily acquisition function.
+    Description: ARN invoked by the Step Functions daily workflow.
     Value: !GetAtt AcquisitionLambdaFunction.Arn
   AcquisitionLambdaFunctionName:
     Condition: HasLambdaCode
-    Description: Name of the scheduled daily acquisition function.
+    Description: Name invoked by the Step Functions daily workflow.
     Value: !Ref AcquisitionLambdaFunction
-  AcquisitionDailyScheduleArn:
-    Condition: HasLambdaCode
-    Description: ARN of the EventBridge Scheduler schedule.
-    Value: !GetAtt AcquisitionDailySchedule.Arn
-  AcquisitionDailyScheduleName:
-    Condition: HasLambdaCode
-    Description: Name of the EventBridge Scheduler schedule.
-    Value: !Ref AcquisitionDailySchedule

@@ -32,6 +32,25 @@ class BackfillCliSafetyTests(unittest.TestCase):
 
         self.assertEqual(args.storage, "local")
 
+    def test_settings_read_aws_account_from_consistent_environment_name(
+        self,
+    ) -> None:
+        with patch.dict(
+            "os.environ",
+            {"ZAVANT_AWS_ACCOUNT_ID": "123456789012"},
+            clear=True,
+        ):
+            settings = Settings.from_environment()
+
+        self.assertEqual(settings.expected_aws_account_id, "123456789012")
+
+    def test_local_projection_accepts_repeated_seasons(self) -> None:
+        args = build_parser().parse_args(
+            ["project-local", "--season", "2025", "--season", "2026"]
+        )
+
+        self.assertEqual(args.seasons, [2025, 2026])
+
     def test_s3_backfill_verifies_expected_account(self) -> None:
         args = SimpleNamespace(bucket=None, storage="s3", prefix=None)
         s3_client = FakeS3Client()

@@ -8,7 +8,7 @@ The current acquisition foundation retrieves, validates, and persists three MLB 
 - Bounded schedule snapshots, stored by request run with a manifest of games discovered for later eligibility and retrieval processing.
 - Pages returned by the corrected-game change feed, stored by poll run with a manifest of games that need to be retrieved again.
 
-A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete acquisition workflow combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest. Acquisition depends on typed storage protocols and portable artifact references. Local operation uses atomic filesystem publication; the Lambda composition uses the same persistence state machines over conditionally written S3 objects. Boto3 is the only third-party runtime dependency.
+A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete acquisition workflow combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest. Acquisition depends on typed storage protocols and portable artifact references. Local operation uses atomic filesystem publication; the Lambda composition uses the same persistence state machines over conditionally written S3 objects. Boto3 is the only production acquisition dependency. Local analytical projection uses the optional PyArrow dependency installed by `make bootstrap`; production projection packages the same pure Python mappings for a Glue 5.0 Spark job that reconciles current S3 revisions into Iceberg v2.
 
 ## Local development
 
@@ -20,6 +20,18 @@ make check
 ```
 
 If `python3` already points to Python 3.9 or newer, `make bootstrap` is sufficient. Bootstrap installs the package and its runtime dependencies into `.venv`. Local outputs are written under `.local/` and ignored by Git.
+
+Copy `.env.example` to the ignored `.env` file for local configuration. Make
+loads that file automatically and maps its `ZAVANT_*` values to infrastructure
+parameters; the wrappers under `test_scripts/` source the same file. Explicit
+Make arguments and variables supplied directly to a test script override those
+defaults.
+
+The separation is intentional: `.env` contains values that describe a local or
+deployed environment, including AWS account, Region, deployment name, S3
+location, bootstrap boundaries, schedule, and projection sizing. The Makefile
+contains tool names, repository paths, artifact names, and stack names derived
+from the deployment environment.
 
 The acquisition workflows create these layouts:
 
@@ -153,15 +165,16 @@ The recommended mode is `reconcile`:
 
 ```shell
 export ZAVANT_S3_BUCKET=<AcquisitionBucketName-output>
-export ZAVANT_EXPECTED_AWS_ACCOUNT_ID=<12-digit-account-id>
+export ZAVANT_AWS_ACCOUNT_ID=<12-digit-account-id>
 PYTHONPATH=src .venv/bin/python -m zavant backfill-seasons \
   2019 2020 2021 --mode reconcile --storage s3
 ```
 
 Storage defaults to `.local/lake` even when an S3 bucket is present in the
 environment. Cloud backfills require explicit `--storage s3`, a bucket, and an
-expected AWS account ID. Credentials remain owned by the normal AWS SDK
-credential chain.
+expected AWS account ID. The `test_scripts/backfill-seasons.sh` wrapper loads
+those values from `.env`; direct CLI calls receive them from the shell.
+Credentials remain owned by the normal AWS SDK credential chain.
 
 The three modes have intentionally different costs and guarantees:
 
@@ -212,7 +225,19 @@ ZAVANT_INITIAL_SCHEDULE_DATE=<first-schedule-date>
 ZAVANT_INITIAL_CORRECTION_WATERMARK=<first-known-safe-UTC-timestamp>
 ```
 
-The bucket is deliberately not created by the application. Its private, encrypted, versioned CloudFormation definition, prefix-scoped execution role, Lambda function, retention-controlled log group, and daily EventBridge Scheduler trigger live in [`infrastructure/template.yaml`](infrastructure/template.yaml); packaging and deployment instructions are in [`infrastructure/README.md`](infrastructure/README.md). The Lambda role can list only the configured prefix and read or write only its objects; it cannot delete data or administer the bucket. A separate Scheduler role can invoke only this function. The schedule defaults to 6:00 AM `America/Los_Angeles`, follows daylight-saving time, and remains configurable through stack parameters. Credentials are supplied by execution roles, never environment variables.
+The bucket is deliberately not created by the application. Its private,
+encrypted, versioned CloudFormation definition, prefix-scoped execution role,
+Lambda function, and retention-controlled log group live in
+[`infrastructure/acquisition-stack.yaml`](infrastructure/acquisition-stack.yaml);
+packaging and deployment instructions are in
+[`infrastructure/README.md`](infrastructure/README.md). The Lambda role can list
+only the configured prefix and read or write only its objects; it cannot delete
+data or administer the bucket. The
+[daily workflow stack](infrastructure/daily-workflow.md) owns EventBridge
+Scheduler, its start-execution role, and the Step Functions state machine that
+invokes acquisition and waits for Glue. The schedule defaults to 6:00 AM
+`America/Los_Angeles` and follows daylight-saving time. Credentials are supplied
+by execution roles, never environment variables.
 
 The optional `through_date` event field supports deterministic smoke tests:
 
@@ -222,6 +247,41 @@ The optional `through_date` event field supports deterministic smoke tests:
 
 Bootstrap configuration is consulted only while its corresponding watermark is absent. Thereafter the persisted S3 state is authoritative. If any daily branch fails, its manifest remains in S3 and the handler raises so the Lambda invocation is visibly unsuccessful.
 
-This completes the local application, historical CLI reconciliation, and scheduled production Lambda definition for API-to-raw acquisition. Verification of the first scheduled run, alarms, analytical dataset publication, dbt transformation, semantics, and presentation remain later layers of the project.
+This completes the local application, historical CLI reconciliation, production
+API-to-raw Lambda, Glue-to-Iceberg projection, and their scheduled Step Functions
+orchestration. Workflow verification, alarms, dbt transformation, semantics,
+and presentation remain later layers of the project.
+
+## Local analytical projection
+
+Project every raw revision selected by a local `current.json` pointer into the
+analytical datasets:
+
+```shell
+PYTHONPATH=src .venv/bin/python -m zavant project-local
+```
+
+Use repeated `--season` options to limit the input, or `--output-dir` to choose
+a new destination. By default, each invocation writes a unique run below
+`.local/lake/analytical/projection_runs/`. A completed run contains one Parquet
+file for each of the 25 contracted datasets, along with `manifest.json`,
+`schemas.json`, and small JSON samples for convenient inspection. The tables
+cover game context, teams and innings; the play/event spine; sparse pitch,
+batted-ball, action, substitution, disengagement, non-pitch, review, and rule
+violation families; runner movements and fielding credits; and game-scoped
+player, position, player-statistic, and team-statistic data.
+
+Only revisions named by `current.json` are eligible. Legacy unversioned
+`game_pk=<id>/game.json` files are not assigned invented provenance; a run lists
+any such ignored files in its manifest so the exclusion is visible.
+
+Every analytical row carries the content-addressed source revision, projection
+contract version, run ID, and projection timestamp. The event table is a skinny
+sequence-preserving spine; sparse event families and ordered child records live
+at their own grains. Embedded season-to-date player statistics are deliberately
+excluded in favor of the game boxscore statistics. Local output is an
+inspection and contract-testing boundary. The production Iceberg writer and
+daily analytical orchestration described in ADR 0015 remain the next
+infrastructure slice.
 
 See the [target architecture](docs/architecture/target-architecture.md), [decision register](docs/architecture/README.md), and [migration roadmap](docs/migration-roadmap.md) for the intended path from acquisition through semantics and presentation.

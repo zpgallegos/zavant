@@ -1,0 +1,243 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Scheduled Step Functions orchestration for Zavant acquisition and projection.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  AcquisitionLambdaArn:
+    Type: String
+    Description: ARN of the deployed daily acquisition Lambda function.
+  AnalyticalProjectionJobName:
+    Type: String
+    Description: Name of the deployed Glue analytical projection job.
+  DailyScheduleExpression:
+    Type: String
+    Description: EventBridge Scheduler expression for the complete daily workflow.
+  DailyScheduleTimezone:
+    Type: String
+    Description: IANA timezone used to interpret the daily schedule expression.
+  DailyScheduleState:
+    Type: String
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+    Description: Whether EventBridge Scheduler starts the complete daily workflow.
+
+Resources:
+  DailyWorkflowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/vendedlogs/states/zavant-daily-workflow-${EnvironmentName}"
+      RetentionInDays: 30
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: daily-workflow
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  DailyWorkflowExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Invokes acquisition and waits for analytical projection.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:zavant-daily-workflow-${EnvironmentName}"
+      Policies:
+        - PolicyName: InvokeDailyAcquisition
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeDailyAcquisition
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !Ref AcquisitionLambdaArn
+                  - !Sub "${AcquisitionLambdaArn}:*"
+        - PolicyName: RunAnalyticalProjection
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: RunAndMonitorGlueJob
+                Effect: Allow
+                Action:
+                  - glue:BatchStopJobRun
+                  - glue:GetJobRun
+                  - glue:GetJobRuns
+                  - glue:StartJobRun
+                Resource: "*"
+        - PolicyName: DeliverWorkflowLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ManageStepFunctionsLogDelivery
+                Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:DescribeLogGroups
+                  - logs:DescribeResourcePolicies
+                  - logs:GetLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:UpdateLogDelivery
+                Resource: "*"
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: daily-workflow
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  DailyWorkflowStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    DependsOn: DailyWorkflowLogGroup
+    Properties:
+      StateMachineName: !Sub "zavant-daily-workflow-${EnvironmentName}"
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt DailyWorkflowExecutionRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "Acquire MLB data, then reconcile current revisions into Iceberg.",
+          "StartAt": "Run daily acquisition",
+          "States": {
+            "Run daily acquisition": {
+              "Type": "Task",
+              "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${AcquisitionLambdaArn}",
+                "Payload.$": "$"
+              },
+              "ResultPath": null,
+              "TimeoutSeconds": 960,
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Next": "Run analytical projection"
+            },
+            "Run analytical projection": {
+              "Type": "Task",
+              "Resource": "arn:${AWS::Partition}:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "${AnalyticalProjectionJobName}"
+              },
+              "ResultPath": null,
+              "TimeoutSeconds": 11400,
+              "End": true
+            }
+          }
+        }
+      LoggingConfiguration:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt DailyWorkflowLogGroup.Arn
+        IncludeExecutionData: true
+        Level: ALL
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: daily-workflow
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  DailyWorkflowScheduleExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Allows EventBridge Scheduler to start the daily state machine.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/default"
+      Policies:
+        - PolicyName: StartDailyWorkflow
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: StartDailyWorkflow
+                Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref DailyWorkflowStateMachine
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: daily-workflow
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  DailyWorkflowSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: Starts acquisition followed by analytical projection.
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      GroupName: default
+      Name: !Sub "zavant-acquisition-daily-${EnvironmentName}"
+      ScheduleExpression: !Ref DailyScheduleExpression
+      ScheduleExpressionTimezone: !Ref DailyScheduleTimezone
+      State: !Ref DailyScheduleState
+      Target:
+        Arn: !Ref DailyWorkflowStateMachine
+        Input: "{}"
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        RoleArn: !GetAtt DailyWorkflowScheduleExecutionRole.Arn
+
+Outputs:
+  DailyWorkflowArn:
+    Description: ARN of the state machine targeted by the daily schedule.
+    Value: !Ref DailyWorkflowStateMachine
+  DailyWorkflowName:
+    Value: !GetAtt DailyWorkflowStateMachine.Name
+  DailyWorkflowLogGroupName:
+    Value: !Ref DailyWorkflowLogGroup
+  DailyWorkflowScheduleArn:
+    Description: ARN of the EventBridge Scheduler schedule.
+    Value: !GetAtt DailyWorkflowSchedule.Arn
+  DailyWorkflowScheduleName:
+    Description: Name of the EventBridge Scheduler schedule.
+    Value: !Ref DailyWorkflowSchedule

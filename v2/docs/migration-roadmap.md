@@ -25,25 +25,43 @@ This is a sequence of independently demonstrable vertical slices, not a commitme
 - Generalize storage behavior into protocols and portable artifact references. Established in ADR 0008.
 - Back the established persistence state machines with conditionally written S3 objects. Established in ADR 0009.
 - Compose the same daily coordinator at a cached Lambda application boundary. Established in ADR 0009.
-- Define the acquisition bucket as code. Established in ADR 0010; deployment remains operator-controlled.
-- Define the Lambda execution role with prefix-scoped S3 access. Established in ADR 0011; deployment remains operator-controlled.
-- Package and define a manually invokable Lambda plus log retention. Established in ADR 0012; deployment remains operator-controlled.
+- Define and deploy the acquisition bucket as code. Established in ADR 0010.
+- Define and deploy the Lambda execution role with prefix-scoped S3 access. Established in ADR 0011.
+- Package and deploy a manually invokable Lambda plus log retention. Established in ADR 0012.
 - Reconcile historical seasons from a local CLI against local or S3 storage. Established in ADR 0013.
-- Define EventBridge scheduling as code. Established in ADR 0014; deployment remains operator-controlled.
+- Define EventBridge scheduling as code. The direct Lambda target from ADR 0014
+  is superseded by the workflow-owned Step Functions schedule in ADR 0017; the
+  one-time CloudFormation ownership migration remains operator-controlled.
 - Add alarms and a failed-event destination, then verify the first scheduled invocation.
 
 Local exit demo established: bootstrap one daily run, acquire eligible schedule games, replay an MLB correction into a new revision, rerun safely, and inspect the schedule, correction, watermark, and coordinator manifests.
 
-Cloud exit demo: deploy the infrastructure, run the Lambda workflow through S3, rerun it safely, and inspect CloudWatch status plus S3 evidence and watermarks.
+Cloud exit demo: deploy the infrastructure, run the Step Functions workflow
+through S3, rerun it safely, and inspect CloudWatch status plus S3 evidence and
+watermarks.
 
 ## 2. Analytical storage
 
-- Define versioned tabular contracts for games, teams, players, plays, events, runners, and box scores.
-- Replace mutation-heavy generic flattening with explicit mappings for durable fields.
-- Publish Parquet atomically and design a correction/backfill strategy.
-- Add schema-drift reports, uniqueness checks, referential checks, and source-to-output reconciliation.
+- Define versioned tabular contracts. All 25 game, play/event, runner/fielding,
+  player, and boxscore contracts are established in ADR 0015.
+- Replace mutation-heavy generic flattening with explicit mappings for durable
+  fields. Established for the complete local game projection.
+- Publish local Parquet atomically with current-revision provenance. Established
+  for inspection runs. Production Glue reconciliation, Iceberg v2 natural-key
+  merges, a completion registry, and a queryable current-revision mapping are
+  implemented in ADR 0016. The first production job completed successfully and
+  its Iceberg tables are queryable in Athena.
+- Add schema-drift reports, cross-game uniqueness checks, production
+  referential checks, and source-to-output reconciliation. Per-game contracts,
+  uniqueness, extension relationships, and event-family counts are established.
 
-Exit demo: convert one raw game into validated Parquet and query every dataset locally.
+Local projection demo established: project every current local game revision
+into all planned analytical datasets, validate their relationships, and inspect
+explicit schemas, row counts, event-family counts, and sample rows.
+
+Production exit demo: deploy the analytical stack, project current S3 revisions,
+query all Iceberg tables in Athena, rerun with zero pending revisions, then land
+a correction and observe one revision reconcile safely.
 
 ## 3. Transformation
 

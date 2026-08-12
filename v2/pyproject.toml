@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zavant"
-version = "0.7.0"
+version = "0.11.0"
 description = "An end-to-end, local-first MLB analytics platform"
 readme = "readme.md"
 requires-python = ">=3.9"
@@ -12,8 +12,12 @@ authors = [{name = "Zavant contributors"}]
 dependencies = ["boto3>=1.40,<2"]
 
 [project.optional-dependencies]
+local = [
+    "pyarrow==19.0.1",
+]
 dev = [
     "coverage==7.15.4",
+    "pyarrow==19.0.1",
     "pyright==1.1.411",
     "ruff==0.16.2",
 ]
@@ -37,9 +41,11 @@ show_missing = true
 skip_covered = true
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "jobs"]
 pythonVersion = "3.9"
 typeCheckingMode = "standard"
+venv = ".venv"
+venvPath = "."
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

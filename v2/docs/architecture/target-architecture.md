@@ -29,7 +29,7 @@ Acquisition also includes a correction loop. The poller captures a run-start che
 
 Daily operation coordinates three independently recorded branches: correction discovery, correction processing, and schedule discovery. The correction processor retries pending and failed work from every completed poll but re-downloads only games already present in raw storage; schedules own initial portfolio inclusion. Schedule discovery maintains a separate successful through-date, queries a rolling lookback to reconsider recent deferred games, and avoids another live-feed request when an eligible game is already landed. One branch failure does not suppress the others or roll back their successful checkpoints.
 
-The same logical boundaries work locally and in the cloud. Local development uses atomic filesystem publication. Production uses the same logical keys and persistence state machines over S3, with ETag preconditions protecting mutable objects. A scheduled Lambda composes the complete daily run once per invocation; it is not a second cloud-specific workflow. Cloud services are not required to run unit tests or exercise a representative vertical slice.
+The same logical boundaries work locally and in the cloud. Local development uses atomic filesystem publication. Production uses the same logical keys and persistence state machines over S3, with ETag preconditions protecting mutable objects. A Lambda composes the acquisition run; explicit Python mappings project current source revisions into revision-aware analytical tables. Local Parquet runs exercise those contracts without AWS. A Glue Spark job independently reconciles every current pointer against its completed-revision registry and merges missing revisions into Iceberg v2. EventBridge Scheduler starts one Standard Step Functions execution that invokes acquisition and waits for Glue projection, rather than invoking either component on an independent schedule.
 
 ## Layers and responsibilities
 
@@ -58,16 +58,34 @@ The same logical boundaries work locally and in the cloud. Local development use
 - Object paths are deterministic and include named partitions.
 - Every landed object has provenance metadata and a checksum.
 - Filesystem-backed execution is first-class, not a mock of the cloud implementation.
-- Production acquisition runs as one scheduled Lambda over a conditionally written S3 prefix.
-- Infrastructure will be defined as code before a new production deployment.
+- Production acquisition runs as one Lambda over a conditionally written S3
+  prefix and is invoked by the daily state machine rather than directly by its
+  schedule.
+- Analytical datasets use explicit grain-specific contracts; pitches and
+  batted-ball metrics are extensions of a skinny play-event spine.
+- Every analytical row retains its source revision and projection contract.
+- Local analytical runs publish atomic Parquet snapshots; production tables use
+  Iceberg format version 2 in S3 and the Glue Data Catalog for Athena access.
+- Production projection scans authoritative current pointers rather than relying
+  on the preceding acquisition manifest. A completion registry makes retries
+  repair partial multi-table publication, while `current_game_revisions` gives
+  dbt an explicit current-state join.
+- The daily workflow stack owns EventBridge Scheduler and the Step Functions
+  Standard workflow that sequences acquisition and one batch Glue projection;
+  later dbt execution can become a subsequent state.
+- Cloud infrastructure is defined as code and separated by workload ownership.
 
-The orchestrator, production query engine, semantic-layer implementation, and presentation framework remain deliberate decision points. They should be selected with a thin vertical slice and recorded as ADRs rather than inherited accidentally from the legacy stack.
+The semantic-layer implementation and presentation framework remain deliberate
+follow-up decisions. They should be selected with thin vertical slices and
+recorded as ADRs rather than inherited accidentally from the legacy stack.
 
 ## Environments
 
 - **Test:** temporary isolated storage and recorded fixtures; no network or cloud credentials.
 - **Local:** `.local/` data, developer-selected dates or games, and the same contracts used in production.
-- **Production:** S3 raw/state storage, scheduled Lambda acquisition, a catalog/query engine, least-privilege IAM, and centralized telemetry.
+- **Production:** S3 raw/state storage, Step Functions-orchestrated Lambda and
+  Glue execution, a catalog/query engine, least-privilege IAM, and centralized
+  telemetry.
 
 Configuration enters at process boundaries through environment variables or explicit command options. Domain and transformation code must not contain account IDs, bucket names, seasons, or credentials.
 

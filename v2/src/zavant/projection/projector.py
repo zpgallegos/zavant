@@ -133,18 +133,25 @@ def _validate_projection(projection: GameProjection) -> None:
     ):
         raise ProjectionContractError("runner movements must reference projected plays")
 
-    player_ids = {row["player_id"] for row in tables["players"]}
+    player_keys = {
+        (row["player_id"], row["team_id"]) for row in tables["players"]
+    }
     for table_name in (
         "player_positions",
         "player_batting",
         "player_pitching",
         "player_fielding",
     ):
-        if not {row["player_id"] for row in tables[table_name]}.issubset(player_ids):
+        referenced_players = {
+            (row["player_id"], row["team_id"]) for row in tables[table_name]
+        }
+        if not referenced_players.issubset(player_keys):
             raise ProjectionContractError(
-                f"{table_name} must reference projected players"
+                f"{table_name} must reference projected player-team rows"
             )
     team_ids = {row["team_id"] for row in tables["game_teams"]}
+    if not {row["team_id"] for row in tables["players"]}.issubset(team_ids):
+        raise ProjectionContractError("players must reference projected game teams")
     for table_name in ("team_batting", "team_pitching", "team_fielding"):
         if {row["team_id"] for row in tables[table_name]} != team_ids:
             raise ProjectionContractError(

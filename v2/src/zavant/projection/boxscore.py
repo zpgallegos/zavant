@@ -24,6 +24,7 @@ from zavant.projection.stat_fields import (
 
 TableRows = Dict[str, List[ProjectionRow]]
 BoxscorePlayer = Tuple[str, int, Dict[str, Any]]
+BoxscorePlayers = Dict[int, List[BoxscorePlayer]]
 
 
 def project_boxscore(payload: Dict[str, Any], identity: ProjectionRow) -> TableRows:
@@ -58,53 +59,60 @@ def project_boxscore(payload: Dict[str, Any], identity: ProjectionRow) -> TableR
         if source_player_id in observed_player_ids:
             raise ProjectionContractError(f"gameData.players duplicates {source_player_id}")
         observed_player_ids.add(source_player_id)
-        box_entry = box_players.get(source_player_id)
-        side = box_entry[0] if box_entry is not None else None
-        box_team_id = box_entry[1] if box_entry is not None else None
-        box_player = box_entry[2] if box_entry is not None else {}
-        rows["players"].append(
-            _project_player(
-                person,
-                path,
-                box_player,
-                box_team_id,
-                side,
-                identity,
+        box_entries = box_players.get(source_player_id)
+        if not box_entries:
+            raise ProjectionContractError(
+                f"gameData player {source_player_id} is missing from boxscore teams"
             )
-        )
-        rows["player_positions"].extend(
-            _project_positions(
-                box_player,
-                source_player_id,
-                box_team_id,
-                side,
-                identity,
-            )
-        )
-        stats = object_value(
-            box_player.get("stats"), f"liveData.boxscore player {source_player_id}.stats"
-        )
-        for output_name, source_name, fields in (
-            ("player_batting", "batting", BATTING_FIELDS),
-            ("player_pitching", "pitching", PITCHING_FIELDS),
-            ("player_fielding", "fielding", FIELDING_FIELDS),
-        ):
-            source_stats = object_value(
-                stats.get(source_name),
-                f"liveData.boxscore player {source_player_id}.stats.{source_name}",
-            )
-            if source_stats:
-                rows[output_name].append(
-                    {
-                        **identity,
-                        "player_id": source_player_id,
-                        **_project_stats(
-                            source_stats,
-                            f"liveData.boxscore player {source_player_id}.stats.{source_name}",
-                            fields,
-                        ),
-                    }
+        for side, box_team_id, box_player in box_entries:
+            rows["players"].append(
+                _project_player(
+                    person,
+                    path,
+                    box_player,
+                    box_team_id,
+                    side,
+                    identity,
                 )
+            )
+            rows["player_positions"].extend(
+                _project_positions(
+                    box_player,
+                    source_player_id,
+                    box_team_id,
+                    side,
+                    identity,
+                )
+            )
+            stats = object_value(
+                box_player.get("stats"),
+                f"liveData.boxscore {side} player {source_player_id}.stats",
+            )
+            for output_name, source_name, fields in (
+                ("player_batting", "batting", BATTING_FIELDS),
+                ("player_pitching", "pitching", PITCHING_FIELDS),
+                ("player_fielding", "fielding", FIELDING_FIELDS),
+            ):
+                source_stats = object_value(
+                    stats.get(source_name),
+                    f"liveData.boxscore {side} player "
+                    f"{source_player_id}.stats.{source_name}",
+                )
+                if source_stats:
+                    rows[output_name].append(
+                        {
+                            **identity,
+                            "player_id": source_player_id,
+                            **_project_stats(
+                                source_stats,
+                                f"liveData.boxscore {side} player "
+                                f"{source_player_id}.stats.{source_name}",
+                                fields,
+                            ),
+                            "team_id": box_team_id,
+                            "team_side": side,
+                        }
+                    )
 
     for side in ("away", "home"):
         path = f"liveData.boxscore.teams.{side}"
@@ -137,8 +145,8 @@ def project_boxscore(payload: Dict[str, Any], identity: ProjectionRow) -> TableR
     return rows
 
 
-def _boxscore_players(teams: Dict[str, Any]) -> Dict[int, BoxscorePlayer]:
-    players: Dict[int, BoxscorePlayer] = {}
+def _boxscore_players(teams: Dict[str, Any]) -> BoxscorePlayers:
+    players: BoxscorePlayers = {}
     for side in ("away", "home"):
         team = object_value(
             teams.get(side), f"liveData.boxscore.teams.{side}", required=True
@@ -163,54 +171,16 @@ def _boxscore_players(teams: Dict[str, Any]) -> Dict[int, BoxscorePlayer]:
             player_id = integer_value(person.get("id"), f"{path}.person.id", required=True)
             if player_id is None:
                 raise ProjectionContractError(f"{path}.person.id must not be null")
-            if player_id in players:
-                players[player_id] = _select_boxscore_player(
-                    player_id,
-                    players[player_id],
-                    (side, team_id, player),
-                )
-            else:
-                players[player_id] = (side, team_id, player)
+            players.setdefault(player_id, []).append((side, team_id, player))
     return players
-
-
-def _select_boxscore_player(
-    player_id: int,
-    existing: BoxscorePlayer,
-    candidate: BoxscorePlayer,
-) -> BoxscorePlayer:
-    """Discard a stale roster entry when only one duplicate played in the game."""
-
-    existing_participated = _has_game_participation(existing[2])
-    candidate_participated = _has_game_participation(candidate[2])
-    if existing_participated != candidate_participated:
-        return existing if existing_participated else candidate
-    raise ProjectionContractError(
-        f"boxscore contains ambiguous duplicate player {player_id}"
-    )
-
-
-def _has_game_participation(player: Dict[str, Any]) -> bool:
-    stats = object_value(player.get("stats"), "duplicate boxscore player.stats")
-    has_stats = any(
-        object_value(stats.get(category), f"duplicate boxscore player.stats.{category}")
-        for category in ("batting", "pitching", "fielding")
-    )
-    return bool(
-        has_stats
-        or player.get("battingOrder") is not None
-        or array_value(
-            player.get("allPositions"), "duplicate boxscore player.allPositions"
-        )
-    )
 
 
 def _project_player(
     person: Dict[str, Any],
     path: str,
     box_player: Dict[str, Any],
-    box_team_id: Optional[int],
-    side: Optional[str],
+    box_team_id: int,
+    side: str,
     identity: ProjectionRow,
 ) -> ProjectionRow:
     player_id = integer_value(person.get("id"), f"{path}.id", required=True)
@@ -313,8 +283,8 @@ def _project_player(
 def _project_positions(
     box_player: Dict[str, Any],
     player_id: int,
-    box_team_id: Optional[int],
-    side: Optional[str],
+    box_team_id: int,
+    side: str,
     identity: ProjectionRow,
 ) -> List[ProjectionRow]:
     rows = []

@@ -133,33 +133,42 @@ class GameProjectionTests(unittest.TestCase):
         self.assertEqual(projection.event_kind_counts["future_event"], 1)
         self.assertEqual(projection.play_events[0]["event_kind"], "future_event")
 
-    def test_discards_stale_duplicate_boxscore_roster_entry(self) -> None:
+    def test_projects_player_who_participated_for_both_teams(self) -> None:
         payload = json.loads(self.raw)
         boxscore_teams = payload["liveData"]["boxscore"]["teams"]
         participating_player = boxscore_teams["away"]["players"]["ID669257"]
-        boxscore_teams["home"]["players"]["ID669257"] = {
-            "person": participating_player["person"],
-            "parentTeamId": 120,
-            "stats": {"batting": {}, "pitching": {}, "fielding": {}},
-            "gameStatus": {"isOnBench": True},
-        }
+        second_team_player = json.loads(json.dumps(participating_player))
+        second_team_player["parentTeamId"] = 120
+        second_team_player["battingOrder"] = "900"
+        second_team_player["stats"]["batting"]["hits"] = 2
+        boxscore_teams["home"]["players"]["ID669257"] = second_team_player
         game = RawGameResponse.from_bytes(json.dumps(payload).encode())
         source = ProjectionSource(
             game=game,
             revision_id=canonical_json_sha256(game.payload),
             observed_at=OBSERVED_AT,
-            source_uri="fixture://stale-duplicate-player",
-            raw_object_uri="file:///stale-duplicate-player.json",
+            source_uri="fixture://dual-team-player",
+            raw_object_uri="file:///dual-team-player.json",
         )
 
         projection = project_game(source, RUN_ID, PROJECTED_AT)
 
-        player = next(
+        players = [
             row for row in projection.tables()["players"] if row["player_id"] == 669257
+        ]
+        batting = [
+            row
+            for row in projection.tables()["player_batting"]
+            if row["player_id"] == 669257
+        ]
+        self.assertEqual(
+            {(row["team_id"], row["team_side"]) for row in players},
+            {(119, "away"), (120, "home")},
         )
-        self.assertEqual(player["team_id"], 119)
-        self.assertEqual(player["team_side"], "away")
-        self.assertEqual(player["batting_order"], "400")
+        self.assertEqual(
+            {(row["team_id"], row["hits"]) for row in batting},
+            {(119, 0), (120, 2)},
+        )
 
     def test_rejects_duplicate_event_natural_key(self) -> None:
         projection = project_game(self.source, RUN_ID, PROJECTED_AT)

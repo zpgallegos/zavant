@@ -503,8 +503,8 @@ GAME_DECISION_COLUMNS = IDENTITY_COLUMNS + (
 
 PLAYER_COLUMNS = IDENTITY_COLUMNS + (
     _column("player_id", "int64", False),
-    _column("team_id", "int64"),
-    _column("team_side", "string"),
+    _column("team_id", "int64", False),
+    _column("team_side", "string", False),
     _column("full_name", "string", False),
     _column("first_name", "string"),
     _column("last_name", "string"),
@@ -553,8 +553,8 @@ PLAYER_COLUMNS = IDENTITY_COLUMNS + (
 PLAYER_POSITION_COLUMNS = IDENTITY_COLUMNS + (
     _column("player_id", "int64", False),
     _column("position_sequence", "int32", False),
-    _column("team_id", "int64"),
-    _column("team_side", "string"),
+    _column("team_id", "int64", False),
+    _column("team_side", "string", False),
     _column("position_code", "string", False),
     _column("position_name", "string"),
     _column("position_type", "string"),
@@ -563,17 +563,23 @@ PLAYER_POSITION_COLUMNS = IDENTITY_COLUMNS + (
 
 
 def _stat_columns(fields: Sequence[StatField], player: bool) -> Tuple[Column, ...]:
-    owner_columns = (
-        (_column("player_id", "int64", False),)
-        if player
-        else (
-            _column("team_id", "int64", False),
-            _column("team_side", "string", False),
-        )
-    )
-    return IDENTITY_COLUMNS + owner_columns + tuple(
+    stat_columns = tuple(
         _column(output_name, kind) for output_name, _, kind in fields
     )
+    if player:
+        return (
+            IDENTITY_COLUMNS
+            + (
+                _column("player_id", "int64", False),
+                _column("team_id", "int64", False),
+                _column("team_side", "string", False),
+            )
+            + stat_columns
+        )
+    return IDENTITY_COLUMNS + (
+        _column("team_id", "int64", False),
+        _column("team_side", "string", False),
+    ) + stat_columns
 
 
 PLAYER_BATTING_COLUMNS = _stat_columns(BATTING_FIELDS, player=True)
@@ -679,11 +685,17 @@ TABLE_CONTRACTS: Dict[str, TableContract] = {
         _table("innings", INNING_COLUMNS, "inning_number"),
         _table("game_officials", GAME_OFFICIAL_COLUMNS, "official_index"),
         _table("game_decisions", GAME_DECISION_COLUMNS, "decision_type"),
-        _table("players", PLAYER_COLUMNS, "player_id"),
-        _table("player_positions", PLAYER_POSITION_COLUMNS, "player_id", "position_sequence"),
-        _table("player_batting", PLAYER_BATTING_COLUMNS, "player_id"),
-        _table("player_pitching", PLAYER_PITCHING_COLUMNS, "player_id"),
-        _table("player_fielding", PLAYER_FIELDING_COLUMNS, "player_id"),
+        _table("players", PLAYER_COLUMNS, "player_id", "team_id"),
+        _table(
+            "player_positions",
+            PLAYER_POSITION_COLUMNS,
+            "player_id",
+            "team_id",
+            "position_sequence",
+        ),
+        _table("player_batting", PLAYER_BATTING_COLUMNS, "player_id", "team_id"),
+        _table("player_pitching", PLAYER_PITCHING_COLUMNS, "player_id", "team_id"),
+        _table("player_fielding", PLAYER_FIELDING_COLUMNS, "player_id", "team_id"),
         _table("team_batting", TEAM_BATTING_COLUMNS, "team_id"),
         _table("team_pitching", TEAM_PITCHING_COLUMNS, "team_id"),
         _table("team_fielding", TEAM_FIELDING_COLUMNS, "team_id"),

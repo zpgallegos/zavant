@@ -9,8 +9,7 @@ __pycache__/
 .coverage
 htmlcov/
 .DS_Store
-/test_scripts/
-/monitoring_scripts/
+/scripts/
 
 # dbt-generated and machine-local state
 /dbt/dbt_packages/

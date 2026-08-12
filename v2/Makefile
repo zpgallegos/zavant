@@ -23,8 +23,10 @@ PYTHON ?= python3
 AWS_CLI ?= aws
 
 BUILD_DIR := build
+DBT_PROJECT_DIR := dbt
 VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
+VENV_DBT := $(abspath $(VENV_DIR)/bin/dbt)
 PYTHON_CONSTRAINTS_FILE := constraints.txt
 
 # AWS deployment identity
@@ -85,6 +87,7 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	aws-check-account \
 	bootstrap \
 	check \
+	dbt-debug \
 	glue-package \
 	glue-start \
 	help \
@@ -100,6 +103,7 @@ help:
 	@echo "bootstrap                   create the local Python environment"
 	@echo "test                        run the unit test suite"
 	@echo "check                       run all local quality checks"
+	@echo "dbt-debug                   validate the dev dbt/Athena connection"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
 	@echo "workflow-infra-validate     validate the Step Functions template"
@@ -130,6 +134,9 @@ check:
 	@PYTHONPATH=src $(VENV_PYTHON) -m coverage run -m unittest discover -s tests
 	@$(VENV_PYTHON) -m coverage report
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(VENV_PYTHON) -c 'import zavant; from zavant.lambda_handler import lambda_handler; assert callable(lambda_handler)'
+
+dbt-debug:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) debug --target dev
 
 acquisition-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \

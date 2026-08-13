@@ -601,7 +601,6 @@ def _table(
         (
             "game_pk",
             "source_revision_id",
-            "projection_contract_version",
             *grain,
         ),
     )
@@ -612,7 +611,7 @@ TABLE_CONTRACTS: Dict[str, TableContract] = {
         TableContract(
             "games",
             GAME_COLUMNS,
-            ("game_pk", "source_revision_id", "projection_contract_version"),
+            ("game_pk", "source_revision_id"),
         ),
         TableContract(
             "plays",
@@ -620,7 +619,6 @@ TABLE_CONTRACTS: Dict[str, TableContract] = {
             (
                 "game_pk",
                 "source_revision_id",
-                "projection_contract_version",
                 "at_bat_index",
             ),
         ),
@@ -630,7 +628,6 @@ TABLE_CONTRACTS: Dict[str, TableContract] = {
             (
                 "game_pk",
                 "source_revision_id",
-                "projection_contract_version",
                 "at_bat_index",
                 "event_index",
             ),
@@ -641,7 +638,6 @@ TABLE_CONTRACTS: Dict[str, TableContract] = {
             (
                 "game_pk",
                 "source_revision_id",
-                "projection_contract_version",
                 "at_bat_index",
                 "event_index",
             ),
@@ -652,7 +648,6 @@ TABLE_CONTRACTS: Dict[str, TableContract] = {
             (
                 "game_pk",
                 "source_revision_id",
-                "projection_contract_version",
                 "at_bat_index",
                 "event_index",
             ),

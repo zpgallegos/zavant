@@ -24,6 +24,3 @@ clean-targets:
 
 models:
   zavant_analytics: {}
-
-vars:
-  current_projection_contract_version: "zavant-analytical-game-projection/v1"

@@ -210,7 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     project_local = subparsers.add_parser(
         "project-local",
-        help="project current local game revisions into inspectable Parquet tables",
+        help="project all local game revisions into inspectable Parquet tables",
     )
     project_local.add_argument(
         "--season",

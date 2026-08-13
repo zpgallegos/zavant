@@ -2,8 +2,7 @@ select
     batted_ball.game_pk,
     batted_ball.at_bat_index,
     batted_ball.event_index,
-    batted_ball.source_revision_id,
-    batted_ball.projection_contract_version
+    batted_ball.source_revision_id
 from {{ ref("stg_batted_balls") }} as batted_ball
 left join {{ ref("stg_pitches") }} as pitch
     on
@@ -11,5 +10,4 @@ left join {{ ref("stg_pitches") }} as pitch
         and batted_ball.at_bat_index = pitch.at_bat_index
         and batted_ball.event_index = pitch.event_index
         and batted_ball.source_revision_id = pitch.source_revision_id
-        and batted_ball.projection_contract_version = pitch.projection_contract_version
 where pitch.game_pk is null

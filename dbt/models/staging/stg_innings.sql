@@ -1,17 +1,10 @@
-with current_revision as (
-    select
-        game_pk,
-        source_revision_id,
-        projection_contract_version
-    from {{ ref("stg_current_game_revisions") }}
-),
-
-innings as (
+with innings as (
     select * from {{ source("zavant_analytical_prod", "innings") }}
 )
 
 select
     -- grain
+    innings.source_revision_id,
     innings.game_pk,
     innings.inning_number,
 
@@ -29,12 +22,6 @@ select
     -- metadata
     innings.official_date,
     innings.projected_at,
-    innings.projection_contract_version,
     innings.projection_run_id,
-    innings.season,
-    innings.source_revision_id
+    innings.season
 from innings
-inner join current_revision on
-    innings.game_pk = current_revision.game_pk
-    and innings.source_revision_id = current_revision.source_revision_id
-    and innings.projection_contract_version = current_revision.projection_contract_version

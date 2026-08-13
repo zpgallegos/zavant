@@ -3,10 +3,10 @@ version: 2
 models:
   - name: stg_current_game_revisions
     description: >-
-      One currently selected raw-game revision per MLB game for the supported
-      analytical projection contract. This model is the revision-selection
-      spine used to restrict revision-aware staging models to their current
-      rows. Its grain is game_pk.
+      One currently selected raw-game revision per MLB game. This is an
+      explicit current-state pointer for models and consumers that do not need
+      the complete revision history exposed by the other staging models. Its
+      grain is game_pk.
     columns:
       # grain
       - name: game_pk
@@ -17,14 +17,6 @@ models:
           - not_null
 
       # metadata
-      - name: projection_contract_version
-        description: >-
-          Version of the analytical projection contract under which the
-          selected revision was published.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: projection_run_id
         description: >-
           UUID of the Glue reconciliation run that most recently confirmed

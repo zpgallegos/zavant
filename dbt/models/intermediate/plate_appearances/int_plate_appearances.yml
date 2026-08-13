@@ -1,0 +1,205 @@
+version: 2
+
+models:
+  - name: int_plate_appearances
+    description: >-
+      Completed batter turns selected from MLB's top-level
+      plays. The model excludes independent baserunning, pitching, and advisory
+      plays that MLB also emits in allPlays with an at_bat_index. Qualification
+      is based on terminal event types and reconciles to MLB's official
+      team-game plate-appearance totals. Its grain remains the source key of
+      source_revision_id, game_pk, and at_bat_index; filtered rows are not
+      renumbered.
+    config:
+      materialized: table
+      table_type: iceberg
+      format: parquet
+      partitioned_by:
+        - season
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - source_revision_id
+              - game_pk
+              - at_bat_index
+    columns:
+      # grain
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: game_pk
+        description: MLB's stable identifier for the game within the source revision.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the qualifying play in MLB's top-level allPlays stream.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: away_score
+        description: Away-team score after the plate appearance.
+        data_type: integer
+
+      - name: balls
+        description: Ball count at the end of the plate appearance.
+        data_type: integer
+
+      - name: bat_side_code
+        description: MLB code for the result batter's batting side.
+        data_type: varchar
+
+      - name: batter_id
+        description: >-
+          MLB identifier of the batter associated with the terminal result.
+          Official statistical credit can belong to a replaced batter in the
+          rare case of an offensive substitution during a two-strike count.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: batter_split
+        description: MLB split classification for the result batter's handedness matchup.
+        data_type: varchar
+
+      - name: captivating_index
+        description: MLB's relative interest score for the plate appearance.
+        data_type: integer
+
+      - name: defense_team_id
+        description: MLB identifier of the fielding team during the plate appearance.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: description
+        description: Human-readable description of the plate-appearance result.
+        data_type: varchar
+
+      - name: ended_at
+        description: UTC timestamp when the plate appearance ended.
+        data_type: timestamp
+
+      - name: event
+        description: Human-readable MLB label for the plate-appearance result.
+        data_type: varchar
+
+      - name: event_type
+        description: Machine-readable MLB classification used to qualify the plate appearance.
+        data_type: varchar
+
+      - name: half_inning
+        description: Inning half in which the plate appearance occurred.
+        data_type: varchar
+
+      - name: has_out
+        description: Whether the plate appearance includes at least one out.
+        data_type: boolean
+
+      - name: has_review
+        description: Whether the plate appearance includes replay-review information.
+        data_type: boolean
+
+      - name: home_score
+        description: Home-team score after the plate appearance.
+        data_type: integer
+
+      - name: inning
+        description: Numeric inning in which the plate appearance occurred.
+        data_type: integer
+
+      - name: is_complete
+        description: Whether MLB marks the plate appearance as complete.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB classifies the plate-appearance result as an out.
+        data_type: boolean
+
+      - name: is_scoring_play
+        description: Whether at least one run scored during the plate appearance.
+        data_type: boolean
+
+      - name: is_top_inning
+        description: Whether the plate appearance occurred in the top half of the inning.
+        data_type: boolean
+
+      - name: men_on_base_split
+        description: MLB classification of the baserunner state for the matchup.
+        data_type: varchar
+
+      - name: offense_team_id
+        description: MLB identifier of the batting team during the plate appearance.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: outs
+        description: Out count after the plate appearance.
+        data_type: integer
+
+      - name: pitch_hand_code
+        description: MLB code for the result pitcher's throwing hand.
+        data_type: varchar
+
+      - name: pitcher_id
+        description: MLB identifier of the pitcher associated with the terminal result.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: pitcher_split
+        description: MLB split classification for the result pitcher's handedness matchup.
+        data_type: varchar
+
+      - name: play_type
+        description: High-level MLB type assigned to the top-level play.
+        data_type: varchar
+
+      - name: post_on_first_id
+        description: MLB identifier of the runner on first base after the plate appearance.
+        data_type: bigint
+
+      - name: post_on_second_id
+        description: MLB identifier of the runner on second base after the plate appearance.
+        data_type: bigint
+
+      - name: post_on_third_id
+        description: MLB identifier of the runner on third base after the plate appearance.
+        data_type: bigint
+
+      - name: rbi
+        description: Runs batted in credited on the plate appearance.
+        data_type: integer
+
+      - name: started_at
+        description: UTC timestamp when the plate appearance started.
+        data_type: timestamp
+
+      - name: strikes
+        description: Strike count at the end of the plate appearance.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer

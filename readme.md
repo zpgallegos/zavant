@@ -8,7 +8,7 @@ The current acquisition foundation retrieves, validates, and persists three MLB 
 - Bounded schedule snapshots, stored by request run with a manifest of games discovered for later eligibility and retrieval processing.
 - Pages returned by the corrected-game change feed, stored by poll run with a manifest of games that need to be retrieved again.
 
-A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete acquisition workflow combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest. Acquisition depends on typed storage protocols and portable artifact references. Local operation uses atomic filesystem publication; the Lambda composition uses the same persistence state machines over conditionally written S3 objects. Boto3 is the only production acquisition dependency. Local analytical projection uses the optional PyArrow dependency installed by `make bootstrap`; production projection packages the same pure Python mappings for a Glue 5.0 Spark job that reconciles current S3 revisions into Iceberg v2.
+A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete acquisition workflow combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest. Acquisition depends on typed storage protocols and portable artifact references. Local operation uses atomic filesystem publication; the Lambda composition uses the same persistence state machines over conditionally written S3 objects. Boto3 is the only production acquisition dependency. Local analytical projection uses the optional PyArrow dependency installed by `make bootstrap`; production projection packages the same pure Python mappings for a Glue 5.0 Spark job that reconciles immutable S3 revisions into Iceberg v2.
 
 ## Local development
 
@@ -260,7 +260,7 @@ Bootstrap configuration is consulted only while its corresponding watermark is a
 
 This completes the local application, historical CLI reconciliation, production
 API-to-raw Lambda, Glue-to-Iceberg projection, scheduled Step Functions
-orchestration, and current-revision dbt staging layer. Workflow verification,
+orchestration, and revision-aware dbt staging layer. Workflow verification,
 alarms, conformed dbt models, semantics, and presentation remain later layers of
 the project.
 
@@ -283,7 +283,7 @@ batted-ball, action, substitution, disengagement, non-pitch, review, and rule
 violation families; runner movements and fielding credits; and game-scoped
 player, position, player-statistic, and team-statistic data.
 
-Only revisions named by `current.json` are eligible. Legacy unversioned
+Every immutable content-addressed revision is eligible. Legacy unversioned
 `game_pk=<id>/game.json` files are not assigned invented provenance; a run lists
 any such ignored files in its manifest so the exclusion is visible.
 
@@ -293,7 +293,7 @@ sequence-preserving spine; sparse event families and ordered child records live
 at their own grains. Embedded season-to-date player statistics are deliberately
 excluded in favor of the game boxscore statistics. Local output is an
 inspection and contract-testing boundary. Production uses the same projection
-contracts in a Glue job that reconciles current revisions into Iceberg tables;
+contracts in a Glue job that reconciles raw revisions into Iceberg tables;
 the scheduled Step Functions workflow runs that job after daily acquisition.
 
 See the [target architecture](docs/architecture/target-architecture.md), [decision register](docs/architecture/README.md), and [migration roadmap](docs/migration-roadmap.md) for the intended path from acquisition through semantics and presentation.

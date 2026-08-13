@@ -19,7 +19,6 @@ from zavant.projection.contracts import (
 )
 from zavant.projection.iceberg import (
     CURRENT_REVISION_CONTRACT,
-    PROJECTION_REGISTRY_CONTRACT,
     all_iceberg_contracts,
     create_database_sql,
     create_table_sql,
@@ -30,10 +29,11 @@ from zavant.projection.models import GameProjection
 from zavant.projection.projector import project_game
 from zavant.projection.s3_sources import (
     CompletedProjection,
-    CurrentProjectionRevision,
+    ProjectionRevision,
     discover_current_revisions,
+    discover_revisions,
     load_projection_source,
-    pending_current_revisions,
+    pending_revisions,
 )
 from zavant.storage.s3_objects import S3Client, S3ObjectBackend
 
@@ -92,11 +92,11 @@ def run_glue_projection(
     run_id: UUID,
     projected_at: datetime,
 ) -> GlueProjectionResult:
-    """Reconcile all current S3 revisions and publish missing ones to Iceberg.
+    """Reconcile all immutable S3 revisions and publish missing ones to Iceberg.
 
-    The completion registry is updated only after every analytical merge
-    succeeds. A retry therefore reprocesses partially committed revisions and
-    repairs them through deterministic natural-key merges.
+    The one-row-per-revision ``games`` table is merged last and acts as the
+    completion marker. A retry therefore reprocesses partially committed
+    revisions and repairs them through deterministic natural-key merges.
     """
 
     if projected_at.utcoffset() is None:
@@ -104,17 +104,20 @@ def run_glue_projection(
     projected_at_utc = projected_at.astimezone(timezone.utc)
     spark.conf.set("spark.sql.session.timeZone", "UTC")
     _ensure_tables(spark, configuration)
+    _validate_projection_release(spark, configuration)
 
     backend = S3ObjectBackend(
         s3_client,
         configuration.bucket,
         configuration.prefix,
     )
+    revisions = discover_revisions(backend)
     current = discover_current_revisions(backend)
     completed = _completed_projections(spark, configuration)
-    pending = pending_current_revisions(current, completed)
+    pending = pending_revisions(revisions, completed)
     LOGGER.info(
-        "projection reconciliation discovered current=%d pending=%d",
+        "projection reconciliation discovered revisions=%d current=%d pending=%d",
+        len(revisions),
         len(current),
         len(pending),
     )
@@ -140,30 +143,12 @@ def run_glue_projection(
                 raise RuntimeError(
                     "projected game count does not match pending revision count"
                 )
-            for contract in TABLE_CONTRACTS.values():
+            for contract in _analytical_merge_contracts():
                 rows = projection_rdd.flatMap(
                     lambda projection, name=contract.name: projection.table_rows[name]
                 )
                 dataframe = spark.createDataFrame(rows, _spark_schema(contract.columns))
                 _merge_dataframe(spark, configuration, contract, dataframe)
-            registry_rows = [
-                {
-                    "game_pk": revision.game_pk,
-                    "season": revision.season,
-                    "source_revision_id": revision.revision_id,
-                    "projection_contract_version": PROJECTION_CONTRACT_VERSION,
-                    "projection_run_id": str(run_id),
-                    "projected_at": projected_at_utc,
-                    "raw_object_uri": backend.uri(revision.raw_key),
-                }
-                for revision in pending
-            ]
-            _merge_rows(
-                spark,
-                configuration,
-                PROJECTION_REGISTRY_CONTRACT,
-                registry_rows,
-            )
         finally:
             projection_rdd.unpersist()
 
@@ -226,7 +211,7 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> None:
 
 
 def _project_partition(
-    revisions: Iterable[CurrentProjectionRevision],
+    revisions: Iterable[ProjectionRevision],
     bucket: str,
     prefix: str,
     run_id: UUID,
@@ -277,8 +262,8 @@ def _validate_table_schema(
         details = _schema_drift_details(observed, expected)
         raise RuntimeError(
             f"Iceberg table {contract.name} does not match its projection contract: "
-            f"{details}. Apply the reviewed Iceberg schema migration before "
-            "deploying this projection contract"
+            f"{details}. Rebuild every analytical table before deploying this "
+            "projection contract"
         )
 
 
@@ -320,15 +305,50 @@ def _completed_projections(
         qualified_table(
             configuration.catalog,
             configuration.database,
-            PROJECTION_REGISTRY_CONTRACT.name,
+            TABLE_CONTRACTS["games"].name,
         )
     )
     return {
-        (int(row["game_pk"]), str(row["source_revision_id"]), str(row["projection_contract_version"]))
-        for row in table.select(
-            "game_pk", "source_revision_id", "projection_contract_version"
-        ).collect()
+        (int(row["game_pk"]), str(row["source_revision_id"]))
+        for row in table.select("game_pk", "source_revision_id").collect()
     }
+
+
+def _validate_projection_release(
+    spark: Any,
+    configuration: GlueProjectionConfiguration,
+) -> None:
+    """Require a table rebuild before publishing a new projection contract."""
+
+    table = spark.table(
+        qualified_table(
+            configuration.catalog,
+            configuration.database,
+            TABLE_CONTRACTS["games"].name,
+        )
+    )
+    observed = {
+        str(row["projection_contract_version"])
+        for row in table.select("projection_contract_version").distinct().collect()
+    }
+    incompatible = observed - {PROJECTION_CONTRACT_VERSION}
+    if incompatible:
+        raise RuntimeError(
+            "analytical tables contain projection contract version(s) "
+            f"{sorted(incompatible)} but this job publishes "
+            f"{PROJECTION_CONTRACT_VERSION}; rebuild every analytical table "
+            "before deploying a new projection release"
+        )
+
+
+def _analytical_merge_contracts() -> tuple[TableContract, ...]:
+    """Order analytical merges so ``games`` is the completion marker."""
+
+    games = TABLE_CONTRACTS["games"]
+    return (
+        *(contract for contract in TABLE_CONTRACTS.values() if contract is not games),
+        games,
+    )
 
 
 def _merge_rows(

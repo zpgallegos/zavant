@@ -1,17 +1,10 @@
-with current_revision as (
-    select
-        game_pk,
-        source_revision_id,
-        projection_contract_version
-    from {{ ref("stg_current_game_revisions") }}
-),
-
-disengagements as (
+with disengagements as (
     select * from {{ source("zavant_analytical_prod", "disengagements") }}
 )
 
 select
     -- grain
+    disengagements.source_revision_id,
     disengagements.game_pk,
     disengagements.at_bat_index,
     disengagements.event_index,
@@ -35,12 +28,6 @@ select
     -- metadata
     disengagements.official_date,
     disengagements.projected_at,
-    disengagements.projection_contract_version,
     disengagements.projection_run_id,
-    disengagements.season,
-    disengagements.source_revision_id
+    disengagements.season
 from disengagements
-inner join current_revision on
-    disengagements.game_pk = current_revision.game_pk
-    and disengagements.source_revision_id = current_revision.source_revision_id
-    and disengagements.projection_contract_version = current_revision.projection_contract_version

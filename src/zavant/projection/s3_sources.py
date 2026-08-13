@@ -1,4 +1,4 @@
-"""S3 discovery and validation for current raw-game projection inputs."""
+"""S3 discovery and validation for immutable raw-game projection inputs."""
 
 from __future__ import annotations
 
@@ -9,39 +9,75 @@ from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple
 
 from zavant.contracts.raw_game import RawGameResponse
-from zavant.projection.contracts import (
-    PROJECTION_CONTRACT_VERSION,
-    ProjectionContractError,
-)
+from zavant.projection.contracts import ProjectionContractError
 from zavant.projection.models import ProjectionSource
 from zavant.storage._path_io import canonical_json_sha256
 from zavant.storage.s3_objects import S3ObjectBackend
 
 
-CompletedProjection = Tuple[int, str, str]
+CompletedProjection = Tuple[int, str]
 
 
 @dataclass(frozen=True)
-class CurrentProjectionRevision:
-    """One raw revision selected by its game's authoritative S3 pointer."""
+class ProjectionRevision:
+    """One immutable raw-game revision available for analytical projection."""
 
     game_pk: int
     season: int
     revision_id: str
-    pointer_key: str
     raw_key: str
     metadata_key: str
 
-    def completed_identity(
-        self, contract_version: str = PROJECTION_CONTRACT_VERSION
-    ) -> CompletedProjection:
-        return self.game_pk, self.revision_id, contract_version
+    def completed_identity(self) -> CompletedProjection:
+        return self.game_pk, self.revision_id
+
+
+def discover_revisions(
+    backend: S3ObjectBackend,
+    seasons: Optional[Sequence[int]] = None,
+) -> Tuple[ProjectionRevision, ...]:
+    """Enumerate every immutable raw revision available for projection."""
+
+    selected_seasons = set(seasons) if seasons is not None else None
+    revisions = []
+    seen: Set[CompletedProjection] = set()
+    pattern = "raw/mlb_stats_api/games/season=*/game_pk=*/revision=*/metadata.json"
+    for metadata_key in backend.list(pattern):
+        season, game_pk, revision_id = _revision_partitions(metadata_key)
+        if selected_seasons is not None and season not in selected_seasons:
+            continue
+        identity = game_pk, revision_id
+        if identity in seen:
+            raise ProjectionContractError(
+                f"raw objects contain duplicate revision {game_pk}/{revision_id}"
+            )
+        seen.add(identity)
+        revision_root = metadata_key.removesuffix("metadata.json")
+        revisions.append(
+            ProjectionRevision(
+                game_pk=game_pk,
+                season=season,
+                revision_id=revision_id,
+                raw_key=f"{revision_root}game.json",
+                metadata_key=metadata_key,
+            )
+        )
+    return tuple(
+        sorted(
+            revisions,
+            key=lambda revision: (
+                revision.season,
+                revision.game_pk,
+                revision.revision_id,
+            ),
+        )
+    )
 
 
 def discover_current_revisions(
     backend: S3ObjectBackend,
     seasons: Optional[Sequence[int]] = None,
-) -> Tuple[CurrentProjectionRevision, ...]:
+) -> Tuple[ProjectionRevision, ...]:
     """Enumerate and validate every selected raw-game current pointer in S3."""
 
     selected_seasons = set(seasons) if seasons is not None else None
@@ -64,11 +100,10 @@ def discover_current_revisions(
             raise ProjectionContractError(f"invalid current pointer {backend.uri(pointer_key)}")
         revision_root = pointer_key.removesuffix("current.json") + f"revision={revision_id}"
         revisions.append(
-            CurrentProjectionRevision(
+            ProjectionRevision(
                 game_pk=game_pk,
                 season=season,
                 revision_id=revision_id,
-                pointer_key=pointer_key,
                 raw_key=f"{revision_root}/game.json",
                 metadata_key=f"{revision_root}/metadata.json",
             )
@@ -76,23 +111,22 @@ def discover_current_revisions(
     return tuple(sorted(revisions, key=lambda revision: (revision.season, revision.game_pk)))
 
 
-def pending_current_revisions(
-    current: Iterable[CurrentProjectionRevision],
+def pending_revisions(
+    revisions: Iterable[ProjectionRevision],
     completed: Set[CompletedProjection],
-    contract_version: str = PROJECTION_CONTRACT_VERSION,
-) -> Tuple[CurrentProjectionRevision, ...]:
-    """Return current revisions absent from the completed projection registry."""
+) -> Tuple[ProjectionRevision, ...]:
+    """Return raw revisions absent from the terminal analytical table."""
 
     return tuple(
         revision
-        for revision in current
-        if revision.completed_identity(contract_version) not in completed
+        for revision in revisions
+        if revision.completed_identity() not in completed
     )
 
 
 def load_projection_source(
     backend: S3ObjectBackend,
-    revision: CurrentProjectionRevision,
+    revision: ProjectionRevision,
 ) -> ProjectionSource:
     """Load one candidate and verify raw content, routing, and provenance metadata."""
 
@@ -100,7 +134,7 @@ def load_projection_source(
     game = RawGameResponse.from_bytes(raw)
     if game.game_pk != revision.game_pk or game.season != revision.season:
         raise ProjectionContractError(
-            f"raw game routing does not match {backend.uri(revision.pointer_key)}"
+            f"raw game routing does not match {backend.uri(revision.raw_key)}"
         )
     if canonical_json_sha256(game.payload) != revision.revision_id:
         raise ProjectionContractError(
@@ -141,6 +175,27 @@ def _pointer_partitions(key: str) -> Tuple[int, int]:
     ):
         raise ProjectionContractError(f"invalid raw-game pointer key {key}")
     return _partition_integer(parts[3], "season"), _partition_integer(parts[4], "game_pk")
+
+
+def _revision_partitions(key: str) -> Tuple[int, int, str]:
+    parts = PurePosixPath(key).parts
+    if (
+        len(parts) != 7
+        or parts[:3] != ("raw", "mlb_stats_api", "games")
+        or parts[6] != "metadata.json"
+    ):
+        raise ProjectionContractError(f"invalid raw-game revision key {key}")
+    revision_prefix = "revision="
+    if not parts[5].startswith(revision_prefix):
+        raise ProjectionContractError(f"invalid revision partition {parts[5]}")
+    revision_id = parts[5].removeprefix(revision_prefix)
+    if not revision_id:
+        raise ProjectionContractError(f"invalid revision partition {parts[5]}")
+    return (
+        _partition_integer(parts[3], "season"),
+        _partition_integer(parts[4], "game_pk"),
+        revision_id,
+    )
 
 
 def _partition_integer(partition: str, name: str) -> int:

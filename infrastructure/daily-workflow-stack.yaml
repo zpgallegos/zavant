@@ -118,7 +118,7 @@ Resources:
       RoleArn: !GetAtt DailyWorkflowExecutionRole.Arn
       DefinitionString: !Sub |
         {
-          "Comment": "Acquire MLB data, then reconcile current revisions into Iceberg.",
+          "Comment": "Acquire MLB data, then reconcile raw revisions into Iceberg.",
           "StartAt": "Prepare workflow input",
           "States": {
             "Prepare workflow input": {

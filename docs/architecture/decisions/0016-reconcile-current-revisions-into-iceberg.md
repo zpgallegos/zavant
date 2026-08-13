@@ -1,4 +1,4 @@
-# ADR 0016: Reconcile current raw revisions into Iceberg
+# ADR 0016: Reconcile immutable raw revisions into Iceberg
 
 - Status: Accepted
 - Date: 2026-08-10
@@ -14,16 +14,16 @@ commits during backfills.
 
 The analytical projector already maps one validated raw revision into 25
 revision-aware table grains. Production needs a scalable execution boundary,
-idempotent publication, and a durable definition of which revision/contract
-combinations are complete.
+idempotent publication, and a durable definition of which source revisions are
+complete.
 
 ## Decision
 
 Run production projection as an AWS Glue 5.0 Spark job independently of the
-acquisition work list. Each invocation enumerates every raw-game `current.json`
-pointer and anti-joins `(game_pk, source_revision_id,
-projection_contract_version)` against an Iceberg `projection_revisions`
-registry. Only absent combinations are projected.
+acquisition work list. Each invocation enumerates every immutable raw-game
+revision and anti-joins `(game_pk, source_revision_id)` against the `games`
+Iceberg table. Only absent revisions are projected. This also allows an empty
+analytical generation to rebuild superseded revision history from raw S3 data.
 
 The driver performs reconciliation and distributes pending revision descriptors
 to Spark workers. Workers load and validate the selected raw object and reuse
@@ -31,15 +31,15 @@ the pure Python per-game projector. The resulting projections are persisted in
 Spark and merged into each contract table by its natural key.
 
 The job creates format-version-2 Iceberg tables in an explicit Glue Data Catalog
-database and S3 warehouse. It writes `projection_revisions` only after every
-analytical table merge succeeds. A separate `current_game_revisions` table
-records the current raw revision for each game and contract version, giving
-Athena and dbt a queryable current-state join.
+database and S3 warehouse. It merges `games` after every other analytical table,
+so its one-row-per-revision grain is the completion marker. A separate
+`current_game_revisions` table records the current raw revision for each game,
+giving Athena and dbt a queryable current-state join.
 
 Iceberg does not provide one transaction across all 25 tables. If a run fails
-after a subset of merges, its completion registry remains absent. A retry
-selects the same revision and repairs every table through deterministic merges.
-The Glue job allows only one concurrent run.
+before the terminal `games` merge, the revision remains incomplete. A retry
+selects it again and repairs every table through deterministic merges. The Glue
+job allows only one concurrent run.
 
 The Glue resources live in a separate `zavant-analytics-{environment}`
 CloudFormation stack. The stack receives the retained acquisition bucket as an
@@ -50,17 +50,20 @@ independent deployment and smoke test.
 ## Consequences
 
 Projection correctness does not depend on how a game arrived or whether a prior
-workflow completed. A contract-version change naturally selects every current
-game for reprojection. Historical raw revisions remain durable but are not
-projected unless they are selected by a current pointer.
+workflow completed. Historical raw revisions are projected and remain
+queryable after the current pointer advances.
 
-Every job performs a full listing and read of current pointers. This is simple,
-observable, and inexpensive at MLB scale, but acquisition manifests may later
+Each physical analytical-table generation supports exactly one projection
+contract. A new contract release requires rebuilding all analytical tables; the
+job rejects existing `games` rows written by another contract version.
+
+Every job performs a full listing of immutable revisions and current pointers.
+This is simple and observable at MLB scale; acquisition manifests may later
 serve as a fast-path candidate list if necessary. A periodic full reconciliation
 must remain the correctness backstop.
 
-The registry is the publication gate rather than evidence of a cross-table
-transaction. Downstream current models must join through
+The terminal `games` merge is the publication gate rather than evidence of a
+cross-table transaction. Downstream current models must join through
 `current_game_revisions` and should run only after a successful Glue invocation.
 
 ## Alternatives considered

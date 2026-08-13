@@ -3,19 +3,26 @@ version: 2
 models:
   - name: stg_disengagements
     description: >-
-      Pitcher or catcher disengagement events from the currently selected
+      Pitcher or catcher disengagement events from the projected
       revision of each MLB game, including pickoff attempts and step-offs.
-      Its grain is one disengagement at game_pk, at_bat_index, and
+      Its grain is one disengagement at source_revision_id, game_pk, at_bat_index, and
       event_index.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
+              - source_revision_id
               - game_pk
               - at_bat_index
               - event_index
     columns:
       # grain
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -23,13 +30,13 @@ models:
           - not_null
 
       - name: at_bat_index
-        description: Zero-based index of the plate appearance containing the disengagement.
+        description: Zero-based index of the top-level play containing the disengagement.
         data_type: integer
         data_tests:
           - not_null
 
       - name: event_index
-        description: Zero-based index of the disengagement within the plate appearance.
+        description: Zero-based index of the disengagement within the top-level play.
         data_type: integer
         data_tests:
           - not_null
@@ -48,7 +55,7 @@ models:
         data_type: varchar
 
       - name: disengagement_number
-        description: Sequential disengagement number within the plate appearance.
+        description: Sequential disengagement number within the top-level play.
         data_type: integer
 
       - name: event
@@ -100,10 +107,6 @@ models:
         description: UTC timestamp when this raw revision was projected.
         data_type: timestamp
 
-      - name: projection_contract_version
-        description: Version of the analytical projection contract used for this row.
-        data_type: varchar
-
       - name: projection_run_id
         description: UUID of the Glue reconciliation run that projected this row.
         data_type: varchar
@@ -111,7 +114,3 @@ models:
       - name: season
         description: MLB season containing the game.
         data_type: integer
-
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar

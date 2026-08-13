@@ -3,20 +3,27 @@ version: 2
 models:
   - name: stg_pitches
     description: >-
-      Pitch calls and tracking measurements from the currently selected
+      Pitch calls and tracking measurements from the projected
       revision of each MLB game. Each row describes one actual pitch,
       including its count, result, type, velocity, location, trajectory,
-      movement, and spin. Its grain is one pitch event at game_pk,
+      movement, and spin. Its grain is one pitch event at source_revision_id, game_pk,
       at_bat_index, and event_index.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
+              - source_revision_id
               - game_pk
               - at_bat_index
               - event_index
     columns:
       # grain
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -24,13 +31,13 @@ models:
           - not_null
 
       - name: at_bat_index
-        description: Zero-based index of the plate appearance containing the pitch.
+        description: Zero-based index of the top-level play containing the pitch.
         data_type: integer
         data_tests:
           - not_null
 
       - name: event_index
-        description: Zero-based index of the pitch within the plate appearance's events.
+        description: Zero-based index of the pitch within the top-level play's events.
         data_type: integer
         data_tests:
           - not_null
@@ -169,7 +176,7 @@ models:
         data_type: integer
 
       - name: pitch_number
-        description: Sequential pitch number within the plate appearance.
+        description: Sequential pitch number within the top-level play.
         data_type: integer
 
       - name: pitch_type_code
@@ -237,10 +244,6 @@ models:
         description: UTC timestamp when this raw revision was projected.
         data_type: timestamp
 
-      - name: projection_contract_version
-        description: Version of the analytical projection contract used for this row.
-        data_type: varchar
-
       - name: projection_run_id
         description: UUID of the Glue reconciliation run that projected this row.
         data_type: varchar
@@ -248,7 +251,3 @@ models:
       - name: season
         description: MLB season containing the game.
         data_type: integer
-
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar

@@ -4,8 +4,7 @@ with batting_failures as (
         batting.game_pk,
         batting.player_id,
         batting.team_id,
-        batting.source_revision_id,
-        batting.projection_contract_version
+        batting.source_revision_id
     from {{ ref("stg_boxscore_player_batting") }} as batting
     left join {{ ref("stg_boxscore_players") }} as player
         on
@@ -13,7 +12,6 @@ with batting_failures as (
             and batting.player_id = player.player_id
             and batting.team_id = player.team_id
             and batting.source_revision_id = player.source_revision_id
-            and batting.projection_contract_version = player.projection_contract_version
     where player.game_pk is null
 ),
 
@@ -23,8 +21,7 @@ pitching_failures as (
         pitching.game_pk,
         pitching.player_id,
         pitching.team_id,
-        pitching.source_revision_id,
-        pitching.projection_contract_version
+        pitching.source_revision_id
     from {{ ref("stg_boxscore_player_pitching") }} as pitching
     left join {{ ref("stg_boxscore_players") }} as player
         on
@@ -32,7 +29,6 @@ pitching_failures as (
             and pitching.player_id = player.player_id
             and pitching.team_id = player.team_id
             and pitching.source_revision_id = player.source_revision_id
-            and pitching.projection_contract_version = player.projection_contract_version
     where player.game_pk is null
 ),
 
@@ -42,8 +38,7 @@ fielding_failures as (
         fielding.game_pk,
         fielding.player_id,
         fielding.team_id,
-        fielding.source_revision_id,
-        fielding.projection_contract_version
+        fielding.source_revision_id
     from {{ ref("stg_boxscore_player_fielding") }} as fielding
     left join {{ ref("stg_boxscore_players") }} as player
         on
@@ -51,7 +46,6 @@ fielding_failures as (
             and fielding.player_id = player.player_id
             and fielding.team_id = player.team_id
             and fielding.source_revision_id = player.source_revision_id
-            and fielding.projection_contract_version = player.projection_contract_version
     where player.game_pk is null
 )
 

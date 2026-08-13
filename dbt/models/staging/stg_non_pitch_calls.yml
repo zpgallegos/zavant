@@ -4,18 +4,25 @@ models:
   - name: stg_non_pitch_calls
     description: >-
       Count-affecting calls recorded by MLB without an actual pitch in the
-      currently selected revision of each game, such as automatic balls or
+      projected revision of each game, such as automatic balls or
       strikes caused by pitch-timer violations. Its grain is one non-pitch
-      call at game_pk, at_bat_index, and event_index.
+      call at source_revision_id, game_pk, at_bat_index, and event_index.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
+              - source_revision_id
               - game_pk
               - at_bat_index
               - event_index
     columns:
       # grain
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -23,13 +30,13 @@ models:
           - not_null
 
       - name: at_bat_index
-        description: Zero-based index of the plate appearance containing the call.
+        description: Zero-based index of the top-level play containing the call.
         data_type: integer
         data_tests:
           - not_null
 
       - name: event_index
-        description: Zero-based index of the call within the plate appearance.
+        description: Zero-based index of the call within the top-level play.
         data_type: integer
         data_tests:
           - not_null
@@ -104,10 +111,6 @@ models:
         description: UTC timestamp when this raw revision was projected.
         data_type: timestamp
 
-      - name: projection_contract_version
-        description: Version of the analytical projection contract used for this row.
-        data_type: varchar
-
       - name: projection_run_id
         description: UUID of the Glue reconciliation run that projected this row.
         data_type: varchar
@@ -115,7 +118,3 @@ models:
       - name: season
         description: MLB season containing the game.
         data_type: integer
-
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar

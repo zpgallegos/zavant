@@ -8,24 +8,6 @@ from typing import Iterable, Tuple
 from zavant.projection.contracts import Column, TableContract
 
 
-PROJECTION_REGISTRY_CONTRACT = TableContract(
-    name="projection_revisions",
-    columns=(
-        Column("game_pk", "int64", False),
-        Column("season", "int32", False),
-        Column("source_revision_id", "string", False),
-        Column("projection_contract_version", "string", False),
-        Column("projection_run_id", "string", False),
-        Column("projected_at", "timestamp", False),
-        Column("raw_object_uri", "string", False),
-    ),
-    primary_key=(
-        "game_pk",
-        "source_revision_id",
-        "projection_contract_version",
-    ),
-)
-
 CURRENT_REVISION_CONTRACT = TableContract(
     name="current_game_revisions",
     columns=(
@@ -37,7 +19,7 @@ CURRENT_REVISION_CONTRACT = TableContract(
         Column("reconciled_at", "timestamp", False),
         Column("raw_object_uri", "string", False),
     ),
-    primary_key=("game_pk", "projection_contract_version"),
+    primary_key=("game_pk",),
 )
 
 
@@ -116,7 +98,6 @@ def all_iceberg_contracts(
 ) -> Tuple[TableContract, ...]:
     return (
         *tuple(analytical_contracts),
-        PROJECTION_REGISTRY_CONTRACT,
         CURRENT_REVISION_CONTRACT,
     )
 

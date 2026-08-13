@@ -3,19 +3,26 @@ version: 2
 models:
   - name: stg_plays
     description: >-
-      Plate appearances from the currently selected revision of each MLB game.
-      Each row summarizes one batter-pitcher matchup and its result, inning,
-      score, count, participants, timing, and post-play baserunner state. Its
-      child play-events contain the ordered pitches and actions within the
-      plate appearance. Its grain is one at_bat_index per game_pk.
+      Top-level records from MLB's allPlays stream for the projected
+      revision of each game. Most rows complete a batter's plate appearance,
+      but MLB also emits independent baserunning, pitching, and advisory plays
+      with the same shape. Child play-events contain the ordered pitches and
+      actions within each record. Its grain is one at_bat_index per source_revision_id and game_pk.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
+              - source_revision_id
               - game_pk
               - at_bat_index
     columns:
       # grain
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -23,18 +30,18 @@ models:
           - not_null
 
       - name: at_bat_index
-        description: Zero-based index of the plate appearance within the game.
+        description: Zero-based index of the record in MLB's top-level allPlays stream.
         data_type: integer
         data_tests:
           - not_null
 
       # attributes
       - name: away_score
-        description: Away-team score after the plate appearance.
+        description: Away-team score after the top-level play.
         data_type: integer
 
       - name: balls
-        description: Ball count reported for the plate appearance.
+        description: Ball count reported for the top-level play.
         data_type: integer
 
       - name: bat_side_code
@@ -50,63 +57,63 @@ models:
         data_type: varchar
 
       - name: captivating_index
-        description: MLB's relative interest score for the plate appearance.
+        description: MLB's relative interest score for the top-level play.
         data_type: integer
 
       - name: defense_team_id
-        description: MLB identifier of the fielding team during the plate appearance.
+        description: MLB identifier of the fielding team during the top-level play.
         data_type: bigint
 
       - name: description
-        description: Human-readable description of the plate appearance result.
+        description: Human-readable description of the top-level play's result.
         data_type: varchar
 
       - name: ended_at
-        description: UTC timestamp when the plate appearance ended.
+        description: UTC timestamp when the top-level play ended.
         data_type: timestamp
 
       - name: event
-        description: Human-readable MLB label for the plate appearance result.
+        description: Human-readable MLB label for the top-level play's result.
         data_type: varchar
 
       - name: event_type
-        description: Machine-readable MLB classification of the plate appearance result.
+        description: Machine-readable MLB classification of the top-level play's result.
         data_type: varchar
 
       - name: half_inning
-        description: Inning half in which the plate appearance occurred.
+        description: Inning half in which the top-level play occurred.
         data_type: varchar
 
       - name: has_out
-        description: Whether the plate appearance includes at least one out.
+        description: Whether the top-level play includes at least one out.
         data_type: boolean
 
       - name: has_review
-        description: Whether the plate appearance includes replay-review information.
+        description: Whether the top-level play includes replay-review information.
         data_type: boolean
 
       - name: home_score
-        description: Home-team score after the plate appearance.
+        description: Home-team score after the top-level play.
         data_type: integer
 
       - name: inning
-        description: Numeric inning in which the plate appearance occurred.
+        description: Numeric inning in which the top-level play occurred.
         data_type: integer
 
       - name: is_complete
-        description: Whether MLB marks the plate appearance as complete.
+        description: Whether MLB marks the top-level play as complete.
         data_type: boolean
 
       - name: is_out
-        description: Whether MLB classifies the plate appearance result as an out.
+        description: Whether MLB classifies the top-level play's result as an out.
         data_type: boolean
 
       - name: is_scoring_play
-        description: Whether at least one run scored during the plate appearance.
+        description: Whether at least one run scored during the top-level play.
         data_type: boolean
 
       - name: is_top_inning
-        description: Whether the plate appearance occurred in the top half of the inning.
+        description: Whether the top-level play occurred in the top half of the inning.
         data_type: boolean
 
       - name: men_on_base_split
@@ -114,11 +121,11 @@ models:
         data_type: varchar
 
       - name: offense_team_id
-        description: MLB identifier of the batting team during the plate appearance.
+        description: MLB identifier of the batting team during the top-level play.
         data_type: bigint
 
       - name: outs
-        description: Out count reported after the plate appearance.
+        description: Out count reported after the top-level play.
         data_type: integer
 
       - name: pitch_hand_code
@@ -134,7 +141,7 @@ models:
         data_type: varchar
 
       - name: play_type
-        description: High-level MLB type assigned to the plate appearance result.
+        description: High-level MLB type assigned to the top-level play's result.
         data_type: varchar
 
       - name: post_on_first_id
@@ -150,15 +157,15 @@ models:
         data_type: bigint
 
       - name: rbi
-        description: Runs batted in credited on the plate appearance.
+        description: Runs batted in credited on the top-level play.
         data_type: integer
 
       - name: started_at
-        description: UTC timestamp when the plate appearance started.
+        description: UTC timestamp when the top-level play started.
         data_type: timestamp
 
       - name: strikes
-        description: Strike count reported for the plate appearance.
+        description: Strike count reported for the top-level play.
         data_type: integer
 
       # metadata
@@ -170,10 +177,6 @@ models:
         description: UTC timestamp when this raw revision was projected.
         data_type: timestamp
 
-      - name: projection_contract_version
-        description: Version of the analytical projection contract used for this row.
-        data_type: varchar
-
       - name: projection_run_id
         description: UUID of the Glue reconciliation run that projected this row.
         data_type: varchar
@@ -181,7 +184,3 @@ models:
       - name: season
         description: MLB season containing the game.
         data_type: integer
-
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar

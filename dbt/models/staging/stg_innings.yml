@@ -3,18 +3,25 @@ version: 2
 models:
   - name: stg_innings
     description: >-
-      Inning-level line scores from the currently selected revision of each
+      Inning-level line scores from the projected revision of each
       MLB game. Each row reports runs, hits, errors, and runners left on base
       for the away and home teams in one numbered inning. Its grain is one
-      inning_number per game_pk.
+      inning_number per source_revision_id and game_pk.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
+              - source_revision_id
               - game_pk
               - inning_number
     columns:
       # grain
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -73,10 +80,6 @@ models:
         description: UTC timestamp when this raw revision was projected.
         data_type: timestamp
 
-      - name: projection_contract_version
-        description: Version of the analytical projection contract used for this row.
-        data_type: varchar
-
       - name: projection_run_id
         description: UUID of the Glue reconciliation run that projected this row.
         data_type: varchar
@@ -84,7 +87,3 @@ models:
       - name: season
         description: MLB season containing the game.
         data_type: integer
-
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar

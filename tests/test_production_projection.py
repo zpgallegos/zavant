@@ -3,22 +3,25 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 from zavant.contracts.raw_game import RawGameResponse
 from zavant.projection.contracts import TABLE_CONTRACTS
 from zavant.projection.glue_job import (
     GlueProjectionConfiguration,
+    _analytical_merge_contracts,
     _schema_drift_details,
+    _validate_projection_release,
     run_glue_projection,
 )
 from zavant.projection.iceberg import create_table_sql, merge_table_sql
 from zavant.projection.s3_sources import (
-    CurrentProjectionRevision,
+    ProjectionRevision,
     discover_current_revisions,
+    discover_revisions,
     load_projection_source,
-    pending_current_revisions,
+    pending_revisions,
 )
 from zavant.projection.models import GameProjection
 from zavant.storage.bundles import s3_acquisition_storage
@@ -51,8 +54,8 @@ class S3ProjectionSourceTests(unittest.TestCase):
         )
         self.backend = S3ObjectBackend(self.client, self.bucket, self.prefix)
 
-    def test_discovers_and_loads_validated_current_revision(self) -> None:
-        revisions = discover_current_revisions(self.backend)
+    def test_discovers_and_loads_validated_revision(self) -> None:
+        revisions = discover_revisions(self.backend)
 
         self.assertEqual(len(revisions), 1)
         revision = revisions[0]
@@ -65,16 +68,47 @@ class S3ProjectionSourceTests(unittest.TestCase):
         self.assertEqual(source.observed_at, OBSERVED_AT)
         self.assertTrue(source.raw_object_uri.startswith("s3://example-bucket/"))
 
-    def test_reconciliation_selects_only_unregistered_contract_revision(self) -> None:
-        revisions = discover_current_revisions(self.backend)
+    def test_reconciliation_selects_only_unprojected_revision(self) -> None:
+        revisions = discover_revisions(self.backend)
         completed = {revisions[0].completed_identity()}
 
-        self.assertEqual(pending_current_revisions(revisions, set()), revisions)
-        self.assertEqual(pending_current_revisions(revisions, completed), ())
-        self.assertEqual(
-            pending_current_revisions(revisions, completed, "future-contract/v2"),
-            revisions,
+        self.assertEqual(pending_revisions(revisions, set()), revisions)
+        self.assertEqual(pending_revisions(revisions, completed), ())
+
+    def test_discovers_superseded_and_current_revisions(self) -> None:
+        changed_payload = json.loads(self.raw)
+        changed_payload["gameData"]["status"]["detailedState"] = "Final: Corrected"
+        changed_raw = json.dumps(changed_payload).encode()
+        changed_game = RawGameResponse.from_bytes(changed_raw)
+        second = s3_acquisition_storage(
+            self.client,
+            self.bucket,
+            self.prefix,
+            clock=lambda: OBSERVED_AT,
+        ).raw_games.land(
+            changed_game,
+            changed_raw,
+            "https://statsapi.example.test/game",
+            "game_changes",
         )
+
+        revisions = discover_revisions(self.backend)
+        current = discover_current_revisions(self.backend)
+
+        self.assertEqual(
+            {revision.revision_id for revision in revisions},
+            {self.landed.revision_id, second.revision_id},
+        )
+        self.assertEqual(
+            tuple(revision.revision_id for revision in current),
+            (second.revision_id,),
+        )
+
+    def test_current_discovery_selects_pointer_revision(self) -> None:
+        revisions = discover_current_revisions(self.backend)
+
+        self.assertEqual(len(revisions), 1)
+        self.assertEqual(revisions[0].revision_id, self.landed.revision_id)
 
     def test_rejects_pointer_whose_routing_identity_was_changed(self) -> None:
         pointer_key = f"{self.prefix}/{self.landed.current_pointer_path.key}"
@@ -87,6 +121,20 @@ class S3ProjectionSourceTests(unittest.TestCase):
 
 
 class IcebergDefinitionTests(unittest.TestCase):
+    def test_rejects_existing_rows_from_another_projection_release(self) -> None:
+        spark = MagicMock()
+        versions = spark.table.return_value.select.return_value.distinct.return_value
+        versions.collect.return_value = [
+            {"projection_contract_version": "zavant-analytical-game-projection/v2"}
+        ]
+        configuration = GlueProjectionConfiguration(
+            bucket="example-bucket",
+            database="zavant_analytical_prod",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "rebuild every analytical table"):
+            _validate_projection_release(spark, configuration)
+
     def test_schema_drift_reports_actionable_column_differences(self) -> None:
         details = _schema_drift_details(
             (("game_pk", "bigint", False), ("old_name", "string", True)),
@@ -144,11 +192,10 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             bucket="example-bucket",
             database="zavant_analytical_prod",
         )
-        self.revision = CurrentProjectionRevision(
+        self.revision = ProjectionRevision(
             game_pk=744863,
             season=2024,
             revision_id="revision-one",
-            pointer_key="raw/mlb_stats_api/games/season=2024/game_pk=744863/current.json",
             raw_key="raw/mlb_stats_api/games/season=2024/game_pk=744863/revision=revision-one/game.json",
             metadata_key="raw/mlb_stats_api/games/season=2024/game_pk=744863/revision=revision-one/metadata.json",
         )
@@ -158,15 +205,20 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             event_kind_counts={},
         )
 
-    def test_registers_completion_only_after_every_analytical_merge(self) -> None:
+    def test_merges_completion_marker_after_every_analytical_table(self) -> None:
         spark = _FakeSpark()
         events = []
 
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
+            patch("zavant.projection.glue_job._validate_projection_release"),
             patch(
                 "zavant.projection.glue_job._completed_projections",
                 return_value=set(),
+            ),
+            patch(
+                "zavant.projection.glue_job.discover_revisions",
+                return_value=(self.revision,),
             ),
             patch(
                 "zavant.projection.glue_job.discover_current_revisions",
@@ -204,19 +256,27 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
                 OBSERVED_AT,
             )
 
-        self.assertEqual(events[: len(TABLE_CONTRACTS)], list(TABLE_CONTRACTS))
-        self.assertEqual(events[-2:], ["projection_revisions", "current_game_revisions"])
+        self.assertEqual(
+            events[: len(TABLE_CONTRACTS)],
+            [contract.name for contract in _analytical_merge_contracts()],
+        )
+        self.assertEqual(events[-2:], ["games", "current_game_revisions"])
         self.assertEqual(result.projected_revision_count, 1)
         self.assertTrue(spark.last_rdd.unpersisted)
 
-    def test_failed_table_merge_does_not_advance_either_registry(self) -> None:
+    def test_failed_table_merge_does_not_advance_current_mapping(self) -> None:
         spark = _FakeSpark()
 
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
+            patch("zavant.projection.glue_job._validate_projection_release"),
             patch(
                 "zavant.projection.glue_job._completed_projections",
                 return_value=set(),
+            ),
+            patch(
+                "zavant.projection.glue_job.discover_revisions",
+                return_value=(self.revision,),
             ),
             patch(
                 "zavant.projection.glue_job.discover_current_revisions",

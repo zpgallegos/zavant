@@ -1,17 +1,10 @@
-with current_revision as (
-    select
-        game_pk,
-        source_revision_id,
-        projection_contract_version
-    from {{ ref("stg_current_game_revisions") }}
-),
-
-pitches as (
+with pitches as (
     select * from {{ source("zavant_analytical_prod", "pitches") }}
 )
 
 select
     -- grain
+    pitches.source_revision_id,
     pitches.game_pk,
     pitches.at_bat_index,
     pitches.event_index,
@@ -69,12 +62,6 @@ select
     -- metadata
     pitches.official_date,
     pitches.projected_at,
-    pitches.projection_contract_version,
     pitches.projection_run_id,
-    pitches.season,
-    pitches.source_revision_id
+    pitches.season
 from pitches
-inner join current_revision on
-    pitches.game_pk = current_revision.game_pk
-    and pitches.source_revision_id = current_revision.source_revision_id
-    and pitches.projection_contract_version = current_revision.projection_contract_version

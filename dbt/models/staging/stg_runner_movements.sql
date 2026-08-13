@@ -1,17 +1,10 @@
-with current_revision as (
-    select
-        game_pk,
-        source_revision_id,
-        projection_contract_version
-    from {{ ref("stg_current_game_revisions") }}
-),
-
-runner_movements as (
+with runner_movements as (
     select * from {{ source("zavant_analytical_prod", "runner_movements") }}
 )
 
 select
     -- grain
+    runner_movements.source_revision_id,
     runner_movements.game_pk,
     runner_movements.at_bat_index,
     runner_movements.runner_index,
@@ -37,12 +30,6 @@ select
     -- metadata
     runner_movements.official_date,
     runner_movements.projected_at,
-    runner_movements.projection_contract_version,
     runner_movements.projection_run_id,
-    runner_movements.season,
-    runner_movements.source_revision_id
+    runner_movements.season
 from runner_movements
-inner join current_revision on
-    runner_movements.game_pk = current_revision.game_pk
-    and runner_movements.source_revision_id = current_revision.source_revision_id
-    and runner_movements.projection_contract_version = current_revision.projection_contract_version

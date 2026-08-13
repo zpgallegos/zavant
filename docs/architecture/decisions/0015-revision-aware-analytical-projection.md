@@ -43,11 +43,10 @@ counts; in particular, pitched innings are represented canonically by outs
 rather than interpreting baseball notation such as `5.2` as a decimal.
 
 Implement the source-to-row mapping as a pure Python projection core. A local
-adapter discovers only revisions selected by persisted `current.json` pointers,
-validates their content hashes and metadata, and atomically publishes explicit
-Parquet schemas plus samples and a run manifest. Production Glue and Iceberg
-composition will reuse the projection rules while replacing local discovery and
-publication.
+adapter discovers every immutable revision, validates its content hash and
+metadata, and atomically publishes explicit Parquet schemas plus samples and a
+run manifest. Production Glue and Iceberg composition reuse the projection
+rules while replacing local discovery and publication.
 
 Production analytical tables will use Apache Iceberg format version 2. A daily
 Step Functions Standard workflow will sequence the existing acquisition Lambda,
@@ -63,6 +62,5 @@ evolution reviewable. Unknown event families remain visible in the event spine
 and run counts even before a dedicated extension exists.
 
 Local Parquet output is a run snapshot for inspection and testing, not an
-emulation of Iceberg transaction semantics. Later production publication must
-add idempotent table merges and a completed-revision registry before current
-views consume a corrected revision.
+emulation of Iceberg transaction semantics. Production publication uses
+idempotent table merges and an explicit current-revision mapping.

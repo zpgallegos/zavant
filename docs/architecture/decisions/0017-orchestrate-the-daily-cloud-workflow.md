@@ -11,8 +11,8 @@ that must run after acquisition has had its daily opportunity. Two unrelated
 schedules would permit projection to race acquisition and would not provide one
 durable status for the daily cloud workflow.
 
-The Glue job is safe to rerun because it reconciles current pointers against a
-completed-revision registry. Acquisition is also safe under repeated delivery,
+The Glue job is safe to rerun because it reconciles immutable raw revisions
+against the terminal `games` table. Acquisition is also safe under repeated delivery,
 but neither component should become responsible for starting or monitoring the
 other.
 
@@ -56,7 +56,7 @@ acquisition, analytical projection, then workflow and schedule.
 
 One execution history now records acquisition and analytical publication.
 Acquisition failure does not strand revisions successfully committed by another
-acquisition branch. Projection failure leaves raw data safe and unregistered
+acquisition branch. Projection failure leaves raw data safe and incomplete
 revisions are retried by a later workflow. A partial acquisition remains an
 overall workflow failure even when projection succeeds.
 Future dbt execution can be added as another state without coupling it to either
@@ -68,8 +68,8 @@ references orchestration. Acquisition updates no longer require resolving or
 passing a workflow ARN.
 
 Standard Step Functions transitions and CloudWatch logs add a small operational
-cost. The state machine does not create a cross-table transaction; the Iceberg
-completion registry remains the publication gate.
+cost. The state machine does not create a cross-table transaction; the terminal
+`games` merge remains the publication gate.
 
 ## Alternatives considered
 

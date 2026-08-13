@@ -4,7 +4,7 @@ The `zavant-analytics-prod` stack owns the Glue Data Catalog database, the Glue
 5.0 Spark projection job, and its least-privilege execution role. It references
 the existing retained acquisition bucket but does not own or replace it.
 
-The job reads current raw-game pointers and selected revisions beneath
+The job reads immutable raw-game revisions and current pointers beneath
 `lake/raw/`, then manages Iceberg data and metadata beneath
 `lake/analytical/iceberg/`. Deployment artifacts are read from
 `deployments/glue/`. The role has no access to acquisition watermarks or run
@@ -46,7 +46,13 @@ aws glue get-job-run \
 ```
 
 The first run creates 25 analytical Iceberg tables plus
-`projection_revisions` and `current_game_revisions` in
-`zavant_analytical_prod`. A successful rerun with unchanged pointers should
-report zero projected revisions while still reconciling the current-revision
-mapping.
+`current_game_revisions` in `zavant_analytical_prod`. The `games` table is
+written last and acts as the revision-completion marker. A successful rerun
+with no newly landed revisions should report zero projected revisions while
+still reconciling the current-revision mapping.
+
+Each analytical generation supports one projection contract. Before deploying
+a new contract release, delete both the Glue Catalog tables and analytical
+Iceberg objects with the reviewed scripts in `scripts/adhoc`, then run Glue to
+rebuild every immutable raw revision. A contract mismatch fails rather than
+mixing releases in the same tables.

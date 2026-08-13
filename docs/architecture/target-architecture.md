@@ -85,13 +85,14 @@ the workflow reports the retained acquisition error.
   schedule.
 - Analytical datasets use explicit grain-specific contracts; pitches and
   batted-ball metrics are extensions of a skinny play-event spine.
-- Every analytical row retains its source revision and projection contract.
+- Every analytical row retains its source revision; the projection contract is
+  lineage for the single active analytical generation.
 - Local analytical runs publish atomic Parquet snapshots; production tables use
   Iceberg format version 2 in S3 and the Glue Data Catalog for Athena access.
-- Production projection scans authoritative current pointers rather than relying
-  on the preceding acquisition manifest. A completion registry makes retries
-  repair partial multi-table publication, while `current_game_revisions` gives
-  dbt an explicit current-state join.
+- Production projection scans every immutable raw revision rather than relying
+  on the preceding acquisition manifest. The terminal `games` merge makes
+  retries repair partial multi-table publication, while
+  `current_game_revisions` gives dbt an explicit current-state join.
 - The daily workflow stack owns EventBridge Scheduler and the Step Functions
   Standard workflow that sequences acquisition and one batch Glue projection;
   later dbt execution can become a subsequent state.

@@ -13,7 +13,7 @@ from zavant.projection.contracts import (
     ProjectionContractError,
     TABLE_CONTRACTS,
 )
-from zavant.projection.local import current_projection_sources, run_local_projection
+from zavant.projection.local import projection_sources, run_local_projection
 from zavant.projection.models import ProjectionSource
 from zavant.projection.projector import project_game
 from zavant.storage._path_io import canonical_json_sha256
@@ -187,7 +187,7 @@ class LocalProjectionTests(unittest.TestCase):
         self.raw = SAMPLE_GAME.read_bytes()
         self.game = RawGameResponse.from_bytes(self.raw)
 
-    def test_discovers_only_revision_selected_by_current_pointer(self) -> None:
+    def test_discovers_every_immutable_revision(self) -> None:
         store = PathRawGameStore(self.data_dir, clock=lambda: OBSERVED_AT)
         first = store.land(self.game, self.raw, "fixture://original")
         changed_payload = json.loads(self.raw)
@@ -196,13 +196,19 @@ class LocalProjectionTests(unittest.TestCase):
         changed_game = RawGameResponse.from_bytes(changed_raw)
         second = store.land(changed_game, changed_raw, "fixture://corrected")
 
-        sources = list(current_projection_sources(self.data_dir))
+        sources = list(projection_sources(self.data_dir))
 
         self.assertNotEqual(first.revision_id, second.revision_id)
-        self.assertEqual(len(sources), 1)
-        self.assertEqual(sources[0].revision_id, second.revision_id)
+        self.assertEqual(len(sources), 2)
         self.assertEqual(
-            sources[0].game.payload["gameData"]["status"]["detailedState"],
+            {source.revision_id for source in sources},
+            {first.revision_id, second.revision_id},
+        )
+        corrected = next(
+            source for source in sources if source.revision_id == second.revision_id
+        )
+        self.assertEqual(
+            corrected.game.payload["gameData"]["status"]["detailedState"],
             "Final: Corrected",
         )
 

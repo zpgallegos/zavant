@@ -1,4 +1,4 @@
-"""Local current-revision discovery and Parquet publication."""
+"""Local raw-revision discovery and Parquet publication."""
 
 from __future__ import annotations
 
@@ -50,34 +50,39 @@ class LocalProjectionResult:
         }
 
 
-def current_projection_sources(
+def projection_sources(
     data_dir: Path,
     seasons: Optional[Sequence[int]] = None,
 ) -> Iterable[ProjectionSource]:
-    """Yield validated raw revisions selected by local current pointers."""
+    """Yield every validated immutable raw revision in the local lake."""
 
     selected_seasons = set(seasons) if seasons is not None else None
     games_root = data_dir / "raw" / "mlb_stats_api" / "games"
-    for pointer_path in sorted(games_root.glob("season=*/game_pk=*/current.json")):
-        season = _partition_integer(pointer_path.parents[1].name, "season")
-        game_pk = _partition_integer(pointer_path.parent.name, "game_pk")
+    pattern = "season=*/game_pk=*/revision=*/metadata.json"
+    for metadata_path in sorted(games_root.glob(pattern)):
+        revision_dir = metadata_path.parent
+        season = _partition_integer(revision_dir.parents[1].name, "season")
+        game_pk = _partition_integer(revision_dir.parent.name, "game_pk")
         if selected_seasons is not None and season not in selected_seasons:
             continue
-        pointer = read_json_object(pointer_path)
-        pointer_game_pk = pointer.get("game_pk")
-        revision_id = pointer.get("revision_id")
-        if pointer_game_pk != game_pk or not isinstance(revision_id, str):
-            raise ProjectionContractError(f"invalid current pointer {pointer_path}")
-
-        revision_dir = pointer_path.parent / f"revision={revision_id}"
+        revision_partition = revision_dir.name
+        revision_prefix = "revision="
+        if not revision_partition.startswith(revision_prefix):
+            raise ProjectionContractError(
+                f"invalid revision partition {revision_partition}"
+            )
+        revision_id = revision_partition.removeprefix(revision_prefix)
+        if not revision_id:
+            raise ProjectionContractError(
+                f"invalid revision partition {revision_partition}"
+            )
         game_path = revision_dir / "game.json"
-        metadata_path = revision_dir / "metadata.json"
         metadata = read_json_object(metadata_path)
         raw = game_path.read_bytes()
         game = RawGameResponse.from_bytes(raw)
         if game.game_pk != game_pk or game.season != season:
             raise ProjectionContractError(
-                f"raw game routing does not match {pointer_path.parent}"
+                f"raw game routing does not match {revision_dir}"
             )
         if canonical_json_sha256(game.payload) != revision_id:
             raise ProjectionContractError(f"raw revision hash does not match {game_path}")
@@ -105,7 +110,7 @@ def run_local_projection(
     projected_at: Optional[datetime] = None,
     seasons: Optional[Sequence[int]] = None,
 ) -> LocalProjectionResult:
-    """Project current local revisions into an atomically published Parquet run."""
+    """Project all local revisions into an atomically published Parquet run."""
 
     resolved_run_id = run_id or uuid4()
     resolved_projected_at = (projected_at or datetime.now(timezone.utc)).astimezone(
@@ -131,7 +136,7 @@ def run_local_projection(
     try:
         temporary_dir.mkdir(parents=True)
         with _ParquetRunWriter(temporary_dir) as writer:
-            for source in current_projection_sources(data_dir, seasons):
+            for source in projection_sources(data_dir, seasons):
                 projection = project_game(
                     source,
                     run_id=resolved_run_id,
@@ -154,7 +159,7 @@ def run_local_projection(
                     if remaining > 0:
                         sample_rows[name].extend(rows[:remaining])
         if game_count == 0:
-            raise ProjectionContractError("no current raw-game revisions were found")
+            raise ProjectionContractError("no raw-game revisions were found")
 
         _write_json(temporary_dir / "schemas.json", _schemas_document())
         samples_dir = temporary_dir / "samples"

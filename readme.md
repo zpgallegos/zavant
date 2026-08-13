@@ -1,6 +1,6 @@
-# Zavant v2
+# Zavant
 
-This directory is the ground-up modernization of Zavant. It is being built through tested vertical slices while [`../v1`](../v1/readme.md) remains available as the behavioral and historical reference.
+Zavant is a ground-up, revision-aware MLB analytics platform built through tested vertical slices from API acquisition through Athena-ready analytical data. The former v1 implementation has been archived outside this repository; this repository is now the current implementation.
 
 The current acquisition foundation retrieves, validates, and persists three MLB Stats API response types:
 
@@ -19,7 +19,7 @@ make bootstrap PYTHON=/path/to/python3.12
 make check
 ```
 
-If `python3` already points to Python 3.9 or newer, `make bootstrap` is sufficient. Bootstrap installs the package and its runtime dependencies into `.venv`. Local outputs are written under `.local/` and ignored by Git.
+If `python3` already points to Python 3.11 or newer, `make bootstrap` is sufficient. Bootstrap installs the package and its runtime dependencies into `.venv`. Local outputs are written under `.local/` and ignored by Git.
 
 Copy `.env.example` to the ignored `.env` file for local configuration. Make
 loads that file automatically and maps its `ZAVANT_*` values to infrastructure
@@ -259,9 +259,10 @@ The optional `through_date` event field supports deterministic smoke tests:
 Bootstrap configuration is consulted only while its corresponding watermark is absent. Thereafter the persisted S3 state is authoritative. If any daily branch fails, its manifest remains in S3 and the handler raises so the Lambda invocation is visibly unsuccessful.
 
 This completes the local application, historical CLI reconciliation, production
-API-to-raw Lambda, Glue-to-Iceberg projection, and their scheduled Step Functions
-orchestration. Workflow verification, alarms, dbt transformation, semantics,
-and presentation remain later layers of the project.
+API-to-raw Lambda, Glue-to-Iceberg projection, scheduled Step Functions
+orchestration, and current-revision dbt staging layer. Workflow verification,
+alarms, conformed dbt models, semantics, and presentation remain later layers of
+the project.
 
 ## Local analytical projection
 
@@ -291,8 +292,8 @@ contract version, run ID, and projection timestamp. The event table is a skinny
 sequence-preserving spine; sparse event families and ordered child records live
 at their own grains. Embedded season-to-date player statistics are deliberately
 excluded in favor of the game boxscore statistics. Local output is an
-inspection and contract-testing boundary. The production Iceberg writer and
-daily analytical orchestration described in ADR 0015 remain the next
-infrastructure slice.
+inspection and contract-testing boundary. Production uses the same projection
+contracts in a Glue job that reconciles current revisions into Iceberg tables;
+the scheduled Step Functions workflow runs that job after daily acquisition.
 
 See the [target architecture](docs/architecture/target-architecture.md), [decision register](docs/architecture/README.md), and [migration roadmap](docs/migration-roadmap.md) for the intended path from acquisition through semantics and presentation.

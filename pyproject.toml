@@ -7,7 +7,7 @@ name = "zavant"
 version = "0.11.0"
 description = "An end-to-end, local-first MLB analytics platform"
 readme = "readme.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 authors = [{name = "Zavant contributors"}]
 dependencies = ["boto3>=1.40,<2"]
 
@@ -22,6 +22,7 @@ dev = [
     "pyarrow==19.0.1",
     "pyright==1.1.411",
     "ruff==0.16.2",
+    "sqlfluff==3.4.2",
 ]
 
 [project.scripts]
@@ -44,7 +45,7 @@ skip_covered = true
 
 [tool.pyright]
 include = ["src", "tests", "jobs"]
-pythonVersion = "3.9"
+pythonVersion = "3.11"
 typeCheckingMode = "standard"
 venv = ".venv"
 venvPath = "."

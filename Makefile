@@ -27,6 +27,7 @@ DBT_PROJECT_DIR := dbt
 VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_DBT := $(abspath $(VENV_DIR)/bin/dbt)
+VENV_SQLFLUFF := $(abspath $(VENV_DIR)/bin/sqlfluff)
 PYTHON_CONSTRAINTS_FILE := constraints.txt
 
 # AWS deployment identity
@@ -87,7 +88,12 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	aws-check-account \
 	bootstrap \
 	check \
+	dbt-deps \
 	dbt-debug \
+	dbt-lint \
+	dbt-parse \
+	dbt-source-freshness \
+	dbt-staging-build \
 	glue-package \
 	glue-start \
 	help \
@@ -103,7 +109,12 @@ help:
 	@echo "bootstrap                   create the local Python environment"
 	@echo "test                        run the unit test suite"
 	@echo "check                       run all local quality checks"
+	@echo "dbt-deps                    install dbt project packages"
 	@echo "dbt-debug                   validate the dev dbt/Athena connection"
+	@echo "dbt-lint                    lint dbt SQL with the Athena dialect"
+	@echo "dbt-parse                   parse dbt resources without querying Athena"
+	@echo "dbt-source-freshness        check the analytical reconciliation timestamp"
+	@echo "dbt-staging-build           build and test staging against Athena"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
 	@echo "workflow-infra-validate     validate the Step Functions template"
@@ -118,15 +129,17 @@ help:
 	@echo "workflow-start              manually start the complete workflow"
 
 bootstrap:
-	@$(PYTHON) -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9+ is required"'
+	@$(PYTHON) -c 'import sys; assert sys.version_info >= (3, 11), "Python 3.11+ is required"'
 	@test -x $(VENV_PYTHON) || $(PYTHON) -m venv $(VENV_DIR)
+	@$(VENV_PYTHON) -m pip install --upgrade pip
 	@$(VENV_PYTHON) -m pip install --constraint $(PYTHON_CONSTRAINTS_FILE) --editable '.[dev]'
+	@$(MAKE) --no-print-directory dbt-deps
 	@$(VENV_PYTHON) -c 'import sys; print(f"ready: {sys.executable} ({sys.version.split()[0]})")'
 
 test:
 	@PYTHONPATH=src $(VENV_PYTHON) -m unittest discover -s tests -v
 
-check:
+check: dbt-parse dbt-lint
 	@PYTHONPATH=src $(VENV_PYTHON) -m compileall -q src tests jobs
 	@$(VENV_PYTHON) -m ruff check src tests jobs
 	@PYTHONPATH=src $(VENV_PYTHON) -m pyright
@@ -135,8 +148,27 @@ check:
 	@$(VENV_PYTHON) -m coverage report
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(VENV_PYTHON) -c 'import zavant; from zavant.lambda_handler import lambda_handler; assert callable(lambda_handler)'
 
+dbt-deps:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) deps
+
 dbt-debug:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) debug --target dev
+
+dbt-lint:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_SQLFLUFF) lint models tests
+
+dbt-parse:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) parse --no-partial-parse
+
+dbt-source-freshness:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) source freshness \
+		--target dev \
+		--select source:zavant_analytical_prod.current_game_revisions
+
+dbt-staging-build:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) build \
+		--target dev \
+		--select path:models/staging
 
 acquisition-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \

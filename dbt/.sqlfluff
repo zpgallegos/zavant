@@ -1,5 +1,5 @@
 [sqlfluff]
-dialect = duckdb
+dialect = athena
 templater = jinja
 ignore = templating
 runaway_limit = 10

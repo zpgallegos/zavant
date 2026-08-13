@@ -7,6 +7,18 @@ sources:
     schema: zavant_analytical_prod
     tables:
       - name: current_game_revisions
+        config:
+          freshness:
+            warn_after:
+              count: 30
+              period: hour
+            error_after:
+              count: 54
+              period: hour
+            filter: >-
+              projection_contract_version =
+              '{{ var("current_projection_contract_version") }}'
+          loaded_at_field: reconciled_at
       - name: projection_revisions
       - name: actions
       - name: batted_balls

@@ -1,51 +1,14 @@
 {{
     config(
-        materialized="incremental",
-        incremental_strategy="append",
+        materialized="table",
         table_type="iceberg",
         format="parquet",
-        partitioned_by=["season"],
-        on_schema_change="fail"
+        partitioned_by=["season"]
     )
 }}
 
-with projected_revisions as (
-    select
-        game_pk,
-        source_revision_id
-    from {{ ref("stg_games") }}
-),
-
-{% if is_incremental() %}
-
-    loaded_revisions as (
-        select distinct
-            game_pk,
-            source_revision_id
-        from {{ this }}
-    ),
-
-{% endif %}
-
-revisions_to_load as (
-    select projected_revisions.*
-    from projected_revisions
-    {% if is_incremental() %}
-        left join loaded_revisions
-            on
-                projected_revisions.game_pk = loaded_revisions.game_pk
-                and projected_revisions.source_revision_id = loaded_revisions.source_revision_id
-        where loaded_revisions.game_pk is null
-    {% endif %}
-),
-
-source_plays as (
-    select plays.*
-    from {{ ref("stg_plays") }} as plays
-    inner join revisions_to_load
-        on
-            plays.game_pk = revisions_to_load.game_pk
-            and plays.source_revision_id = revisions_to_load.source_revision_id
+with source_plays as (
+    select * from {{ ref("stg_plays") }}
 ),
 
 plays_with_prior_state as (
@@ -54,8 +17,7 @@ plays_with_prior_state as (
         coalesce(
             lag(source_plays.away_score) over (
                 partition by
-                    source_plays.game_pk,
-                    source_plays.source_revision_id
+                    source_plays.game_pk
                 order by source_plays.at_bat_index
             ),
             0
@@ -63,8 +25,7 @@ plays_with_prior_state as (
         coalesce(
             lag(source_plays.home_score) over (
                 partition by
-                    source_plays.game_pk,
-                    source_plays.source_revision_id
+                    source_plays.game_pk
                 order by source_plays.at_bat_index
             ),
             0
@@ -73,7 +34,6 @@ plays_with_prior_state as (
             lag(source_plays.outs) over (
                 partition by
                     source_plays.game_pk,
-                    source_plays.source_revision_id,
                     source_plays.inning,
                     source_plays.half_inning
                 order by source_plays.at_bat_index
@@ -83,7 +43,6 @@ plays_with_prior_state as (
         lag(source_plays.post_on_first_id) over (
             partition by
                 source_plays.game_pk,
-                source_plays.source_revision_id,
                 source_plays.inning,
                 source_plays.half_inning
             order by source_plays.at_bat_index
@@ -91,7 +50,6 @@ plays_with_prior_state as (
         lag(source_plays.post_on_second_id) over (
             partition by
                 source_plays.game_pk,
-                source_plays.source_revision_id,
                 source_plays.inning,
                 source_plays.half_inning
             order by source_plays.at_bat_index
@@ -99,7 +57,6 @@ plays_with_prior_state as (
         lag(source_plays.post_on_third_id) over (
             partition by
                 source_plays.game_pk,
-                source_plays.source_revision_id,
                 source_plays.inning,
                 source_plays.half_inning
             order by source_plays.at_bat_index
@@ -113,8 +70,6 @@ plate_appearances as (
     inner join {{ ref("int_plate_appearances") }} as qualifying_plate_appearances
         on
             plays_with_prior_state.game_pk = qualifying_plate_appearances.game_pk
-            and plays_with_prior_state.source_revision_id
-            = qualifying_plate_appearances.source_revision_id
             and plays_with_prior_state.at_bat_index
             = qualifying_plate_appearances.at_bat_index
 ),
@@ -122,7 +77,6 @@ plate_appearances as (
 field_error_exceptions as (
     select
         fielding_credits.game_pk,
-        fielding_credits.source_revision_id,
         fielding_credits.at_bat_index,
         count_if(fielding_credits.credit = 'f_interference') > 0
             as has_interference,
@@ -130,30 +84,21 @@ field_error_exceptions as (
             fielding_credits.credit = 'f_defensive_shift_violation_error'
         ) > 0 as has_defensive_shift_violation
     from {{ ref("stg_fielding_credits") }} as fielding_credits
-    inner join revisions_to_load
-        on
-            fielding_credits.game_pk = revisions_to_load.game_pk
-            and fielding_credits.source_revision_id = revisions_to_load.source_revision_id
     where
         fielding_credits.credit in (
             'f_defensive_shift_violation_error',
             'f_interference'
         )
-    group by 1, 2, 3
+    group by 1, 2
 ),
 
 pitch_counts as (
     select
         pitches.game_pk,
-        pitches.source_revision_id,
         pitches.at_bat_index,
         count(*) as pitch_count
     from {{ ref("stg_pitches") }} as pitches
-    inner join revisions_to_load
-        on
-            pitches.game_pk = revisions_to_load.game_pk
-            and pitches.source_revision_id = revisions_to_load.source_revision_id
-    group by 1, 2, 3
+    group by 1, 2
 ),
 
 classified_plate_appearances as (
@@ -190,13 +135,10 @@ classified_plate_appearances as (
     left join field_error_exceptions
         on
             plate_appearances.game_pk = field_error_exceptions.game_pk
-            and plate_appearances.source_revision_id
-            = field_error_exceptions.source_revision_id
             and plate_appearances.at_bat_index = field_error_exceptions.at_bat_index
     left join pitch_counts
         on
             plate_appearances.game_pk = pitch_counts.game_pk
-            and plate_appearances.source_revision_id = pitch_counts.source_revision_id
             and plate_appearances.at_bat_index = pitch_counts.at_bat_index
 ),
 
@@ -205,21 +147,18 @@ sequenced_plate_appearances as (
         classified_plate_appearances.*,
         row_number() over (
             partition by
-                classified_plate_appearances.game_pk,
-                classified_plate_appearances.source_revision_id
+                classified_plate_appearances.game_pk
             order by classified_plate_appearances.at_bat_index
         ) as plate_appearance_number,
         row_number() over (
             partition by
                 classified_plate_appearances.game_pk,
-                classified_plate_appearances.source_revision_id,
                 classified_plate_appearances.offense_team_id
             order by classified_plate_appearances.at_bat_index
         ) as team_plate_appearance_number,
         row_number() over (
             partition by
                 classified_plate_appearances.game_pk,
-                classified_plate_appearances.source_revision_id,
                 classified_plate_appearances.batter_id
             order by classified_plate_appearances.at_bat_index
         ) as result_batter_plate_appearance_number
@@ -230,15 +169,9 @@ select
     -- keys and grain
     {{ dbt_utils.generate_surrogate_key([
         "game_pk",
-        "source_revision_id",
-        "at_bat_index"
-    ]) }} as plate_appearance_revision_key,
-    {{ dbt_utils.generate_surrogate_key([
-        "game_pk",
         "at_bat_index"
     ]) }} as plate_appearance_key,
     game_pk,
-    source_revision_id,
     at_bat_index,
 
     -- participants
@@ -409,7 +342,5 @@ select
 
     -- metadata
     official_date,
-    projected_at,
-    projection_run_id,
     season
 from sequenced_plate_appearances

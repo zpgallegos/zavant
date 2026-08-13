@@ -1,29 +1,25 @@
 # Zavant dbt project
 
-This directory is the SQL transformation boundary between the revision-aware
-Iceberg tables in the Glue Data Catalog and the semantic and presentation
-layers. The staging layer exposes every analytical dataset at its complete
-revision-aware source grain. Models that need current state select it
-explicitly through `stg_current_game_revisions`; revision-history models retain
-all projected source revisions.
+This directory is the SQL transformation boundary between Glue-published
+current-state Athena views and the semantic and presentation layers. Glue owns
+raw-revision reconciliation; dbt receives one current version of each game and
+models only business grains.
 
 The project currently includes:
 
-- Sources for the 25 projected baseball datasets plus the current-revision
-  spine.
+- Sources for the 25 current-state baseball datasets.
 - One documented staging model for every source table.
 - Grain and required-key tests on each staging model.
-- Singular tests for the persisted relationships among revisions, games,
+- Singular tests for the persisted relationships among games,
   plays, events, pitches, batted balls, runner movements, fielding credits, and
   boxscore player statistics.
-- A freshness check on the current-revision spine.
+- A freshness check on the current games source.
 - Intermediate plate-appearance and at-bat models that isolate official batter
   turns from MLB's broader allPlays stream and reconcile both grains to
   official team-game boxscore totals.
-- An append-only, revision-grained plate-appearance fact that preserves
-  superseded source revisions while exposing governed outcome flags, additive
-  batting measures, matchup attributes, and game state before and after each
-  appearance.
+- A current-state plate-appearance fact exposing governed outcome flags,
+  additive batting measures, matchup attributes, and game state before and
+  after each appearance.
 
 Each analytical table generation is produced by one projection contract.
 Breaking projection releases rebuild the analytical tables and dependent dbt

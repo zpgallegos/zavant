@@ -4,24 +4,17 @@ models:
   - name: stg_games
     description: >-
       Game-level identity, scheduling, status, scoring, venue, weather, rules,
-      and operational information from the projected revision of
-      each MLB game. Its grain is one row per source_revision_id and game_pk.
+      and operational information from the current version of
+      each MLB game. Its grain is one row per game_pk.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
-        description: MLB's stable identifier for the game within the source revision.
+        description: MLB's stable identifier for the game within the game.
         data_type: bigint
         data_tests:
           - not_null
@@ -241,34 +234,10 @@ models:
         data_type: varchar
 
       # metadata
-      - name: feed_timecode
-        description: MLB feed timecode identifying the source response snapshot.
-        data_type: varchar
-
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
 
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
-
-      - name: raw_object_uri
-        description: URI of the immutable raw game JSON used for this row.
-        data_type: varchar
-
       - name: season
         description: MLB season containing the game.
         data_type: integer
-
-      - name: source_observed_at
-        description: UTC timestamp when acquisition observed the raw response.
-        data_type: timestamp
-
-      - name: source_uri
-        description: MLB Stats API endpoint from which the raw response was acquired.
-        data_type: varchar

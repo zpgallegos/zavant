@@ -4,7 +4,6 @@ with runner_movements as (
 
 select
     -- grain
-    runner_movements.source_revision_id,
     runner_movements.game_pk,
     runner_movements.at_bat_index,
     runner_movements.runner_index,
@@ -29,7 +28,5 @@ select
 
     -- metadata
     runner_movements.official_date,
-    runner_movements.projected_at,
-    runner_movements.projection_run_id,
     runner_movements.season
 from runner_movements

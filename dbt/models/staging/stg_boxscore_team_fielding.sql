@@ -4,7 +4,6 @@ with team_fielding as (
 
 select
     -- grain
-    team_fielding.source_revision_id,
     team_fielding.game_pk,
     team_fielding.team_id,
 
@@ -25,7 +24,5 @@ select
 
     -- metadata
     team_fielding.official_date,
-    team_fielding.projected_at,
-    team_fielding.projection_run_id,
     team_fielding.season
 from team_fielding

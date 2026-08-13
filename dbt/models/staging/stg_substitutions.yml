@@ -3,27 +3,20 @@ version: 2
 models:
   - name: stg_substitutions
     description: >-
-      Substitution action events from the projected revision of each
+      Substitution action events from the current version of each
       MLB game, including pitching, offensive, and defensive substitutions and
       defensive switches. Each row identifies the incoming player and any
       supplied replaced player, position, batting-order slot, or base. Its
-      grain is one substitution at source_revision_id, game_pk, at_bat_index, and event_index.
+      grain is one substitution at game_pk, at_bat_index, and event_index.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
               - at_bat_index
               - event_index
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -89,14 +82,6 @@ models:
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
-
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

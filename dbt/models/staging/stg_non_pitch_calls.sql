@@ -4,7 +4,6 @@ with non_pitch_calls as (
 
 select
     -- grain
-    non_pitch_calls.source_revision_id,
     non_pitch_calls.game_pk,
     non_pitch_calls.at_bat_index,
     non_pitch_calls.event_index,
@@ -28,7 +27,5 @@ select
 
     -- metadata
     non_pitch_calls.official_date,
-    non_pitch_calls.projected_at,
-    non_pitch_calls.projection_run_id,
     non_pitch_calls.season
 from non_pitch_calls

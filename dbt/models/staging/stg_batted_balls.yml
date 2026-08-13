@@ -4,25 +4,18 @@ models:
   - name: stg_batted_balls
     description: >-
       Contact measurements and classifications supplied by MLB for pitch
-      events containing hit data in the projected revision of each
-      game. Its grain is one batted-ball event at source_revision_id, game_pk, at_bat_index, and
+      events containing hit data in the current version of each
+      game. Its grain is one batted-ball event at game_pk, at_bat_index, and
       event_index.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
               - at_bat_index
               - event_index
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -86,14 +79,6 @@ models:
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
-
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

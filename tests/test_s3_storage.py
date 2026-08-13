@@ -20,6 +20,17 @@ OBSERVED_AT = datetime(2026, 8, 9, tzinfo=timezone.utc)
 
 
 class S3ObjectBackendTests(unittest.TestCase):
+    def test_overwrite_replaces_a_derived_object_without_a_conditional_write(
+        self,
+    ) -> None:
+        client = FakeS3Client()
+        backend = S3ObjectBackend(client, "example-bucket", "lake")
+
+        backend.overwrite("control/marker.json", b"first")
+        backend.overwrite("control/marker.json", b"second")
+
+        self.assertEqual(backend.read("control/marker.json"), b"second")
+
     def test_conditional_update_rejects_a_stale_writer(self) -> None:
         client = FakeS3Client()
         first = S3ObjectBackend(client, "example-bucket", "lake")

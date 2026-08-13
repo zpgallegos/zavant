@@ -42,7 +42,7 @@ The same logical boundaries work locally and in the cloud. Local development
 uses atomic filesystem publication. Production uses the same logical keys and
 persistence state machines over S3, with ETag preconditions protecting mutable
 objects. A Lambda composes the acquisition run; explicit Python mappings project
-current source revisions into revision-aware analytical tables. Local Parquet
+every source revision into revision-aware analytical tables. Local Parquet
 runs exercise those contracts without AWS. A Glue Spark job independently
 reconciles every current pointer against its completed-revision registry and
 merges missing revisions into Iceberg v2. EventBridge Scheduler starts one
@@ -91,8 +91,9 @@ the workflow reports the retained acquisition error.
   Iceberg format version 2 in S3 and the Glue Data Catalog for Athena access.
 - Production projection scans every immutable raw revision rather than relying
   on the preceding acquisition manifest. The terminal `games` merge makes
-  retries repair partial multi-table publication, while
-  `current_game_revisions` gives dbt an explicit current-state join.
+  retries repair partial multi-table publication. Glue-owned `current_*`
+  Athena views resolve `current_game_revisions` and give dbt business-grained
+  current state without revision keys.
 - The daily workflow stack owns EventBridge Scheduler and the Step Functions
   Standard workflow that sequences acquisition and one batch Glue projection;
   later dbt execution can become a subsequent state.

@@ -4,7 +4,6 @@ with players as (
 
 select
     -- grain
-    players.source_revision_id,
     players.game_pk,
     players.player_id,
     players.team_id,
@@ -57,7 +56,5 @@ select
 
     -- metadata
     players.official_date,
-    players.projected_at,
-    players.projection_run_id,
     players.season
 from players

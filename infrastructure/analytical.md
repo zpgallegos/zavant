@@ -45,11 +45,37 @@ aws glue get-job-run \
   --run-id <job-run-id>
 ```
 
-The first run creates 25 analytical Iceberg tables plus
-`current_game_revisions` in `zavant_analytical_prod`. The `games` table is
-written last and acts as the revision-completion marker. A successful rerun
-with no newly landed revisions should report zero projected revisions while
-still reconciling the current-revision mapping.
+The first run creates 25 revision-aware analytical Iceberg tables,
+`current_game_revisions`, and 25 ordinary Athena views named `current_<table>`
+in `zavant_analytical_prod`. The views expose explicit business columns and
+resolve each history table through the current-revision mapping; dbt consumes
+these views without handling revision or projection identifiers. The `games`
+history table is written last and acts as the revision-completion marker.
+
+The job creates or replaces the current views through the `primary` Athena
+workgroup, then updates the current-revision mapping. View DDL writes query
+metadata beneath `lake/analytical/athena-results/projection-views/`. A
+successful rerun with no newly landed revisions should report zero projected
+revisions while still reconciling the current mapping; unchanged view
+definitions are reused.
+
+Steady-state runs avoid repeated catalog work. Glue inventories the catalog
+once, creates only missing Iceberg tables, and still validates every table
+against its exact Python contract. One S3 listing classifies both immutable
+revision metadata and current pointers. Pointer objects older than their
+successfully reconciled Iceberg mapping are not downloaded; new or changed
+pointers and a five-minute overlap are validated with bounded concurrent reads.
+The overlap protects updates near an S3 timestamp/reconciliation boundary. The full immutable
+revision inventory is still anti-joined to `games`, so this optimization does
+not make correctness depend on the preceding acquisition run.
+
+Current-view definitions are content-fingerprinted beneath
+`lake/analytical/control/current-views.json`. The 25 Athena DDL statements run
+only when a definition changes, the marker is absent, or a catalog view is
+missing. Iceberg MERGEs include `season` in their match predicate to enable
+partition pruning. Timed phase messages in the Glue output log expose catalog,
+schema, S3 inventory, pointer resolution, completion scan, table merge, view,
+and current-mapping costs independently.
 
 Each analytical generation supports one projection contract. Before deploying
 a new contract release, delete both the Glue Catalog tables and analytical

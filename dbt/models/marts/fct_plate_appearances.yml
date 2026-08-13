@@ -1,53 +1,31 @@
 version: 2
 
 models:
-  - name: fct_plate_appearances_revisions
+  - name: fct_plate_appearances
     description: >-
-      Append-only history of official plate appearances for every successfully
-      projected raw-game revision. Each incremental run appends complete source
-      revisions that are not already represented; it never mutates facts from
-      an earlier revision. The physical grain is game_pk, source_revision_id,
-      and at_bat_index. Consumers that need only
-      current game state must join game_pk and source_revision_id to
-      stg_current_game_revisions. Changes to this model's transformation logic
-      require an intentional full refresh so previously loaded revisions are
-      rebuilt consistently.
+      Current official plate appearances derived from Glue-published game
+      state. The physical grain is game_pk and at_bat_index. The table is
+      rebuilt so a corrected MLB game replaces its earlier analytical state.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
               - game_pk
-              - source_revision_id
               - at_bat_index
     columns:
       # keys and grain
-      - name: plate_appearance_revision_key
+      - name: plate_appearance_key
         description: >-
-          Deterministic surrogate key for one physical plate-appearance
-          revision, generated from the complete natural grain.
+          Deterministic key generated from game_pk and the source
+          at_bat_index. The source index is not renumbered after qualification.
         data_type: varchar
         data_tests:
           - not_null
           - unique
 
-      - name: plate_appearance_key
-        description: >-
-          Deterministic key for the game and source at_bat_index, suitable for
-          identifying the corresponding logical source position across
-          revisions. The source index is not renumbered after qualification.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
-        data_tests:
-          - not_null
-
-      - name: source_revision_id
-        description: SHA-256 content identity of the immutable raw game response.
-        data_type: varchar
         data_tests:
           - not_null
 
@@ -89,17 +67,17 @@ models:
 
       # sequence and game state
       - name: plate_appearance_number
-        description: One-based sequence of the plate appearance within the game revision.
+        description: One-based sequence of the plate appearance within the game.
         data_type: bigint
 
       - name: team_plate_appearance_number
-        description: One-based sequence of the batting team's plate appearances in the game revision.
+        description: One-based sequence of the batting team's plate appearances in the game.
         data_type: bigint
 
       - name: result_batter_plate_appearance_number
         description: >-
           One-based sequence of terminal results associated with the result
-          batter in the game revision.
+          batter in the game.
         data_type: bigint
 
       - name: inning
@@ -440,14 +418,6 @@ models:
         data_type: date
         data_tests:
           - not_null
-
-      - name: projected_at
-        description: UTC timestamp when the raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected the revision.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

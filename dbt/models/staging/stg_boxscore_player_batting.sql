@@ -4,7 +4,6 @@ with player_batting as (
 
 select
     -- grain
-    player_batting.source_revision_id,
     player_batting.game_pk,
     player_batting.player_id,
     player_batting.team_id,
@@ -50,7 +49,5 @@ select
 
     -- metadata
     player_batting.official_date,
-    player_batting.projected_at,
-    player_batting.projection_run_id,
     player_batting.season
 from player_batting

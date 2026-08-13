@@ -3,25 +3,18 @@ version: 2
 models:
   - name: stg_game_teams
     description: >-
-      Away and home team snapshots from the projected revision of
+      Away and home team snapshots from the current version of
       each MLB game. Each row combines team identity and organizational
       attributes with the record and game score reported by MLB. Its grain is
-      one team side per source_revision_id and game_pk.
+      one team side per game_pk.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
               - team_side
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -139,14 +132,6 @@ models:
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
-
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

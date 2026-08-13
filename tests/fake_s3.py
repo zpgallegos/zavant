@@ -2,6 +2,7 @@
 
 from hashlib import sha256
 from io import BytesIO
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 
@@ -14,9 +15,13 @@ class FakeS3Error(Exception):
 class FakeS3Client:
     def __init__(self, page_size: int = 1000) -> None:
         self.objects: Dict[Tuple[str, str], bytes] = {}
+        self.modified_at: Dict[Tuple[str, str], datetime] = {}
         self.page_size = page_size
+        self.get_object_calls = 0
+        self.list_objects_v2_calls = 0
 
     def get_object(self, **kwargs: Any) -> Dict[str, Any]:
+        self.get_object_calls += 1
         identity = self._identity(kwargs)
         try:
             content = self.objects[identity]
@@ -46,9 +51,11 @@ class FakeS3Client:
         if not isinstance(body, bytes):
             raise TypeError("Body must be bytes")
         self.objects[identity] = body
+        self.modified_at[identity] = datetime.now(timezone.utc)
         return {"ETag": self._etag(body)}
 
     def list_objects_v2(self, **kwargs: Any) -> Dict[str, Any]:
+        self.list_objects_v2_calls += 1
         bucket = kwargs.get("Bucket")
         prefix = kwargs.get("Prefix", "")
         token = kwargs.get("ContinuationToken")
@@ -64,7 +71,16 @@ class FakeS3Client:
         next_offset = offset + len(page)
         truncated = next_offset < len(keys)
         response: Dict[str, Any] = {
-            "Contents": [{"Key": key} for key in page],
+            "Contents": [
+                {
+                    "Key": key,
+                    "LastModified": self.modified_at.get(
+                        (bucket, key),
+                        datetime(2000, 1, 1, tzinfo=timezone.utc),
+                    ),
+                }
+                for key in page
+            ],
             "IsTruncated": truncated,
         }
         if truncated:

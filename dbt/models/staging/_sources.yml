@@ -2,11 +2,12 @@ version: 2
 
 sources:
   - name: zavant_analytical_prod
-    description: Revision-aware MLB datasets projected by the Zavant Glue job.
+    description: Current-state MLB datasets published by the Zavant Glue job.
     database: awsdatacatalog
     schema: zavant_analytical_prod
     tables:
-      - name: current_game_revisions
+      - name: games
+        identifier: current_games
         config:
           freshness:
             warn_after:
@@ -17,27 +18,50 @@ sources:
               period: hour
           loaded_at_field: reconciled_at
       - name: actions
+        identifier: current_actions
       - name: batted_balls
+        identifier: current_batted_balls
       - name: disengagements
+        identifier: current_disengagements
       - name: fielding_credits
+        identifier: current_fielding_credits
       - name: game_decisions
+        identifier: current_game_decisions
       - name: game_officials
+        identifier: current_game_officials
       - name: game_teams
-      - name: games
+        identifier: current_game_teams
       - name: innings
+        identifier: current_innings
       - name: non_pitch_calls
+        identifier: current_non_pitch_calls
       - name: pitches
+        identifier: current_pitches
       - name: play_events
+        identifier: current_play_events
       - name: player_batting
+        identifier: current_player_batting
       - name: player_fielding
+        identifier: current_player_fielding
       - name: player_pitching
+        identifier: current_player_pitching
       - name: player_positions
+        identifier: current_player_positions
       - name: players
+        identifier: current_players
       - name: plays
+        identifier: current_plays
       - name: reviews
+        identifier: current_reviews
       - name: rule_violations
+        identifier: current_rule_violations
       - name: runner_movements
+        identifier: current_runner_movements
       - name: substitutions
+        identifier: current_substitutions
       - name: team_batting
+        identifier: current_team_batting
       - name: team_fielding
+        identifier: current_team_fielding
       - name: team_pitching
+        identifier: current_team_pitching

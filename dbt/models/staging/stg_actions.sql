@@ -4,7 +4,6 @@ with actions as (
 
 select
     -- grain
-    actions.source_revision_id,
     actions.game_pk,
     actions.at_bat_index,
     actions.event_index,
@@ -36,7 +35,5 @@ select
 
     -- metadata
     actions.official_date,
-    actions.projected_at,
-    actions.projection_run_id,
     actions.season
 from actions

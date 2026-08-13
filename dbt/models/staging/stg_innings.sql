@@ -4,7 +4,6 @@ with innings as (
 
 select
     -- grain
-    innings.source_revision_id,
     innings.game_pk,
     innings.inning_number,
 
@@ -21,7 +20,5 @@ select
 
     -- metadata
     innings.official_date,
-    innings.projected_at,
-    innings.projection_run_id,
     innings.season
 from innings

@@ -4,7 +4,6 @@ with games as (
 
 select
     -- grain
-    games.source_revision_id,
     games.game_pk,
 
     -- attributes
@@ -63,12 +62,6 @@ select
     games.wind,
 
     -- metadata
-    games.feed_timecode,
     games.official_date,
-    games.projected_at,
-    games.projection_run_id,
-    games.raw_object_uri,
-    games.season,
-    games.source_observed_at,
-    games.source_uri
+    games.season
 from games

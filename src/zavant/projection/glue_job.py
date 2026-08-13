@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import import_module
 import logging
 import sys
-from typing import Any, Dict, Iterable, Iterator, Mapping, Sequence, Set, cast
+from time import monotonic
+from typing import Any, Dict, Iterable, Iterator, Mapping, Protocol, Sequence, Set, cast
 from uuid import UUID, uuid4
 
 from zavant.projection.contracts import (
@@ -17,10 +19,15 @@ from zavant.projection.contracts import (
     TableContract,
     TABLE_CONTRACTS,
 )
+from zavant.projection.current_views import (
+    AthenaClient,
+    current_views_need_publication,
+    publish_current_views,
+    record_current_view_publication,
+)
 from zavant.projection.iceberg import (
     CURRENT_REVISION_CONTRACT,
     all_iceberg_contracts,
-    create_database_sql,
     create_table_sql,
     merge_table_sql,
     qualified_table,
@@ -29,16 +36,25 @@ from zavant.projection.models import GameProjection
 from zavant.projection.projector import project_game
 from zavant.projection.s3_sources import (
     CompletedProjection,
+    CurrentRevisionCacheEntry,
     ProjectionRevision,
-    discover_current_revisions,
-    discover_revisions,
+    discover_projection_inventory,
     load_projection_source,
     pending_revisions,
+    resolve_current_revisions,
+    validate_current_revisions,
 )
 from zavant.storage.s3_objects import S3Client, S3ObjectBackend
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+class GlueCatalogClient(Protocol):
+    """Subset of the Boto3 Glue client used to inspect catalog tables."""
+
+    def get_tables(self, **kwargs: Any) -> Dict[str, Any]:
+        ...
 
 
 @dataclass(frozen=True)
@@ -49,6 +65,7 @@ class GlueProjectionConfiguration:
     database: str
     prefix: str = "lake"
     catalog: str = "glue_catalog"
+    athena_workgroup: str = "primary"
     max_projection_partitions: int = 64
 
     def __post_init__(self) -> None:
@@ -56,6 +73,8 @@ class GlueProjectionConfiguration:
             raise ValueError("bucket must be a non-empty S3 bucket name")
         if not self.database:
             raise ValueError("database must not be empty")
+        if not self.athena_workgroup:
+            raise ValueError("athena_workgroup must not be empty")
         if self.max_projection_partitions <= 0:
             raise ValueError("max_projection_partitions must be positive")
 
@@ -65,6 +84,20 @@ class GlueProjectionConfiguration:
             part for part in (self.prefix.strip("/"), "analytical", "iceberg") if part
         )
         return f"s3://{self.bucket}/{suffix}"
+
+    @property
+    def athena_output_uri(self) -> str:
+        suffix = "/".join(
+            part
+            for part in (
+                self.prefix.strip("/"),
+                "analytical",
+                "athena-results",
+                "projection-views",
+            )
+            if part
+        )
+        return f"s3://{self.bucket}/{suffix}/"
 
 
 @dataclass(frozen=True)
@@ -88,6 +121,8 @@ class GlueProjectionResult:
 def run_glue_projection(
     spark: Any,
     s3_client: S3Client,
+    athena_client: AthenaClient,
+    glue_client: GlueCatalogClient,
     configuration: GlueProjectionConfiguration,
     run_id: UUID,
     projected_at: datetime,
@@ -103,22 +138,41 @@ def run_glue_projection(
         raise ValueError("projected_at must be timezone-aware")
     projected_at_utc = projected_at.astimezone(timezone.utc)
     spark.conf.set("spark.sql.session.timeZone", "UTC")
-    _ensure_tables(spark, configuration)
-    _validate_projection_release(spark, configuration)
+    with _timed_phase("catalog_inventory"):
+        existing_tables = _existing_catalog_tables(
+            glue_client,
+            configuration.database,
+        )
+    with _timed_phase("table_ensure_and_schema_validation"):
+        _ensure_tables(spark, configuration, existing_tables)
 
     backend = S3ObjectBackend(
         s3_client,
         configuration.bucket,
         configuration.prefix,
     )
-    revisions = discover_revisions(backend)
-    current = discover_current_revisions(backend)
-    completed = _completed_projections(spark, configuration)
+    with _timed_phase("current_revision_cache"):
+        current_cache = _current_revision_cache(spark, configuration)
+    with _timed_phase("s3_projection_inventory"):
+        inventory = discover_projection_inventory(backend)
+    with _timed_phase("current_pointer_resolution"):
+        current_discovery = resolve_current_revisions(
+            backend,
+            inventory.current_pointers,
+            current_cache,
+        )
+    with _timed_phase("completed_revision_scan"):
+        completed = _completed_projections(spark, configuration)
+    revisions = inventory.revisions
+    current = current_discovery.revisions
+    validate_current_revisions(revisions, current)
     pending = pending_revisions(revisions, completed)
     LOGGER.info(
-        "projection reconciliation discovered revisions=%d current=%d pending=%d",
+        "projection reconciliation discovered revisions=%d current=%d "
+        "pointers_read=%d pending=%d",
         len(revisions),
         len(current),
+        len(current_discovery.refreshed),
         len(pending),
     )
 
@@ -148,9 +202,35 @@ def run_glue_projection(
                     lambda projection, name=contract.name: projection.table_rows[name]
                 )
                 dataframe = spark.createDataFrame(rows, _spark_schema(contract.columns))
-                _merge_dataframe(spark, configuration, contract, dataframe)
+                with _timed_phase(f"merge_{contract.name}"):
+                    _merge_dataframe(spark, configuration, contract, dataframe)
         finally:
             projection_rdd.unpersist()
+
+    with _timed_phase("current_view_publication"):
+        expected_history_tables = {
+            contract.name
+            for contract in all_iceberg_contracts(TABLE_CONTRACTS.values())
+        }
+        view_catalog = (
+            existing_tables
+            if expected_history_tables.issubset(existing_tables)
+            else set()
+        )
+        if current_views_need_publication(
+            backend,
+            configuration.database,
+            view_catalog,
+        ):
+            publish_current_views(
+                athena_client,
+                configuration.database,
+                configuration.athena_workgroup,
+                configuration.athena_output_uri,
+            )
+            record_current_view_publication(backend, configuration.database)
+        else:
+            LOGGER.info("current analytical view definitions are unchanged")
 
     current_rows = [
         {
@@ -165,12 +245,13 @@ def run_glue_projection(
         for revision in current
     ]
     if current_rows:
-        _merge_rows(
-            spark,
-            configuration,
-            CURRENT_REVISION_CONTRACT,
-            current_rows,
-        )
+        with _timed_phase("current_revision_merge"):
+            _merge_rows(
+                spark,
+                configuration,
+                CURRENT_REVISION_CONTRACT,
+                current_rows,
+            )
     return GlueProjectionResult(
         run_id=run_id,
         current_revision_count=len(current),
@@ -188,6 +269,7 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> None:
     parser.add_argument("--prefix", default="lake")
     parser.add_argument("--database", required=True)
     parser.add_argument("--catalog", default="glue_catalog")
+    parser.add_argument("--athena-workgroup", default="primary")
     parser.add_argument("--max-projection-partitions", type=int, default=64)
     arguments, _ = parser.parse_known_args(argv)
 
@@ -198,11 +280,14 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> None:
         prefix=arguments.prefix,
         database=arguments.database,
         catalog=arguments.catalog,
+        athena_workgroup=arguments.athena_workgroup,
         max_projection_partitions=arguments.max_projection_partitions,
     )
     result = run_glue_projection(
         spark=spark_session,
         s3_client=cast(S3Client, boto3.client("s3")),
+        athena_client=cast(AthenaClient, boto3.client("athena")),
+        glue_client=cast(GlueCatalogClient, boto3.client("glue")),
         configuration=configuration,
         run_id=uuid4(),
         projected_at=datetime.now(timezone.utc),
@@ -227,19 +312,49 @@ def _project_partition(
         )
 
 
-def _ensure_tables(spark: Any, configuration: GlueProjectionConfiguration) -> None:
-    spark.sql(create_database_sql(configuration.catalog, configuration.database))
+def _ensure_tables(
+    spark: Any,
+    configuration: GlueProjectionConfiguration,
+    existing_tables: Set[str],
+) -> None:
     contracts = all_iceberg_contracts(TABLE_CONTRACTS.values())
     for contract in contracts:
-        spark.sql(
-            create_table_sql(
-                configuration.catalog,
-                configuration.database,
-                contract,
-                configuration.warehouse_uri,
+        if contract.name not in existing_tables:
+            spark.sql(
+                create_table_sql(
+                    configuration.catalog,
+                    configuration.database,
+                    contract,
+                    configuration.warehouse_uri,
+                )
             )
-        )
         _validate_table_schema(spark, configuration, contract)
+
+
+def _existing_catalog_tables(
+    client: GlueCatalogClient,
+    database: str,
+) -> Set[str]:
+    names = set()
+    next_token: str | None = None
+    while True:
+        request: Dict[str, Any] = {"DatabaseName": database}
+        if next_token is not None:
+            request["NextToken"] = next_token
+        response = client.get_tables(**request)
+        tables = response.get("TableList")
+        if not isinstance(tables, list):
+            raise RuntimeError("Glue returned no catalog table list")
+        for table in tables:
+            if not isinstance(table, dict) or not isinstance(table.get("Name"), str):
+                raise RuntimeError("Glue returned invalid catalog table metadata")
+            names.add(table["Name"])
+        token = response.get("NextToken")
+        if token is None:
+            return names
+        if not isinstance(token, str) or not token:
+            raise RuntimeError("Glue returned an invalid catalog continuation token")
+        next_token = token
 
 
 def _validate_table_schema(
@@ -308,10 +423,48 @@ def _completed_projections(
             TABLE_CONTRACTS["games"].name,
         )
     )
-    return {
-        (int(row["game_pk"]), str(row["source_revision_id"]))
-        for row in table.select("game_pk", "source_revision_id").collect()
-    }
+    completed = set()
+    versions = set()
+    for row in table.select(
+        "game_pk",
+        "source_revision_id",
+        "projection_contract_version",
+    ).collect():
+        completed.add((int(row["game_pk"]), str(row["source_revision_id"])))
+        versions.add(str(row["projection_contract_version"]))
+    _validate_projection_versions(versions)
+    return completed
+
+
+def _current_revision_cache(
+    spark: Any,
+    configuration: GlueProjectionConfiguration,
+) -> Dict[int, CurrentRevisionCacheEntry]:
+    table = spark.table(
+        qualified_table(
+            configuration.catalog,
+            configuration.database,
+            CURRENT_REVISION_CONTRACT.name,
+        )
+    )
+    cache = {}
+    for row in table.select(
+        "game_pk",
+        "season",
+        "source_revision_id",
+        "reconciled_at",
+    ).collect():
+        reconciled_at = cast(datetime, row["reconciled_at"])
+        if reconciled_at.utcoffset() is None:
+            reconciled_at = reconciled_at.replace(tzinfo=timezone.utc)
+        game_pk = int(row["game_pk"])
+        cache[game_pk] = CurrentRevisionCacheEntry(
+            game_pk=game_pk,
+            season=int(row["season"]),
+            revision_id=str(row["source_revision_id"]),
+            reconciled_at=reconciled_at.astimezone(timezone.utc),
+        )
+    return cache
 
 
 def _validate_projection_release(
@@ -331,6 +484,10 @@ def _validate_projection_release(
         str(row["projection_contract_version"])
         for row in table.select("projection_contract_version").distinct().collect()
     }
+    _validate_projection_versions(observed)
+
+
+def _validate_projection_versions(observed: Set[str]) -> None:
     incompatible = observed - {PROJECTION_CONTRACT_VERSION}
     if incompatible:
         raise RuntimeError(
@@ -416,6 +573,19 @@ def _spark_type_name(column: Column) -> str:
         "string": "string",
         "timestamp": "timestamp",
     }[column.kind]
+
+
+@contextmanager
+def _timed_phase(name: str) -> Iterator[None]:
+    started = monotonic()
+    try:
+        yield
+    finally:
+        LOGGER.info(
+            "projection phase=%s elapsed_seconds=%.3f",
+            name,
+            monotonic() - started,
+        )
 
 
 if __name__ == "__main__":

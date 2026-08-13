@@ -4,7 +4,6 @@ with player_positions as (
 
 select
     -- grain
-    player_positions.source_revision_id,
     player_positions.game_pk,
     player_positions.player_id,
     player_positions.team_id,
@@ -19,7 +18,5 @@ select
 
     -- metadata
     player_positions.official_date,
-    player_positions.projected_at,
-    player_positions.projection_run_id,
     player_positions.season
 from player_positions

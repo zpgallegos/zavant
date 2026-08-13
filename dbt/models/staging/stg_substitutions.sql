@@ -4,7 +4,6 @@ with substitutions as (
 
 select
     -- grain
-    substitutions.source_revision_id,
     substitutions.game_pk,
     substitutions.at_bat_index,
     substitutions.event_index,
@@ -23,7 +22,5 @@ select
 
     -- metadata
     substitutions.official_date,
-    substitutions.projected_at,
-    substitutions.projection_run_id,
     substitutions.season
 from substitutions

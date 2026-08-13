@@ -1,5 +1,7 @@
 """Minimal conditional S3 object and path machinery for storage adapters."""
 
+from dataclasses import dataclass
+from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional, Protocol, Tuple, Union
@@ -23,6 +25,14 @@ class S3Client(Protocol):
 
 class S3ObjectWriteConflictError(OSError):
     """Raised when an S3 conditional write observes competing state."""
+
+
+@dataclass(frozen=True)
+class S3ObjectSummary:
+    """Logical key and modification time returned by an S3 listing."""
+
+    key: str
+    last_modified: Optional[datetime]
 
 
 class S3ObjectBackend:
@@ -162,6 +172,26 @@ class S3ObjectBackend:
             raise OSError(f"failed to write S3 object {self.uri(key)}") from exc
         self._observed_versions[key] = self._etag(response)
 
+    def overwrite(self, key: str, content: bytes) -> None:
+        """Publish bytes without coordinating with another writer.
+
+        This is appropriate only for derived, replaceable objects whose writers do
+        not need compare-and-swap semantics. State such as revision pointers and
+        watermarks must use :meth:`write` instead.
+        """
+
+        request: Dict[str, Any] = {
+            "Body": content,
+            "Bucket": self.bucket,
+            "ContentType": "application/json",
+            "Key": self._full_key(key),
+        }
+        try:
+            response = self.client.put_object(**request)
+        except Exception as exc:
+            raise OSError(f"failed to overwrite S3 object {self.uri(key)}") from exc
+        self._observed_versions[key] = self._etag(response)
+
     def list(self, key_pattern: str) -> Tuple[str, ...]:
         """List logical keys matching a relative glob pattern.
 
@@ -176,9 +206,18 @@ class S3ObjectBackend:
         """
 
         static_prefix = key_pattern.split("*", 1)[0]
-        request_prefix = self._full_key(static_prefix)
+        return tuple(
+            summary.key
+            for summary in self.list_objects(static_prefix)
+            if fnmatch(summary.key, key_pattern)
+        )
+
+    def list_objects(self, key_prefix: str) -> Tuple[S3ObjectSummary, ...]:
+        """List object keys and modification times below a logical prefix."""
+
+        request_prefix = self._full_key(key_prefix)
         continuation_token: Optional[str] = None
-        matches = []
+        objects = []
         while True:
             request: Dict[str, Any] = {
                 "Bucket": self.bucket,
@@ -190,22 +229,26 @@ class S3ObjectBackend:
                 response = self.client.list_objects_v2(**request)
             except Exception as exc:
                 raise OSError(
-                    f"failed to list S3 objects below {self.uri(static_prefix)}"
+                    f"failed to list S3 objects below {self.uri(key_prefix)}"
                 ) from exc
             for entry in self._contents(response):
                 full_key = entry.get("Key")
                 if not isinstance(full_key, str):
                     raise OSError("S3 listing contains an invalid key")
                 logical_key = self._logical_key(full_key)
-                if fnmatch(logical_key, key_pattern):
-                    matches.append(logical_key)
+                last_modified = entry.get("LastModified")
+                if last_modified is not None and not isinstance(
+                    last_modified, datetime
+                ):
+                    raise OSError("S3 listing contains an invalid modification time")
+                objects.append(S3ObjectSummary(logical_key, last_modified))
             if not response.get("IsTruncated", False):
                 break
             token = response.get("NextContinuationToken")
             if not isinstance(token, str) or not token:
                 raise OSError("truncated S3 listing has no continuation token")
             continuation_token = token
-        return tuple(sorted(matches))
+        return tuple(sorted(objects, key=lambda item: item.key))
 
     def _full_key(self, key: str) -> str:
         normalized_key = key.strip("/")

@@ -4,7 +4,6 @@ with fielding_credits as (
 
 select
     -- grain
-    fielding_credits.source_revision_id,
     fielding_credits.game_pk,
     fielding_credits.at_bat_index,
     fielding_credits.runner_index,
@@ -21,7 +20,5 @@ select
 
     -- metadata
     fielding_credits.official_date,
-    fielding_credits.projected_at,
-    fielding_credits.projection_run_id,
     fielding_credits.season
 from fielding_credits

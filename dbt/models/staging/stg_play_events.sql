@@ -4,7 +4,6 @@ with play_events as (
 
 select
     -- grain
-    play_events.source_revision_id,
     play_events.game_pk,
     play_events.at_bat_index,
     play_events.event_index,
@@ -44,7 +43,5 @@ select
 
     -- metadata
     play_events.official_date,
-    play_events.projected_at,
-    play_events.projection_run_id,
     play_events.season
 from play_events

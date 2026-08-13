@@ -7,32 +7,19 @@ models:
       plays. The model excludes independent baserunning, pitching, and advisory
       plays that MLB also emits in allPlays with an at_bat_index. Qualification
       is based on terminal event types and reconciles to MLB's official
-      team-game plate-appearance totals. Its grain remains the source key of
-      source_revision_id, game_pk, and at_bat_index; filtered rows are not
+      team-game plate-appearance totals. Its grain is game_pk and
+      at_bat_index; filtered rows are not
       renumbered.
-    config:
-      materialized: table
-      table_type: iceberg
-      format: parquet
-      partitioned_by:
-        - season
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
               - at_bat_index
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
-        description: MLB's stable identifier for the game within the source revision.
+        description: MLB's stable identifier for the game.
         data_type: bigint
         data_tests:
           - not_null
@@ -191,14 +178,6 @@ models:
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
-
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

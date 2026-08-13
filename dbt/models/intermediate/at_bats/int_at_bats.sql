@@ -5,7 +5,6 @@ with non_at_bat_field_errors as (
     -- in the final filter.
 
     select distinct
-        source_revision_id,
         game_pk,
         at_bat_index
     from {{ ref("stg_fielding_credits") }}
@@ -22,7 +21,6 @@ plate_appearances as (
 
 select
     -- grain
-    plate_appearances.source_revision_id,
     plate_appearances.game_pk,
     plate_appearances.at_bat_index,
 
@@ -63,14 +61,11 @@ select
 
     -- metadata
     plate_appearances.official_date,
-    plate_appearances.projected_at,
-    plate_appearances.projection_run_id,
     plate_appearances.season
 from plate_appearances
 left join non_at_bat_field_errors
     on
-        plate_appearances.source_revision_id = non_at_bat_field_errors.source_revision_id
-        and plate_appearances.game_pk = non_at_bat_field_errors.game_pk
+        plate_appearances.game_pk = non_at_bat_field_errors.game_pk
         and plate_appearances.at_bat_index = non_at_bat_field_errors.at_bat_index
 where
     plate_appearances.event_type not in (

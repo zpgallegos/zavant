@@ -1,7 +1,6 @@
 with derived_statistics as (
     select
         game_pk,
-        source_revision_id,
         offense_team_id as team_id,
         sum(plate_appearance_count) as plate_appearances,
         sum(at_bat_count) as at_bats,
@@ -14,14 +13,13 @@ with derived_statistics as (
         sum(sac_bunt_count) as sac_bunts,
         sum(sac_fly_count) as sac_flies,
         sum(coalesce(rbi, 0)) as rbi
-    from {{ ref("fct_plate_appearances_revisions") }}
-    group by 1, 2, 3
+    from {{ ref("fct_plate_appearances") }}
+    group by 1, 2
 ),
 
 official_statistics as (
     select
         player_batting.game_pk,
-        player_batting.source_revision_id,
         player_batting.team_id,
         sum(player_batting.plate_appearances) as plate_appearances,
         sum(player_batting.at_bats) as at_bats,
@@ -35,14 +33,12 @@ official_statistics as (
         sum(player_batting.sac_flies) as sac_flies,
         sum(player_batting.rbi) as rbi
     from {{ ref("stg_boxscore_player_batting") }} as player_batting
-    group by 1, 2, 3
+    group by 1, 2
 ),
 
 reconciled as (
     select
         coalesce(derived_counts.game_pk, official_counts.game_pk) as game_pk,
-        coalesce(derived_counts.source_revision_id, official_counts.source_revision_id)
-            as source_revision_id,
         coalesce(derived_counts.team_id, official_counts.team_id) as team_id,
         coalesce(derived_counts.plate_appearances, 0) as derived_plate_appearances,
         coalesce(official_counts.plate_appearances, 0) as official_plate_appearances,
@@ -70,7 +66,6 @@ reconciled as (
     full outer join official_statistics as official_counts
         on
             derived_counts.game_pk = official_counts.game_pk
-            and derived_counts.source_revision_id = official_counts.source_revision_id
             and derived_counts.team_id = official_counts.team_id
 )
 

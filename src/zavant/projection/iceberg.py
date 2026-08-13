@@ -71,8 +71,12 @@ def merge_table_sql(
 
     target = qualified_table(catalog, database, contract.name)
     source = f"`{_identifier(source_view)}`"
+    predicate_columns = (
+        *contract.primary_key,
+        *(("season",) if "season" not in contract.primary_key else ()),
+    )
     predicate = " AND ".join(
-        f"target.`{column}` = source.`{column}`" for column in contract.primary_key
+        f"target.`{column}` = source.`{column}`" for column in predicate_columns
     )
     assignments = ",\n  ".join(
         f"target.`{column.name}` = source.`{column.name}`"

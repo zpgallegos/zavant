@@ -23,4 +23,5 @@ clean-targets:
   - dbt_packages
 
 models:
-  zavant_analytics: {}
+  zavant_analytics:
+    +materialized: view

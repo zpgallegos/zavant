@@ -3,25 +3,18 @@ version: 2
 models:
   - name: stg_boxscore_game_officials
     description: >-
-      Officials assigned by MLB in the projected revision of each
+      Officials assigned by MLB in the current version of each
       game's boxscore, typically the umpiring crew and each member's on-field
-      role. Its grain is one ordered official assignment at source_revision_id,
-      game_pk, and official_index.
+      role. Its grain is one ordered official assignment at game_pk and
+      official_index.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
               - official_index
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -51,14 +44,6 @@ models:
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
-
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,20 +8,34 @@ from uuid import UUID
 
 from zavant.contracts.raw_game import RawGameResponse
 from zavant.projection.contracts import TABLE_CONTRACTS
+from zavant.projection.current_views import (
+    PRIVATE_COLUMNS,
+    all_current_views,
+    create_current_view_sql,
+    current_views_need_publication,
+    publish_current_views,
+    record_current_view_publication,
+)
 from zavant.projection.glue_job import (
     GlueProjectionConfiguration,
     _analytical_merge_contracts,
+    _ensure_tables,
     _schema_drift_details,
     _validate_projection_release,
     run_glue_projection,
 )
 from zavant.projection.iceberg import create_table_sql, merge_table_sql
 from zavant.projection.s3_sources import (
+    CurrentRevisionCacheEntry,
+    CurrentRevisionDiscovery,
+    ProjectionInventory,
     ProjectionRevision,
     discover_current_revisions,
+    discover_projection_inventory,
     discover_revisions,
     load_projection_source,
     pending_revisions,
+    resolve_current_revisions,
 )
 from zavant.projection.models import GameProjection
 from zavant.storage.bundles import s3_acquisition_storage
@@ -119,6 +133,36 @@ class S3ProjectionSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid current pointer"):
             discover_current_revisions(self.backend)
 
+    def test_single_inventory_classifies_revisions_and_current_pointers(self) -> None:
+        inventory = discover_projection_inventory(self.backend)
+
+        self.assertEqual(len(inventory.revisions), 1)
+        self.assertEqual(len(inventory.current_pointers), 1)
+        self.assertEqual(inventory.current_pointers[0].game_pk, self.game.game_pk)
+
+    def test_current_pointer_cache_avoids_unchanged_object_read(self) -> None:
+        inventory = discover_projection_inventory(self.backend)
+        pointer = inventory.current_pointers[0]
+        cache = {
+            self.game.game_pk: CurrentRevisionCacheEntry(
+                game_pk=self.game.game_pk,
+                season=self.game.season,
+                revision_id=self.landed.revision_id,
+                reconciled_at=pointer.last_modified + timedelta(minutes=10),
+            )
+        }
+        reads_before = self.client.get_object_calls
+
+        discovery = resolve_current_revisions(
+            self.backend,
+            inventory.current_pointers,
+            cache,
+        )
+
+        self.assertEqual(discovery.refreshed, ())
+        self.assertEqual(discovery.revisions[0].revision_id, self.landed.revision_id)
+        self.assertEqual(self.client.get_object_calls, reads_before)
+
 
 class IcebergDefinitionTests(unittest.TestCase):
     def test_rejects_existing_rows_from_another_projection_release(self) -> None:
@@ -170,6 +214,7 @@ class IcebergDefinitionTests(unittest.TestCase):
 
         for column in contract.primary_key:
             self.assertIn(f"target.`{column}` = source.`{column}`", sql)
+        self.assertIn("target.`season` = source.`season`", sql)
         self.assertIn("WHEN MATCHED THEN UPDATE", sql)
         self.assertIn("WHEN NOT MATCHED THEN INSERT", sql)
 
@@ -184,6 +229,92 @@ class IcebergDefinitionTests(unittest.TestCase):
             configuration.warehouse_uri,
             "s3://example-bucket/portfolio/lake/analytical/iceberg",
         )
+        self.assertEqual(
+            configuration.athena_output_uri,
+            "s3://example-bucket/portfolio/lake/analytical/athena-results/"
+            "projection-views/",
+        )
+
+    def test_existing_tables_skip_repeated_create_ddl(self) -> None:
+        spark = MagicMock()
+        configuration = GlueProjectionConfiguration(
+            bucket="example-bucket",
+            database="zavant_analytical_prod",
+        )
+        existing = {
+            contract.name
+            for contract in (*TABLE_CONTRACTS.values(),)
+        } | {"current_game_revisions"}
+
+        with patch("zavant.projection.glue_job._validate_table_schema"):
+            _ensure_tables(spark, configuration, existing)
+
+        spark.sql.assert_not_called()
+
+
+class CurrentViewTests(unittest.TestCase):
+    def test_builds_one_current_view_for_every_analytical_table(self) -> None:
+        views = all_current_views("zavant_analytical_prod")
+
+        self.assertEqual(
+            tuple(view.name for view in views),
+            tuple(f"current_{name}" for name in TABLE_CONTRACTS),
+        )
+
+    def test_current_view_resolves_revision_without_exposing_revision_keys(self) -> None:
+        sql = create_current_view_sql(
+            "zavant_analytical_prod",
+            TABLE_CONTRACTS["plays"],
+        )
+
+        self.assertIn('CREATE OR REPLACE VIEW "current_plays"', sql)
+        self.assertIn('history."game_pk" = current_revision."game_pk"', sql)
+        self.assertIn(
+            'history."source_revision_id" = current_revision."source_revision_id"',
+            sql,
+        )
+        selection = sql.split("FROM", maxsplit=1)[0]
+        for private_column in PRIVATE_COLUMNS:
+            self.assertNotIn(f'history."{private_column}"', selection)
+
+    def test_current_games_exposes_reconciliation_time_for_freshness(self) -> None:
+        sql = create_current_view_sql(
+            "zavant_analytical_prod",
+            TABLE_CONTRACTS["games"],
+        )
+
+        self.assertIn('current_revision."reconciled_at"', sql)
+
+    def test_publisher_waits_for_each_athena_ddl(self) -> None:
+        client = _FakeAthenaClient()
+
+        publish_current_views(
+            client,
+            "zavant_analytical_prod",
+            "primary",
+            "s3://example-bucket/results/",
+            poll_interval_seconds=0,
+            wait=lambda _seconds: None,
+        )
+
+        self.assertEqual(len(client.started), len(TABLE_CONTRACTS))
+        self.assertEqual(len(client.inspected), len(TABLE_CONTRACTS))
+        first = client.started[0]
+        self.assertEqual(first["WorkGroup"], "primary")
+        self.assertEqual(
+            first["ResultConfiguration"],
+            {"OutputLocation": "s3://example-bucket/results/"},
+        )
+
+    def test_publication_marker_skips_unchanged_complete_view_set(self) -> None:
+        client = FakeS3Client()
+        backend = S3ObjectBackend(client, "example-bucket", "lake")
+        existing = {view.name for view in all_current_views("analytics")}
+
+        self.assertTrue(current_views_need_publication(backend, "analytics", existing))
+        record_current_view_publication(backend, "analytics")
+
+        self.assertFalse(current_views_need_publication(backend, "analytics", existing))
 
 
 class GlueProjectionCoordinatorTests(unittest.TestCase):
@@ -212,17 +343,23 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
             patch("zavant.projection.glue_job._validate_projection_release"),
+            patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
+            patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
+            patch("zavant.projection.glue_job.publish_current_views"),
             patch(
                 "zavant.projection.glue_job._completed_projections",
                 return_value=set(),
             ),
             patch(
-                "zavant.projection.glue_job.discover_revisions",
-                return_value=(self.revision,),
+                "zavant.projection.glue_job.discover_projection_inventory",
+                return_value=ProjectionInventory((self.revision,), ()),
             ),
             patch(
-                "zavant.projection.glue_job.discover_current_revisions",
-                return_value=(self.revision,),
+                "zavant.projection.glue_job.resolve_current_revisions",
+                return_value=CurrentRevisionDiscovery(
+                    (self.revision,),
+                    (self.revision,),
+                ),
             ),
             patch(
                 "zavant.projection.glue_job._project_partition",
@@ -251,6 +388,8 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             result = run_glue_projection(
                 spark,
                 FakeS3Client(),
+                _FakeAthenaClient(),
+                _FakeGlueClient(),
                 self.configuration,
                 self.run_id,
                 OBSERVED_AT,
@@ -270,17 +409,23 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
             patch("zavant.projection.glue_job._validate_projection_release"),
+            patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
+            patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
+            patch("zavant.projection.glue_job.publish_current_views"),
             patch(
                 "zavant.projection.glue_job._completed_projections",
                 return_value=set(),
             ),
             patch(
-                "zavant.projection.glue_job.discover_revisions",
-                return_value=(self.revision,),
+                "zavant.projection.glue_job.discover_projection_inventory",
+                return_value=ProjectionInventory((self.revision,), ()),
             ),
             patch(
-                "zavant.projection.glue_job.discover_current_revisions",
-                return_value=(self.revision,),
+                "zavant.projection.glue_job.resolve_current_revisions",
+                return_value=CurrentRevisionDiscovery(
+                    (self.revision,),
+                    (self.revision,),
+                ),
             ),
             patch(
                 "zavant.projection.glue_job._project_partition",
@@ -303,6 +448,8 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
                 run_glue_projection(
                     spark,
                     FakeS3Client(),
+                    _FakeAthenaClient(),
+                    _FakeGlueClient(),
                     self.configuration,
                     self.run_id,
                     OBSERVED_AT,
@@ -311,10 +458,71 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
         merge_rows.assert_not_called()
         self.assertTrue(spark.last_rdd.unpersisted)
 
+    def test_failed_view_publication_does_not_advance_current_mapping(self) -> None:
+        spark = _FakeSpark()
+
+        with (
+            patch("zavant.projection.glue_job._ensure_tables"),
+            patch("zavant.projection.glue_job._validate_projection_release"),
+            patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
+            patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
+            patch(
+                "zavant.projection.glue_job._completed_projections",
+                return_value={self.revision.completed_identity()},
+            ),
+            patch(
+                "zavant.projection.glue_job.discover_projection_inventory",
+                return_value=ProjectionInventory((self.revision,), ()),
+            ),
+            patch(
+                "zavant.projection.glue_job.resolve_current_revisions",
+                return_value=CurrentRevisionDiscovery(
+                    (self.revision,),
+                    (self.revision,),
+                ),
+            ),
+            patch(
+                "zavant.projection.glue_job.publish_current_views",
+                side_effect=RuntimeError("Athena DDL failed"),
+            ),
+            patch("zavant.projection.glue_job._merge_rows") as merge_rows,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Athena DDL failed"):
+                run_glue_projection(
+                    spark,
+                    FakeS3Client(),
+                    _FakeAthenaClient(),
+                    _FakeGlueClient(),
+                    self.configuration,
+                    self.run_id,
+                    OBSERVED_AT,
+                )
+
+        merge_rows.assert_not_called()
+
 
 class _FakeConfiguration:
     def set(self, _name: str, _value: str) -> None:
         pass
+
+
+class _FakeAthenaClient:
+    def __init__(self) -> None:
+        self.started: list[dict[str, object]] = []
+        self.inspected: list[str] = []
+
+    def start_query_execution(self, **kwargs):
+        self.started.append(kwargs)
+        return {"QueryExecutionId": f"query-{len(self.started)}"}
+
+    def get_query_execution(self, **kwargs):
+        self.inspected.append(kwargs["QueryExecutionId"])
+        return {"QueryExecution": {"Status": {"State": "SUCCEEDED"}}}
+
+
+class _FakeGlueClient:
+    def get_tables(self, **_kwargs):
+        return {"TableList": []}
 
 
 class _FakeRDD:

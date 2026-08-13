@@ -4,23 +4,16 @@ models:
   - name: stg_boxscore_team_fielding
     description: >-
       Team-level fielding totals reported by MLB in the projected
-      revision of each game's boxscore. These aggregate the team's performance
-      in the individual game. Its grain is source_revision_id, game_pk, and team_id.
+      current version of each game's boxscore. These aggregate the team's performance
+      in the individual game. Its grain is game_pk and team_id.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - source_revision_id
               - game_pk
               - team_id
     columns:
       # grain
-      - name: source_revision_id
-        description: SHA-256 content identity of the raw game response used for this row.
-        data_type: varchar
-        data_tests:
-          - not_null
-
       - name: game_pk
         description: MLB's stable identifier for the game.
         data_type: bigint
@@ -90,14 +83,6 @@ models:
       - name: official_date
         description: Official MLB date of the game.
         data_type: date
-
-      - name: projected_at
-        description: UTC timestamp when this raw revision was projected.
-        data_type: timestamp
-
-      - name: projection_run_id
-        description: UUID of the Glue reconciliation run that projected this row.
-        data_type: varchar
 
       - name: season
         description: MLB season containing the game.

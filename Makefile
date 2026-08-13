@@ -3,6 +3,7 @@
 DOTENV_FILE ?= .env
 -include $(DOTENV_FILE)
 
+export ZAVANT_ANALYTICAL_ATHENA_WORKGROUP
 export ZAVANT_ANALYTICAL_MAX_PROJECTION_PARTITIONS
 export ZAVANT_AWS_ACCOUNT_ID
 export ZAVANT_AWS_REGION
@@ -62,6 +63,8 @@ ACQUISITION_LAMBDA_RESPONSE_FILE ?= $(BUILD_DIR)/lambda-response.json
 
 ANALYTICAL_TEMPLATE := infrastructure/analytical-projection-stack.yaml
 ANALYTICAL_STACK_NAME ?= $(PROJECT_NAME)-analytics-$(DEPLOYMENT_ENVIRONMENT)
+ANALYTICAL_ATHENA_WORKGROUP ?= $(call configuration_or_default, \
+	$(ZAVANT_ANALYTICAL_ATHENA_WORKGROUP),primary)
 ANALYTICAL_GLUE_LIBRARY_ARCHIVE := $(BUILD_DIR)/zavant-glue.zip
 ANALYTICAL_GLUE_SCRIPT := jobs/project_analytical.py
 ANALYTICAL_GLUE_CODE_PREFIX := deployments/glue
@@ -163,7 +166,7 @@ dbt-parse:
 dbt-source-freshness:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) source freshness \
 		--target dev \
-		--select source:zavant_analytical_prod.current_game_revisions
+		--select source:zavant_analytical_prod.games
 
 dbt-staging-build:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) build \
@@ -306,6 +309,7 @@ analytics-infra-deploy: aws-check-account glue-package
 			DataPrefix="$$prefix" \
 			GlueLibraryS3Key="$$library_key" \
 			GlueScriptS3Key="$$script_key" \
+			AthenaWorkGroup=$(ANALYTICAL_ATHENA_WORKGROUP) \
 			MaximumProjectionPartitions=$(ANALYTICAL_MAX_PROJECTION_PARTITIONS) \
 		--tags Project=$(PROJECT_NAME) Component=analytical-projection Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
 

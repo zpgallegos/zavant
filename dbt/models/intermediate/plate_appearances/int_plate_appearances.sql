@@ -1,3 +1,12 @@
+{{
+    config(
+        materialized="table",
+        table_type="iceberg",
+        format="parquet",
+        partitioned_by=["season"]
+    )
+}}
+
 -- subset of play outcome types that qualify as a plate appearance
 with qualifying_event_types (event_type) as (
     values
@@ -31,7 +40,6 @@ plays as (
 
 select
     -- grain
-    plays.source_revision_id,
     plays.game_pk,
     plays.at_bat_index,
 
@@ -72,8 +80,6 @@ select
 
     -- metadata
     plays.official_date,
-    plays.projected_at,
-    plays.projection_run_id,
     plays.season
 from plays
 inner join qualifying_event_types

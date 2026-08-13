@@ -4,7 +4,6 @@ with game_teams as (
 
 select
     -- grain
-    game_teams.source_revision_id,
     game_teams.game_pk,
     game_teams.team_side,
 
@@ -37,7 +36,5 @@ select
 
     -- metadata
     game_teams.official_date,
-    game_teams.projected_at,
-    game_teams.projection_run_id,
     game_teams.season
 from game_teams

@@ -4,7 +4,6 @@ with batted_balls as (
 
 select
     -- grain
-    batted_balls.source_revision_id,
     batted_balls.game_pk,
     batted_balls.at_bat_index,
     batted_balls.event_index,
@@ -23,7 +22,5 @@ select
 
     -- metadata
     batted_balls.official_date,
-    batted_balls.projected_at,
-    batted_balls.projection_run_id,
     batted_balls.season
 from batted_balls

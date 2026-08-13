@@ -4,7 +4,6 @@ with pitches as (
 
 select
     -- grain
-    pitches.source_revision_id,
     pitches.game_pk,
     pitches.at_bat_index,
     pitches.event_index,
@@ -61,7 +60,5 @@ select
 
     -- metadata
     pitches.official_date,
-    pitches.projected_at,
-    pitches.projection_run_id,
     pitches.season
 from pitches

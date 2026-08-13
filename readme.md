@@ -260,7 +260,7 @@ Bootstrap configuration is consulted only while its corresponding watermark is a
 
 This completes the local application, historical CLI reconciliation, production
 API-to-raw Lambda, Glue-to-Iceberg projection, scheduled Step Functions
-orchestration, and revision-aware dbt staging layer. Workflow verification,
+orchestration, and business-grained dbt staging over Glue-owned current views. Workflow verification,
 alarms, conformed dbt models, semantics, and presentation remain later layers of
 the project.
 

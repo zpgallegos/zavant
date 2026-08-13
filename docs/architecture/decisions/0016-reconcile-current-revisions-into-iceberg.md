@@ -33,8 +33,9 @@ Spark and merged into each contract table by its natural key.
 The job creates format-version-2 Iceberg tables in an explicit Glue Data Catalog
 database and S3 warehouse. It merges `games` after every other analytical table,
 so its one-row-per-revision grain is the completion marker. A separate
-`current_game_revisions` table records the current raw revision for each game,
-giving Athena and dbt a queryable current-state join.
+`current_game_revisions` table records the current raw revision for each game.
+ADR 0021 subsequently assigns that join to Glue-owned Athena views rather than
+to dbt.
 
 Iceberg does not provide one transaction across all 25 tables. If a run fails
 before the terminal `games` merge, the revision remains incomplete. A retry
@@ -62,9 +63,19 @@ This is simple and observable at MLB scale; acquisition manifests may later
 serve as a fast-path candidate list if necessary. A periodic full reconciliation
 must remain the correctness backstop.
 
+The two logical inventories share one S3 listing. Current-pointer object reads
+reuse the successfully reconciled Iceberg mapping when the listed S3
+modification time is not newer; changed pointers are read with bounded
+concurrency, with a five-minute overlap around the reconciliation boundary.
+Existing catalog tables skip repeated create DDL while retaining
+exact runtime schema validation. These are performance optimizations only: the
+job still enumerates every immutable revision and compares it with the terminal
+`games` registry on every invocation.
+
 The terminal `games` merge is the publication gate rather than evidence of a
-cross-table transaction. Downstream current models must join through
-`current_game_revisions` and should run only after a successful Glue invocation.
+cross-table transaction. Glue-owned current views join through
+`current_game_revisions`; downstream dbt models should run only after a
+successful Glue invocation.
 
 ## Alternatives considered
 

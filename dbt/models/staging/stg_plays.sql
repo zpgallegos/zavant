@@ -4,7 +4,6 @@ with plays as (
 
 select
     -- grain
-    plays.source_revision_id,
     plays.game_pk,
     plays.at_bat_index,
 
@@ -45,7 +44,5 @@ select
 
     -- metadata
     plays.official_date,
-    plays.projected_at,
-    plays.projection_run_id,
     plays.season
 from plays

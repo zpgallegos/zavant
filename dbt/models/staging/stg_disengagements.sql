@@ -4,7 +4,6 @@ with disengagements as (
 
 select
     -- grain
-    disengagements.source_revision_id,
     disengagements.game_pk,
     disengagements.at_bat_index,
     disengagements.event_index,
@@ -27,7 +26,5 @@ select
 
     -- metadata
     disengagements.official_date,
-    disengagements.projected_at,
-    disengagements.projection_run_id,
     disengagements.season
 from disengagements

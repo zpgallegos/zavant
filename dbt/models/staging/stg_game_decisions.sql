@@ -4,7 +4,6 @@ with game_decisions as (
 
 select
     -- grain
-    game_decisions.source_revision_id,
     game_decisions.game_pk,
     game_decisions.decision_type,
 
@@ -14,7 +13,5 @@ select
 
     -- metadata
     game_decisions.official_date,
-    game_decisions.projected_at,
-    game_decisions.projection_run_id,
     game_decisions.season
 from game_decisions

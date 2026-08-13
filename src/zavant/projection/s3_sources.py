@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import PurePosixPath
-from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set, Tuple
 
 from zavant.contracts.raw_game import RawGameResponse
 from zavant.projection.contracts import ProjectionContractError
 from zavant.projection.models import ProjectionSource
 from zavant.storage._path_io import canonical_json_sha256
-from zavant.storage.s3_objects import S3ObjectBackend
+from zavant.storage.s3_objects import S3ObjectBackend, S3ObjectSummary
 
 
 CompletedProjection = Tuple[int, str]
@@ -32,17 +33,88 @@ class ProjectionRevision:
         return self.game_pk, self.revision_id
 
 
+@dataclass(frozen=True)
+class CurrentRevisionCacheEntry:
+    """Previously reconciled current revision used to avoid unchanged S3 reads."""
+
+    game_pk: int
+    season: int
+    revision_id: str
+    reconciled_at: datetime
+
+
+@dataclass(frozen=True)
+class CurrentPointer:
+    """Routing identity and modification time for one listed current pointer."""
+
+    game_pk: int
+    season: int
+    key: str
+    last_modified: datetime
+
+
+@dataclass(frozen=True)
+class ProjectionInventory:
+    """Revision metadata and current pointers classified from one S3 listing."""
+
+    revisions: Tuple[ProjectionRevision, ...]
+    current_pointers: Tuple[CurrentPointer, ...]
+
+
+@dataclass(frozen=True)
+class CurrentRevisionDiscovery:
+    """Complete current state plus pointers that required validation reads."""
+
+    revisions: Tuple[ProjectionRevision, ...]
+    refreshed: Tuple[ProjectionRevision, ...]
+
+
+def discover_projection_inventory(
+    backend: S3ObjectBackend,
+    seasons: Optional[Sequence[int]] = None,
+) -> ProjectionInventory:
+    """Classify all projection inputs from one raw-game prefix listing."""
+
+    selected_seasons = set(seasons) if seasons is not None else None
+    revision_metadata = []
+    current_pointers = []
+    prefix = "raw/mlb_stats_api/games/"
+    for summary in backend.list_objects(prefix):
+        if summary.key.endswith("/metadata.json") and "/revision=" in summary.key:
+            revision_metadata.append(summary.key)
+        elif summary.key.endswith("/current.json"):
+            current_pointers.append(_current_pointer(summary))
+    revisions = _revisions_from_metadata(revision_metadata, selected_seasons)
+    pointers = tuple(
+        sorted(
+            (
+                pointer
+                for pointer in current_pointers
+                if selected_seasons is None or pointer.season in selected_seasons
+            ),
+            key=lambda pointer: (pointer.season, pointer.game_pk),
+        )
+    )
+    _validate_unique_current_games(pointers)
+    return ProjectionInventory(revisions, pointers)
+
+
 def discover_revisions(
     backend: S3ObjectBackend,
     seasons: Optional[Sequence[int]] = None,
 ) -> Tuple[ProjectionRevision, ...]:
     """Enumerate every immutable raw revision available for projection."""
 
-    selected_seasons = set(seasons) if seasons is not None else None
+    return discover_projection_inventory(backend, seasons).revisions
+
+
+def _revisions_from_metadata(
+    metadata_keys: Iterable[str],
+    selected_seasons: Optional[Set[int]],
+) -> Tuple[ProjectionRevision, ...]:
     revisions = []
     seen: Set[CompletedProjection] = set()
-    pattern = "raw/mlb_stats_api/games/season=*/game_pk=*/revision=*/metadata.json"
-    for metadata_key in backend.list(pattern):
+    for metadata_key in metadata_keys:
         season, game_pk, revision_id = _revision_partitions(metadata_key)
         if selected_seasons is not None and season not in selected_seasons:
             continue
@@ -80,35 +152,102 @@ def discover_current_revisions(
 ) -> Tuple[ProjectionRevision, ...]:
     """Enumerate and validate every selected raw-game current pointer in S3."""
 
-    selected_seasons = set(seasons) if seasons is not None else None
-    revisions = []
-    seen_games: Set[int] = set()
-    pattern = "raw/mlb_stats_api/games/season=*/game_pk=*/current.json"
-    for pointer_key in backend.list(pattern):
-        season, game_pk = _pointer_partitions(pointer_key)
-        if selected_seasons is not None and season not in selected_seasons:
-            continue
-        if game_pk in seen_games:
-            raise ProjectionContractError(
-                f"current pointers contain duplicate game_pk {game_pk}"
-            )
-        seen_games.add(game_pk)
-        pointer = _json_object(backend.read(pointer_key), backend.uri(pointer_key))
-        pointer_game_pk = pointer.get("game_pk")
-        revision_id = pointer.get("revision_id")
-        if pointer_game_pk != game_pk or not isinstance(revision_id, str) or not revision_id:
-            raise ProjectionContractError(f"invalid current pointer {backend.uri(pointer_key)}")
-        revision_root = pointer_key.removesuffix("current.json") + f"revision={revision_id}"
-        revisions.append(
-            ProjectionRevision(
-                game_pk=game_pk,
-                season=season,
-                revision_id=revision_id,
-                raw_key=f"{revision_root}/game.json",
-                metadata_key=f"{revision_root}/metadata.json",
-            )
+    inventory = discover_projection_inventory(backend, seasons)
+    return resolve_current_revisions(backend, inventory.current_pointers).revisions
+
+
+def resolve_current_revisions(
+    backend: S3ObjectBackend,
+    pointers: Sequence[CurrentPointer],
+    cached: Optional[Mapping[int, CurrentRevisionCacheEntry]] = None,
+    max_workers: int = 16,
+    overlap_seconds: float = 300.0,
+) -> CurrentRevisionDiscovery:
+    """Resolve pointers, reading only objects newer than their cached mapping."""
+
+    if max_workers <= 0:
+        raise ValueError("max_workers must be positive")
+    if overlap_seconds < 0:
+        raise ValueError("overlap_seconds must not be negative")
+    overlap = timedelta(seconds=overlap_seconds)
+    cached_by_game = cached or {}
+    resolved = []
+    refresh = []
+    for pointer in pointers:
+        cached_entry = cached_by_game.get(pointer.game_pk)
+        if (
+            cached_entry is not None
+            and cached_entry.season == pointer.season
+            and pointer.last_modified <= cached_entry.reconciled_at - overlap
+        ):
+            resolved.append(_revision_from_pointer(pointer, cached_entry.revision_id))
+        else:
+            refresh.append(pointer)
+
+    with ThreadPoolExecutor(max_workers=min(max_workers, max(len(refresh), 1))) as pool:
+        refreshed = tuple(pool.map(lambda item: _read_pointer(backend, item), refresh))
+    resolved.extend(refreshed)
+    return CurrentRevisionDiscovery(
+        revisions=tuple(
+            sorted(resolved, key=lambda revision: (revision.season, revision.game_pk))
+        ),
+        refreshed=refreshed,
+    )
+
+
+def _current_pointer(summary: S3ObjectSummary) -> CurrentPointer:
+    season, game_pk = _pointer_partitions(summary.key)
+    last_modified = summary.last_modified
+    if last_modified is None or last_modified.utcoffset() is None:
+        raise ProjectionContractError(
+            f"current pointer has no valid modification time {summary.key}"
         )
-    return tuple(sorted(revisions, key=lambda revision: (revision.season, revision.game_pk)))
+    return CurrentPointer(
+        game_pk=game_pk,
+        season=season,
+        key=summary.key,
+        last_modified=last_modified.astimezone(timezone.utc),
+    )
+
+
+def _validate_unique_current_games(pointers: Sequence[CurrentPointer]) -> None:
+    seen_games: Set[int] = set()
+    for pointer in pointers:
+        if pointer.game_pk in seen_games:
+            raise ProjectionContractError(
+                f"current pointers contain duplicate game_pk {pointer.game_pk}"
+            )
+        seen_games.add(pointer.game_pk)
+
+
+def _read_pointer(
+    backend: S3ObjectBackend,
+    current: CurrentPointer,
+) -> ProjectionRevision:
+    pointer = _json_object(backend.read(current.key), backend.uri(current.key))
+    pointer_game_pk = pointer.get("game_pk")
+    revision_id = pointer.get("revision_id")
+    if (
+        pointer_game_pk != current.game_pk
+        or not isinstance(revision_id, str)
+        or not revision_id
+    ):
+        raise ProjectionContractError(f"invalid current pointer {backend.uri(current.key)}")
+    return _revision_from_pointer(current, revision_id)
+
+
+def _revision_from_pointer(
+    pointer: CurrentPointer,
+    revision_id: str,
+) -> ProjectionRevision:
+    revision_root = pointer.key.removesuffix("current.json") + f"revision={revision_id}"
+    return ProjectionRevision(
+        game_pk=pointer.game_pk,
+        season=pointer.season,
+        revision_id=revision_id,
+        raw_key=f"{revision_root}/game.json",
+        metadata_key=f"{revision_root}/metadata.json",
+    )
 
 
 def pending_revisions(
@@ -122,6 +261,24 @@ def pending_revisions(
         for revision in revisions
         if revision.completed_identity() not in completed
     )
+
+
+def validate_current_revisions(
+    revisions: Sequence[ProjectionRevision],
+    current: Sequence[ProjectionRevision],
+) -> None:
+    """Require every current pointer to reference an inventoried raw revision."""
+
+    available = {revision.completed_identity() for revision in revisions}
+    missing = [
+        revision.completed_identity()
+        for revision in current
+        if revision.completed_identity() not in available
+    ]
+    if missing:
+        raise ProjectionContractError(
+            f"current pointers reference missing raw revisions {missing[:10]}"
+        )
 
 
 def load_projection_source(

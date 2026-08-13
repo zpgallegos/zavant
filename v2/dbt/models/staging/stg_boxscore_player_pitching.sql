@@ -1,0 +1,92 @@
+with current_revision as (
+    select
+        game_pk,
+        source_revision_id,
+        projection_contract_version
+    from {{ ref("stg_current_game_revisions") }}
+),
+
+player_pitching as (
+    select * from {{ source("zavant_analytical_prod", "player_pitching") }}
+)
+
+select
+    -- grain
+    player_pitching.game_pk,
+    player_pitching.player_id,
+    player_pitching.team_id,
+
+    -- attributes
+    player_pitching.air_outs,
+    player_pitching.at_bats,
+    player_pitching.balks,
+    player_pitching.balls,
+    player_pitching.base_on_balls,
+    player_pitching.batters_faced,
+    player_pitching.blown_saves,
+    player_pitching.catchers_interference,
+    player_pitching.caught_stealing,
+    player_pitching.caught_stealing_percentage,
+    player_pitching.complete_games,
+    player_pitching.doubles,
+    player_pitching.earned_run_average,
+    player_pitching.earned_runs,
+    player_pitching.fly_outs,
+    player_pitching.games_finished,
+    player_pitching.games_pitched,
+    player_pitching.games_played,
+    player_pitching.games_started,
+    player_pitching.ground_outs,
+    player_pitching.ground_outs_to_air_outs,
+    player_pitching.hit_batsmen,
+    player_pitching.hit_by_pitch,
+    player_pitching.hits,
+    player_pitching.holds,
+    player_pitching.home_runs,
+    player_pitching.home_runs_per_nine,
+    player_pitching.inherited_runners,
+    player_pitching.inherited_runners_scored,
+    player_pitching.innings_pitched,
+    player_pitching.intentional_walks,
+    player_pitching.line_outs,
+    player_pitching.losses,
+    player_pitching.note,
+    player_pitching.number_of_pitches,
+    player_pitching.outs,
+    player_pitching.passed_balls,
+    player_pitching.pickoffs,
+    player_pitching.pitches_per_inning,
+    player_pitching.pitches_thrown,
+    player_pitching.pop_outs,
+    player_pitching.rbi,
+    player_pitching.runs,
+    player_pitching.runs_scored_per_nine,
+    player_pitching.sac_bunts,
+    player_pitching.sac_flies,
+    player_pitching.save_opportunities,
+    player_pitching.saves,
+    player_pitching.shutouts,
+    player_pitching.stolen_base_percentage,
+    player_pitching.stolen_bases,
+    player_pitching.strike_outs,
+    player_pitching.strike_percentage,
+    player_pitching.strikes,
+    player_pitching.summary,
+    player_pitching.team_side,
+    player_pitching.triples,
+    player_pitching.walks_hits_per_inning,
+    player_pitching.wild_pitches,
+    player_pitching.wins,
+
+    -- metadata
+    player_pitching.official_date,
+    player_pitching.projected_at,
+    player_pitching.projection_contract_version,
+    player_pitching.projection_run_id,
+    player_pitching.season,
+    player_pitching.source_revision_id
+from player_pitching
+inner join current_revision on
+    player_pitching.game_pk = current_revision.game_pk
+    and player_pitching.source_revision_id = current_revision.source_revision_id
+    and player_pitching.projection_contract_version = current_revision.projection_contract_version

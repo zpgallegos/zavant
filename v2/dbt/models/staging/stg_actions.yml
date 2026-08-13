@@ -1,0 +1,153 @@
+version: 2
+
+models:
+  - name: stg_actions
+    description: >-
+      Non-pitch game events from the currently selected revision of each MLB
+      game, including substitutions, mound visits, timeouts, game advisories,
+      and baserunning events. Its grain is one action at game_pk,
+      at_bat_index, and event_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the action.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the action within the plate appearance's events.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: action_play_id
+        description: MLB identifier linking the action to an associated play event.
+        data_type: varchar
+
+      - name: balls
+        description: Ball count reported with the action.
+        data_type: integer
+
+      - name: base_number
+        description: Numeric base associated with the action, when supplied by MLB.
+        data_type: integer
+
+      - name: batting_order
+        description: MLB batting-order code associated with a substitution or switch.
+        data_type: varchar
+
+      - name: description
+        description: Human-readable description of the action.
+        data_type: varchar
+
+      - name: disengagement_number
+        description: Disengagement count associated with the action.
+        data_type: integer
+
+      - name: ended_at
+        description: UTC timestamp when the action ended.
+        data_type: timestamp
+
+      - name: event
+        description: Human-readable MLB event label.
+        data_type: varchar
+
+      - name: event_code
+        description: Compact MLB code identifying the action, when available.
+        data_type: varchar
+
+      - name: event_type
+        description: Machine-readable MLB event classification.
+        data_type: varchar
+
+      - name: has_review
+        description: Whether the action includes replay-review information.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB marks the action as recording an out.
+        data_type: boolean
+
+      - name: is_substitution
+        description: Whether MLB identifies the action as a substitution.
+        data_type: boolean
+
+      - name: outs
+        description: Out count reported with the action.
+        data_type: integer
+
+      - name: play_id
+        description: MLB play identifier assigned directly to the action.
+        data_type: varchar
+
+      - name: player_id
+        description: MLB identifier of the player associated with the action.
+        data_type: bigint
+
+      - name: position_abbreviation
+        description: Abbreviation of the fielding position associated with the action.
+        data_type: varchar
+
+      - name: position_code
+        description: MLB code for the fielding position associated with the action.
+        data_type: varchar
+
+      - name: position_name
+        description: Name of the fielding position associated with the action.
+        data_type: varchar
+
+      - name: replaced_player_id
+        description: MLB identifier of the player replaced by the associated player.
+        data_type: bigint
+
+      - name: started_at
+        description: UTC timestamp when the action started.
+        data_type: timestamp
+
+      - name: strikes
+        description: Strike count reported with the action.
+        data_type: integer
+
+      - name: umpire_id
+        description: MLB identifier of the umpire associated with the action.
+        data_type: bigint
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

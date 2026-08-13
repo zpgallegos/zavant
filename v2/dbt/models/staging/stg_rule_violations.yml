@@ -1,0 +1,73 @@
+version: 2
+
+models:
+  - name: stg_rule_violations
+    description: >-
+      Rules violations attached by MLB to play events in the currently
+      selected revision of each game, including batter and pitcher pitch-timer
+      violations and pitcher disengagement violations. Its grain is one
+      violation at game_pk, at_bat_index, and event_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the violation.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the event containing the violation.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: description
+        description: Human-readable description of the rules violation.
+        data_type: varchar
+
+      - name: player_id
+        description: MLB identifier of the player charged with the violation.
+        data_type: bigint
+
+      - name: violation_type
+        description: Machine-readable MLB classification of the rules violation.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

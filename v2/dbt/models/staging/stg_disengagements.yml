@@ -1,0 +1,117 @@
+version: 2
+
+models:
+  - name: stg_disengagements
+    description: >-
+      Pitcher or catcher disengagement events from the currently selected
+      revision of each MLB game, including pickoff attempts and step-offs.
+      Its grain is one disengagement at game_pk, at_bat_index, and
+      event_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the disengagement.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the disengagement within the plate appearance.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: action_play_id
+        description: MLB identifier linking the disengagement to an associated action.
+        data_type: varchar
+
+      - name: balls
+        description: Ball count when the disengagement occurred.
+        data_type: integer
+
+      - name: description
+        description: Human-readable description of the disengagement.
+        data_type: varchar
+
+      - name: disengagement_number
+        description: Sequential disengagement number within the plate appearance.
+        data_type: integer
+
+      - name: event
+        description: Human-readable MLB event label.
+        data_type: varchar
+
+      - name: event_code
+        description: MLB code identifying the target base or type of disengagement.
+        data_type: varchar
+
+      - name: event_kind
+        description: MLB play-event kind, either pickoff or stepoff.
+        data_type: varchar
+
+      - name: event_type
+        description: Machine-readable MLB event classification, when supplied.
+        data_type: varchar
+
+      - name: from_catcher
+        description: Whether the pickoff attempt originated from the catcher.
+        data_type: boolean
+
+      - name: has_review
+        description: Whether the disengagement includes replay-review information.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB marks the disengagement as recording an out.
+        data_type: boolean
+
+      - name: outs
+        description: Out count when the disengagement occurred.
+        data_type: integer
+
+      - name: play_id
+        description: MLB identifier assigned directly to the disengagement event.
+        data_type: varchar
+
+      - name: strikes
+        description: Strike count when the disengagement occurred.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

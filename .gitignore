@@ -11,6 +11,7 @@ __pycache__/
 htmlcov/
 .DS_Store
 /scripts/
+package-lock.yml
 
 # dbt-generated and machine-local state
 /dbt/dbt_packages/

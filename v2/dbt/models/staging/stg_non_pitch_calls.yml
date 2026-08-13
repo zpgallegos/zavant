@@ -1,0 +1,121 @@
+version: 2
+
+models:
+  - name: stg_non_pitch_calls
+    description: >-
+      Count-affecting calls recorded by MLB without an actual pitch in the
+      currently selected revision of each game, such as automatic balls or
+      strikes caused by pitch-timer violations. Its grain is one non-pitch
+      call at game_pk, at_bat_index, and event_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the call.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the call within the plate appearance.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: balls
+        description: Ball count after the non-pitch call.
+        data_type: integer
+
+      - name: call_code
+        description: MLB code identifying the non-pitch call.
+        data_type: varchar
+
+      - name: call_description
+        description: Human-readable name of the non-pitch call.
+        data_type: varchar
+
+      - name: description
+        description: Detailed human-readable description of the event.
+        data_type: varchar
+
+      - name: ended_at
+        description: UTC timestamp when the non-pitch event ended.
+        data_type: timestamp
+
+      - name: has_review
+        description: Whether the event includes replay-review information.
+        data_type: boolean
+
+      - name: is_ball
+        description: Whether MLB classifies the call as a ball.
+        data_type: boolean
+
+      - name: is_in_play
+        description: Whether MLB classifies the event as putting the ball in play.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB marks the event as recording an out.
+        data_type: boolean
+
+      - name: is_strike
+        description: Whether MLB classifies the call as a strike.
+        data_type: boolean
+
+      - name: outs
+        description: Out count after the non-pitch call.
+        data_type: integer
+
+      - name: pitch_number
+        description: Pitch-sequence number supplied for the event, often zero.
+        data_type: integer
+
+      - name: play_id
+        description: MLB identifier assigned to the non-pitch event.
+        data_type: varchar
+
+      - name: started_at
+        description: UTC timestamp when the non-pitch event started.
+        data_type: timestamp
+
+      - name: strikes
+        description: Strike count after the non-pitch call.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: stg_boxscore_game_officials
+    description: >-
+      Officials assigned by MLB in the currently selected revision of each
+      game's boxscore, typically the umpiring crew and each member's on-field
+      role. Its grain is one ordered official assignment at game_pk and
+      official_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - official_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: official_index
+        description: Zero-based position of the official in MLB's boxscore officials array.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: official_id
+        description: MLB identifier of the assigned official.
+        data_type: bigint
+
+      - name: official_name
+        description: Full name of the assigned official.
+        data_type: varchar
+
+      - name: official_type
+        description: Official's assigned role, such as Home Plate or First Base.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

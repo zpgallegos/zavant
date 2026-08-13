@@ -1,0 +1,104 @@
+version: 2
+
+models:
+  - name: stg_substitutions
+    description: >-
+      Substitution action events from the currently selected revision of each
+      MLB game, including pitching, offensive, and defensive substitutions and
+      defensive switches. Each row identifies the incoming player and any
+      supplied replaced player, position, batting-order slot, or base. Its
+      grain is one substitution at game_pk, at_bat_index, and event_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the substitution.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the substitution within the plate appearance.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: base_number
+        description: Numeric base associated with the substitution, when supplied by MLB.
+        data_type: integer
+
+      - name: batting_order
+        description: MLB batting-order code assigned to the incoming player.
+        data_type: varchar
+
+      - name: description
+        description: Human-readable description of the substitution.
+        data_type: varchar
+
+      - name: incoming_player_id
+        description: MLB identifier of the player entering or changing role in the game.
+        data_type: bigint
+
+      - name: play_id
+        description: MLB identifier assigned to the substitution event.
+        data_type: varchar
+
+      - name: position_abbreviation
+        description: Abbreviation of the incoming player's assigned position.
+        data_type: varchar
+
+      - name: position_code
+        description: MLB code for the incoming player's assigned position.
+        data_type: varchar
+
+      - name: position_name
+        description: Name of the incoming player's assigned position.
+        data_type: varchar
+
+      - name: replaced_player_id
+        description: MLB identifier of the player being replaced, when supplied.
+        data_type: bigint
+
+      - name: substitution_type
+        description: >-
+          Machine-readable MLB classification such as pitching_substitution,
+          offensive_substitution, defensive_substitution, or defensive_switch.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

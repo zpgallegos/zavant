@@ -1,0 +1,97 @@
+version: 2
+
+models:
+  - name: stg_reviews
+    description: >-
+      Replay reviews attached by MLB to plays or individual play events in the
+      currently selected revision of each game. Primary and additional reviews
+      are represented as separate ordered rows. Its grain is one review at
+      game_pk, at_bat_index, and review_id.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - review_id
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the review.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: review_id
+        description: >-
+          Deterministic identifier constructed from the review scope, optional
+          event index, and review sequence within the plate appearance.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: challenge_team_id
+        description: MLB identifier of the team that initiated the challenge.
+        data_type: bigint
+
+      - name: event_index
+        description: Event index when the review applies to a specific play event.
+        data_type: integer
+
+      - name: in_progress
+        description: Whether MLB marks the review as still in progress.
+        data_type: boolean
+
+      - name: is_overturned
+        description: Whether the reviewed ruling was overturned.
+        data_type: boolean
+
+      - name: player_id
+        description: MLB identifier of the player associated with the review.
+        data_type: bigint
+
+      - name: review_scope
+        description: Level at which the review is attached, either play or event.
+        data_type: varchar
+
+      - name: review_sequence
+        description: >-
+          Zero-based order of the review, distinguishing a primary review from
+          an additional review attached to the same source object.
+        data_type: integer
+
+      - name: review_type
+        description: MLB code classifying the type of replay review.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

@@ -1,0 +1,209 @@
+version: 2
+
+models:
+  - name: stg_boxscore_player_batting
+    description: >-
+      Game-level batting lines reported by MLB for players in the currently
+      selected revision of each game's boxscore. These are statistics for the
+      individual game rather than season-to-date totals. Its grain is one
+      player-team batting line at game_pk, player_id, and team_id.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - player_id
+              - team_id
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: player_id
+        description: MLB identifier of the player whose batting line is represented.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_id
+        description: MLB identifier of the team for which the player accumulated the line.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: air_outs
+        description: Air outs credited in the player's batting line.
+        data_type: integer
+
+      - name: at_bats
+        description: Official at-bats recorded for the player.
+        data_type: integer
+
+      - name: at_bats_per_home_run
+        description: At-bats-per-home-run rate as formatted by MLB.
+        data_type: varchar
+
+      - name: average
+        description: Batting average as formatted by MLB.
+        data_type: varchar
+
+      - name: base_on_balls
+        description: Walks recorded for the player.
+        data_type: integer
+
+      - name: catchers_interference
+        description: Times the player reached due to catcher's interference.
+        data_type: integer
+
+      - name: caught_stealing
+        description: Times the player was caught stealing.
+        data_type: integer
+
+      - name: doubles
+        description: Doubles recorded for the player.
+        data_type: integer
+
+      - name: fly_outs
+        description: Fly outs credited in the player's batting line.
+        data_type: integer
+
+      - name: games_played
+        description: Games played represented by the boxscore line, normally one.
+        data_type: integer
+
+      - name: ground_into_double_play
+        description: Ground-ball double plays charged to the player.
+        data_type: integer
+
+      - name: ground_into_triple_play
+        description: Ground-ball triple plays charged to the player.
+        data_type: integer
+
+      - name: ground_outs
+        description: Ground outs credited in the player's batting line.
+        data_type: integer
+
+      - name: hit_by_pitch
+        description: Times the player was hit by a pitch.
+        data_type: integer
+
+      - name: hits
+        description: Hits recorded for the player.
+        data_type: integer
+
+      - name: home_runs
+        description: Home runs recorded for the player.
+        data_type: integer
+
+      - name: intentional_walks
+        description: Intentional walks recorded for the player.
+        data_type: integer
+
+      - name: left_on_base
+        description: Runners left on base attributed to the player's plate appearances.
+        data_type: integer
+
+      - name: line_outs
+        description: Line outs credited in the player's batting line.
+        data_type: integer
+
+      - name: note
+        description: Optional MLB note attached to the player's batting line.
+        data_type: varchar
+
+      - name: on_base_percentage
+        description: On-base percentage as formatted by MLB.
+        data_type: varchar
+
+      - name: on_base_plus_slugging
+        description: On-base plus slugging as formatted by MLB.
+        data_type: varchar
+
+      - name: pickoffs
+        description: Pickoffs charged to the player as a baserunner.
+        data_type: integer
+
+      - name: plate_appearances
+        description: Plate appearances recorded for the player.
+        data_type: integer
+
+      - name: pop_outs
+        description: Pop outs credited in the player's batting line.
+        data_type: integer
+
+      - name: rbi
+        description: Runs batted in recorded for the player.
+        data_type: integer
+
+      - name: runs
+        description: Runs scored by the player.
+        data_type: integer
+
+      - name: sac_bunts
+        description: Sacrifice bunts recorded for the player.
+        data_type: integer
+
+      - name: sac_flies
+        description: Sacrifice flies recorded for the player.
+        data_type: integer
+
+      - name: slugging_percentage
+        description: Slugging percentage as formatted by MLB.
+        data_type: varchar
+
+      - name: stolen_base_percentage
+        description: Stolen-base success rate as formatted by MLB.
+        data_type: varchar
+
+      - name: stolen_bases
+        description: Stolen bases recorded for the player.
+        data_type: integer
+
+      - name: strike_outs
+        description: Strikeouts recorded for the player as a batter.
+        data_type: integer
+
+      - name: summary
+        description: Compact human-readable summary of the player's batting line.
+        data_type: varchar
+
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+
+      - name: total_bases
+        description: Total bases recorded for the player.
+        data_type: integer
+
+      - name: triples
+        description: Triples recorded for the player.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

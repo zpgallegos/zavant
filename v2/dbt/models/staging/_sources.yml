@@ -1,0 +1,35 @@
+version: 2
+
+sources:
+  - name: zavant_analytical_prod
+    description: Revision-aware MLB datasets projected by the Zavant Glue job.
+    database: awsdatacatalog
+    schema: zavant_analytical_prod
+    tables:
+      - name: current_game_revisions
+      - name: projection_revisions
+      - name: actions
+      - name: batted_balls
+      - name: disengagements
+      - name: fielding_credits
+      - name: game_decisions
+      - name: game_officials
+      - name: game_teams
+      - name: games
+      - name: innings
+      - name: non_pitch_calls
+      - name: pitches
+      - name: play_events
+      - name: player_batting
+      - name: player_fielding
+      - name: player_pitching
+      - name: player_positions
+      - name: players
+      - name: plays
+      - name: reviews
+      - name: rule_violations
+      - name: runner_movements
+      - name: substitutions
+      - name: team_batting
+      - name: team_fielding
+      - name: team_pitching

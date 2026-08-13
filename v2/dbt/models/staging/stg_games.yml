@@ -1,0 +1,270 @@
+version: 2
+
+models:
+  - name: stg_games
+    description: >-
+      Game-level identity, scheduling, status, scoring, venue, weather, rules,
+      and operational information from the currently selected revision of
+      each MLB game. Its grain is one row per game_pk.
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game and this model's grain.
+        data_type: bigint
+        data_tests:
+          - unique
+          - not_null
+
+      # attributes
+      - name: abs_has_challenges
+        description: Whether the game supports automated ball-strike challenges.
+        data_type: boolean
+
+      - name: abstract_game_state
+        description: High-level MLB game state, such as Preview, Live, or Final.
+        data_type: varchar
+
+      - name: attendance
+        description: Reported attendance for the game.
+        data_type: bigint
+
+      - name: away_abs_challenges_failed
+        description: Failed automated ball-strike challenges used by the away team.
+        data_type: integer
+
+      - name: away_abs_challenges_remaining
+        description: Automated ball-strike challenges remaining for the away team.
+        data_type: integer
+
+      - name: away_abs_challenges_successful
+        description: Successful automated ball-strike challenges used by the away team.
+        data_type: integer
+
+      - name: away_mound_visits_remaining
+        description: Mound visits remaining for the away team.
+        data_type: integer
+
+      - name: away_mound_visits_used
+        description: Mound visits used by the away team.
+        data_type: integer
+
+      - name: away_replay_challenges_remaining
+        description: Replay challenges remaining for the away team.
+        data_type: integer
+
+      - name: away_replay_challenges_used
+        description: Replay challenges used by the away team.
+        data_type: integer
+
+      - name: away_score
+        description: Runs scored by the away team.
+        data_type: integer
+
+      - name: away_team_id
+        description: MLB identifier of the away team.
+        data_type: bigint
+
+      - name: away_team_no_hitter
+        description: Whether MLB flags the away team as having thrown a no-hitter.
+        data_type: boolean
+
+      - name: away_team_perfect_game
+        description: Whether MLB flags the away team as having thrown a perfect game.
+        data_type: boolean
+
+      - name: calendar_event_id
+        description: MLB calendar-event identifier for the game.
+        data_type: varchar
+
+      - name: coded_game_state
+        description: Compact MLB code for the game's current state.
+        data_type: varchar
+
+      - name: day_night
+        description: Whether MLB classifies the game as a day or night game.
+        data_type: varchar
+
+      - name: delay_duration_minutes
+        description: Total delay duration reported for the game, in minutes.
+        data_type: integer
+
+      - name: detailed_state
+        description: Detailed human-readable MLB game status.
+        data_type: varchar
+
+      - name: double_header
+        description: MLB code describing the game's doubleheader status.
+        data_type: varchar
+
+      - name: first_pitch_at
+        description: UTC timestamp of the reported first pitch.
+        data_type: timestamp
+
+      - name: game_duration_minutes
+        description: Total game duration reported by MLB, in minutes.
+        data_type: integer
+
+      - name: game_id
+        description: MLB's date-and-matchup-based game identifier.
+        data_type: varchar
+
+      - name: game_number
+        description: Game number used to distinguish games on the same date.
+        data_type: integer
+
+      - name: game_type
+        description: MLB code identifying the competition type, such as regular season.
+        data_type: varchar
+
+      - name: gameday_type
+        description: MLB code identifying the type of Gameday coverage.
+        data_type: varchar
+
+      - name: home_abs_challenges_failed
+        description: Failed automated ball-strike challenges used by the home team.
+        data_type: integer
+
+      - name: home_abs_challenges_remaining
+        description: Automated ball-strike challenges remaining for the home team.
+        data_type: integer
+
+      - name: home_abs_challenges_successful
+        description: Successful automated ball-strike challenges used by the home team.
+        data_type: integer
+
+      - name: home_mound_visits_remaining
+        description: Mound visits remaining for the home team.
+        data_type: integer
+
+      - name: home_mound_visits_used
+        description: Mound visits used by the home team.
+        data_type: integer
+
+      - name: home_replay_challenges_remaining
+        description: Replay challenges remaining for the home team.
+        data_type: integer
+
+      - name: home_replay_challenges_used
+        description: Replay challenges used by the home team.
+        data_type: integer
+
+      - name: home_score
+        description: Runs scored by the home team.
+        data_type: integer
+
+      - name: home_team_id
+        description: MLB identifier of the home team.
+        data_type: bigint
+
+      - name: home_team_no_hitter
+        description: Whether MLB flags the home team as having thrown a no-hitter.
+        data_type: boolean
+
+      - name: home_team_perfect_game
+        description: Whether MLB flags the home team as having thrown a perfect game.
+        data_type: boolean
+
+      - name: no_hitter
+        description: Whether MLB flags the game as a no-hitter.
+        data_type: boolean
+
+      - name: original_date
+        description: Originally scheduled date when the game has been rescheduled.
+        data_type: date
+
+      - name: perfect_game
+        description: Whether MLB flags the game as a perfect game.
+        data_type: boolean
+
+      - name: replay_has_challenges
+        description: Whether replay challenges are available in the game.
+        data_type: boolean
+
+      - name: resume_date
+        description: Date on which a suspended game is scheduled to resume.
+        data_type: date
+
+      - name: resumed_from_date
+        description: Original playing date from which a resumed game continues.
+        data_type: date
+
+      - name: scheduled_innings
+        description: Number of innings for which the game was scheduled.
+        data_type: integer
+
+      - name: scheduled_start_at
+        description: Scheduled game start timestamp in UTC.
+        data_type: timestamp
+
+      - name: start_time_tbd
+        description: Whether the game's scheduled start time remains to be determined.
+        data_type: boolean
+
+      - name: status_code
+        description: MLB status code for the game.
+        data_type: varchar
+
+      - name: temperature_fahrenheit
+        description: Reported game-time temperature in degrees Fahrenheit.
+        data_type: integer
+
+      - name: tiebreaker
+        description: MLB code describing whether special tiebreaker rules apply.
+        data_type: varchar
+
+      - name: venue_id
+        description: MLB identifier of the game's venue.
+        data_type: bigint
+
+      - name: venue_name
+        description: Name of the game's venue.
+        data_type: varchar
+
+      - name: weather_condition
+        description: Reported game-time weather condition.
+        data_type: varchar
+
+      - name: wind
+        description: Reported wind speed and direction.
+        data_type: varchar
+
+      # metadata
+      - name: feed_timecode
+        description: MLB feed timecode identifying the source response snapshot.
+        data_type: varchar
+
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: raw_object_uri
+        description: URI of the immutable raw game JSON used for this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_observed_at
+        description: UTC timestamp when acquisition observed the raw response.
+        data_type: timestamp
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar
+
+      - name: source_uri
+        description: MLB Stats API endpoint from which the raw response was acquired.
+        data_type: varchar

@@ -1,0 +1,105 @@
+version: 2
+
+models:
+  - name: stg_boxscore_team_fielding
+    description: >-
+      Team-level fielding totals reported by MLB in the currently selected
+      revision of each game's boxscore. These aggregate the team's performance
+      in the individual game. Its grain is game_pk and team_id.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - team_id
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_id
+        description: MLB identifier of the team represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: assists
+        description: Fielding assists recorded in the line.
+        data_type: integer
+
+      - name: caught_stealing
+        description: Runners caught stealing in the fielding line.
+        data_type: integer
+
+      - name: caught_stealing_percentage
+        description: Caught-stealing rate as formatted by MLB.
+        data_type: varchar
+
+      - name: chances
+        description: Total fielding chances recorded in the line.
+        data_type: integer
+
+      - name: errors
+        description: Fielding errors charged in the line.
+        data_type: integer
+
+      - name: fielding_percentage
+        description: Fielding percentage as formatted by MLB.
+        data_type: varchar
+
+      - name: games_started
+        description: Games started represented by the fielding line.
+        data_type: integer
+
+      - name: passed_balls
+        description: Passed balls charged in the fielding line.
+        data_type: integer
+
+      - name: pickoffs
+        description: Pickoffs recorded in the fielding line.
+        data_type: integer
+
+      - name: put_outs
+        description: Putouts recorded in the fielding line.
+        data_type: integer
+
+      - name: stolen_base_percentage
+        description: Opponent stolen-base success rate as formatted by MLB.
+        data_type: varchar
+
+      - name: stolen_bases
+        description: Stolen bases allowed in the fielding line.
+        data_type: integer
+
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

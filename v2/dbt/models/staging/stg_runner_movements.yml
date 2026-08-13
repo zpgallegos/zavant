@@ -1,0 +1,126 @@
+version: 2
+
+models:
+  - name: stg_runner_movements
+    description: >-
+      Structured baserunner outcomes from the currently selected revision of
+      each MLB game. Each row describes how one affected runner, including the
+      batter-runner, advanced, scored, or was put out during a plate
+      appearance. Its grain is one runner movement at game_pk, at_bat_index,
+      and runner_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - runner_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the movement.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: runner_index
+        description: Zero-based index of the runner movement within the plate appearance.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: earned
+        description: Whether a run scored by the runner is charged as earned.
+        data_type: boolean
+
+      - name: end_base
+        description: Base reached by the runner at the end of the movement.
+        data_type: varchar
+
+      - name: event
+        description: Human-readable MLB event label associated with the movement.
+        data_type: varchar
+
+      - name: event_type
+        description: Machine-readable MLB event classification for the movement.
+        data_type: varchar
+
+      - name: is_out
+        description: Whether the runner was put out during the movement.
+        data_type: boolean
+
+      - name: is_scoring_event
+        description: Whether the runner movement represents a scoring event.
+        data_type: boolean
+
+      - name: movement_reason
+        description: MLB's stated reason for the runner movement.
+        data_type: varchar
+
+      - name: origin_base
+        description: Original base associated with the runner before the play sequence.
+        data_type: varchar
+
+      - name: out_base
+        description: Base at which the runner was put out.
+        data_type: varchar
+
+      - name: out_number
+        description: Sequential out number recorded by the runner movement.
+        data_type: integer
+
+      - name: play_event_index
+        description: Index of the play event associated with the runner movement.
+        data_type: integer
+
+      - name: rbi
+        description: Whether the runner movement generated a run batted in.
+        data_type: boolean
+
+      - name: responsible_pitcher_id
+        description: MLB identifier of the pitcher responsible for the runner.
+        data_type: bigint
+
+      - name: runner_id
+        description: MLB identifier of the runner affected by the movement.
+        data_type: bigint
+
+      - name: start_base
+        description: Base from which the runner began this movement.
+        data_type: varchar
+
+      - name: team_unearned
+        description: Whether a scored run is classified as team unearned.
+        data_type: boolean
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

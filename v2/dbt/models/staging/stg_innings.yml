@@ -1,0 +1,90 @@
+version: 2
+
+models:
+  - name: stg_innings
+    description: >-
+      Inning-level line scores from the currently selected revision of each
+      MLB game. Each row reports runs, hits, errors, and runners left on base
+      for the away and home teams in one numbered inning. Its grain is one
+      inning_number per game_pk.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - inning_number
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: inning_number
+        description: Numeric inning, including values greater than nine for extra innings.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: away_errors
+        description: Errors charged to the away team during the inning.
+        data_type: integer
+
+      - name: away_hits
+        description: Hits recorded by the away team during the inning.
+        data_type: integer
+
+      - name: away_left_on_base
+        description: Away-team runners left on base during the inning.
+        data_type: integer
+
+      - name: away_runs
+        description: Runs scored by the away team during the inning.
+        data_type: integer
+
+      - name: home_errors
+        description: Errors charged to the home team during the inning.
+        data_type: integer
+
+      - name: home_hits
+        description: Hits recorded by the home team during the inning.
+        data_type: integer
+
+      - name: home_left_on_base
+        description: Home-team runners left on base during the inning.
+        data_type: integer
+
+      - name: home_runs
+        description: Runs scored by the home team during the inning.
+        data_type: integer
+
+      - name: ordinal
+        description: Human-readable ordinal supplied by MLB, such as 1st or 10th.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

@@ -1,0 +1,237 @@
+version: 2
+
+models:
+  - name: stg_boxscore_players
+    description: >-
+      Game-scoped player identity, biographical, handedness, position, roster,
+      and boxscore-status attributes from the currently selected revision of
+      each MLB game. A player can have one row for each team represented in
+      the game. Its grain is game_pk, player_id, and team_id.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - player_id
+              - team_id
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: player_id
+        description: MLB identifier of the player represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_id
+        description: MLB identifier of the team represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: active
+        description: Whether MLB identifies the player as active.
+        data_type: boolean
+
+      - name: bat_side_code
+        description: MLB code for the player's batting side.
+        data_type: varchar
+
+      - name: bat_side_description
+        description: Human-readable description of the player's batting side.
+        data_type: varchar
+
+      - name: batting_order
+        description: MLB batting-order code assigned in the boxscore.
+        data_type: varchar
+
+      - name: birth_city
+        description: Player's reported city of birth.
+        data_type: varchar
+
+      - name: birth_country
+        description: Player's reported country of birth.
+        data_type: varchar
+
+      - name: birth_date
+        description: Player's date of birth.
+        data_type: date
+
+      - name: birth_state_province
+        description: Player's reported state or province of birth.
+        data_type: varchar
+
+      - name: boxscore_name
+        description: Player name formatted for boxscore display.
+        data_type: varchar
+
+      - name: boxscore_position_abbreviation
+        description: Abbreviation of the player's boxscore position.
+        data_type: varchar
+
+      - name: boxscore_position_code
+        description: MLB code for the player's boxscore position.
+        data_type: varchar
+
+      - name: boxscore_position_name
+        description: Name of the player's boxscore position.
+        data_type: varchar
+
+      - name: boxscore_position_type
+        description: Broad type of the player's boxscore position.
+        data_type: varchar
+
+      - name: draft_year
+        description: Year in which the player was drafted.
+        data_type: integer
+
+      - name: first_name
+        description: Player's first name.
+        data_type: varchar
+
+      - name: full_name
+        description: Player's full name.
+        data_type: varchar
+
+      - name: gender
+        description: Player's gender code as reported by MLB.
+        data_type: varchar
+
+      - name: height
+        description: Player's listed height.
+        data_type: varchar
+
+      - name: is_current_batter
+        description: Whether the player was the current batter in the source snapshot.
+        data_type: boolean
+
+      - name: is_current_pitcher
+        description: Whether the player was the current pitcher in the source snapshot.
+        data_type: boolean
+
+      - name: is_on_bench
+        description: Whether MLB marked the player as on the bench.
+        data_type: boolean
+
+      - name: is_substitute
+        description: Whether MLB marked the player as a substitute.
+        data_type: boolean
+
+      - name: jersey_number
+        description: Player's jersey number in the boxscore.
+        data_type: varchar
+
+      - name: last_name
+        description: Player's last name.
+        data_type: varchar
+
+      - name: middle_name
+        description: Player's middle name.
+        data_type: varchar
+
+      - name: mlb_debut_date
+        description: Date of the player's MLB debut.
+        data_type: date
+
+      - name: name_slug
+        description: URL-friendly player name supplied by MLB.
+        data_type: varchar
+
+      - name: nickname
+        description: Player's nickname.
+        data_type: varchar
+
+      - name: pitch_hand_code
+        description: MLB code for the player's throwing hand.
+        data_type: varchar
+
+      - name: pitch_hand_description
+        description: Human-readable description of the player's throwing hand.
+        data_type: varchar
+
+      - name: primary_number
+        description: Player's primary uniform number.
+        data_type: varchar
+
+      - name: primary_position_abbreviation
+        description: Abbreviation of the player's primary position.
+        data_type: varchar
+
+      - name: primary_position_code
+        description: MLB code for the player's primary position.
+        data_type: varchar
+
+      - name: primary_position_name
+        description: Name of the player's primary position.
+        data_type: varchar
+
+      - name: primary_position_type
+        description: Broad type of the player's primary position.
+        data_type: varchar
+
+      - name: pronunciation
+        description: Pronunciation guide for the player's name.
+        data_type: varchar
+
+      - name: roster_status_code
+        description: MLB code for the player's roster status.
+        data_type: varchar
+
+      - name: roster_status_description
+        description: Human-readable description of the player's roster status.
+        data_type: varchar
+
+      - name: strike_zone_bottom
+        description: Bottom of the player's strike zone, in feet.
+        data_type: double
+
+      - name: strike_zone_top
+        description: Top of the player's strike zone, in feet.
+        data_type: double
+
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+
+      - name: use_last_name
+        description: Player's preferred last name.
+        data_type: varchar
+
+      - name: use_name
+        description: Player's preferred first name.
+        data_type: varchar
+
+      - name: weight
+        description: Player's listed weight, in pounds.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

@@ -1,0 +1,186 @@
+version: 2
+
+models:
+  - name: stg_play_events
+    description: >-
+      Ordered events within each plate appearance from the currently selected
+      revision of each MLB game. This is the canonical event stream containing
+      pitches, actions, pickoffs, step-offs, no-pitch calls, and other event
+      kinds; specialized event models contain sparse subsets of these rows.
+      Its grain is one event at game_pk, at_bat_index, and event_index.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance containing the event.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index defining the event's order within the plate appearance.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: away_score
+        description: Away-team score reported with the event.
+        data_type: integer
+
+      - name: balls
+        description: Ball count reported after the event.
+        data_type: integer
+
+      - name: base_number
+        description: Numeric base associated with the event, when supplied by MLB.
+        data_type: integer
+
+      - name: batting_order
+        description: MLB batting-order code associated with a substitution or switch.
+        data_type: varchar
+
+      - name: description
+        description: Detailed human-readable description of the event.
+        data_type: varchar
+
+      - name: ended_at
+        description: UTC timestamp when the event ended.
+        data_type: timestamp
+
+      - name: event
+        description: Human-readable MLB event label.
+        data_type: varchar
+
+      - name: event_code
+        description: Compact MLB code identifying the event or call.
+        data_type: varchar
+
+      - name: event_kind
+        description: Top-level MLB event kind, such as pitch, action, pickoff, or stepoff.
+        data_type: varchar
+
+      - name: event_type
+        description: More specific machine-readable MLB event classification.
+        data_type: varchar
+
+      - name: has_review
+        description: Whether the event includes replay-review information.
+        data_type: boolean
+
+      - name: home_score
+        description: Home-team score reported with the event.
+        data_type: integer
+
+      - name: injury_type
+        description: MLB injury classification associated with the event.
+        data_type: varchar
+
+      - name: is_ball
+        description: Whether MLB classifies the event as a ball.
+        data_type: boolean
+
+      - name: is_base_running_play
+        description: Whether MLB identifies the event as a baserunning play.
+        data_type: boolean
+
+      - name: is_in_play
+        description: Whether the event put the ball in play.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB marks the event as recording an out.
+        data_type: boolean
+
+      - name: is_pitch
+        description: Whether MLB identifies the event as an actual pitch.
+        data_type: boolean
+
+      - name: is_scoring_play
+        description: Whether MLB marks the event as contributing to a scoring play.
+        data_type: boolean
+
+      - name: is_strike
+        description: Whether MLB classifies the event as a strike.
+        data_type: boolean
+
+      - name: is_substitution
+        description: Whether MLB identifies the event as a substitution.
+        data_type: boolean
+
+      - name: outs
+        description: Out count reported after the event.
+        data_type: integer
+
+      - name: pitch_number
+        description: Sequential pitch number supplied for the event.
+        data_type: integer
+
+      - name: play_id
+        description: MLB identifier assigned to the event.
+        data_type: varchar
+
+      - name: player_id
+        description: MLB identifier of the player associated with the event.
+        data_type: bigint
+
+      - name: position_abbreviation
+        description: Abbreviation of the fielding position associated with the event.
+        data_type: varchar
+
+      - name: position_code
+        description: MLB code for the fielding position associated with the event.
+        data_type: varchar
+
+      - name: position_name
+        description: Name of the fielding position associated with the event.
+        data_type: varchar
+
+      - name: replaced_player_id
+        description: MLB identifier of the player replaced during the event.
+        data_type: bigint
+
+      - name: started_at
+        description: UTC timestamp when the event started.
+        data_type: timestamp
+
+      - name: strikes
+        description: Strike count reported after the event.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

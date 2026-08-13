@@ -1,0 +1,88 @@
+version: 2
+
+models:
+  - name: stg_boxscore_player_positions
+    description: >-
+      Ordered positions listed by MLB for each player-team entry in the
+      currently selected revision of a game's boxscore. A player can have
+      multiple rows when appearing at multiple positions. Its grain is
+      game_pk, player_id, team_id, and position_sequence.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - player_id
+              - team_id
+              - position_sequence
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: player_id
+        description: MLB identifier of the player represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_id
+        description: MLB identifier of the team represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: position_sequence
+        description: Zero-based order of the position in MLB's boxscore position list.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: position_abbreviation
+        description: Abbreviation of the listed position.
+        data_type: varchar
+
+      - name: position_code
+        description: MLB code for the listed position.
+        data_type: varchar
+
+      - name: position_name
+        description: Name of the listed position.
+        data_type: varchar
+
+      - name: position_type
+        description: Broad category of the listed position.
+        data_type: varchar
+
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

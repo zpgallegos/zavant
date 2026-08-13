@@ -23,7 +23,7 @@ If `python3` already points to Python 3.9 or newer, `make bootstrap` is sufficie
 
 Copy `.env.example` to the ignored `.env` file for local configuration. Make
 loads that file automatically and maps its `ZAVANT_*` values to infrastructure
-parameters; the wrappers under `test_scripts/` source the same file. Explicit
+parameters; the wrappers under `scripts/adhoc/` source the same file. Explicit
 Make arguments and variables supplied directly to a test script override those
 defaults.
 
@@ -181,7 +181,7 @@ PYTHONPATH=src .venv/bin/python -m zavant backfill-seasons \
 
 Storage defaults to `.local/lake` even when an S3 bucket is present in the
 environment. Cloud backfills require explicit `--storage s3`, a bucket, and an
-expected AWS account ID. The `test_scripts/backfill-seasons.sh` wrapper loads
+expected AWS account ID. The `scripts/adhoc/backfill-seasons.sh` wrapper loads
 those values from `.env`; direct CLI calls receive them from the shell.
 Credentials remain owned by the normal AWS SDK credential chain.
 

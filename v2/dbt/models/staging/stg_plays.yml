@@ -1,0 +1,187 @@
+version: 2
+
+models:
+  - name: stg_plays
+    description: >-
+      Plate appearances from the currently selected revision of each MLB game.
+      Each row summarizes one batter-pitcher matchup and its result, inning,
+      score, count, participants, timing, and post-play baserunner state. Its
+      child play-events contain the ordered pitches and actions within the
+      plate appearance. Its grain is one at_bat_index per game_pk.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the plate appearance within the game.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: away_score
+        description: Away-team score after the plate appearance.
+        data_type: integer
+
+      - name: balls
+        description: Ball count reported for the plate appearance.
+        data_type: integer
+
+      - name: bat_side_code
+        description: MLB code for the batter's batting side in the matchup.
+        data_type: varchar
+
+      - name: batter_id
+        description: MLB identifier of the batter in the matchup.
+        data_type: bigint
+
+      - name: batter_split
+        description: MLB split classification for the batter's handedness matchup.
+        data_type: varchar
+
+      - name: captivating_index
+        description: MLB's relative interest score for the plate appearance.
+        data_type: integer
+
+      - name: defense_team_id
+        description: MLB identifier of the fielding team during the plate appearance.
+        data_type: bigint
+
+      - name: description
+        description: Human-readable description of the plate appearance result.
+        data_type: varchar
+
+      - name: ended_at
+        description: UTC timestamp when the plate appearance ended.
+        data_type: timestamp
+
+      - name: event
+        description: Human-readable MLB label for the plate appearance result.
+        data_type: varchar
+
+      - name: event_type
+        description: Machine-readable MLB classification of the plate appearance result.
+        data_type: varchar
+
+      - name: half_inning
+        description: Inning half in which the plate appearance occurred.
+        data_type: varchar
+
+      - name: has_out
+        description: Whether the plate appearance includes at least one out.
+        data_type: boolean
+
+      - name: has_review
+        description: Whether the plate appearance includes replay-review information.
+        data_type: boolean
+
+      - name: home_score
+        description: Home-team score after the plate appearance.
+        data_type: integer
+
+      - name: inning
+        description: Numeric inning in which the plate appearance occurred.
+        data_type: integer
+
+      - name: is_complete
+        description: Whether MLB marks the plate appearance as complete.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB classifies the plate appearance result as an out.
+        data_type: boolean
+
+      - name: is_scoring_play
+        description: Whether at least one run scored during the plate appearance.
+        data_type: boolean
+
+      - name: is_top_inning
+        description: Whether the plate appearance occurred in the top half of the inning.
+        data_type: boolean
+
+      - name: men_on_base_split
+        description: MLB classification of the baserunner state for the matchup.
+        data_type: varchar
+
+      - name: offense_team_id
+        description: MLB identifier of the batting team during the plate appearance.
+        data_type: bigint
+
+      - name: outs
+        description: Out count reported after the plate appearance.
+        data_type: integer
+
+      - name: pitch_hand_code
+        description: MLB code for the pitcher's throwing hand in the matchup.
+        data_type: varchar
+
+      - name: pitcher_id
+        description: MLB identifier of the pitcher in the matchup.
+        data_type: bigint
+
+      - name: pitcher_split
+        description: MLB split classification for the pitcher's handedness matchup.
+        data_type: varchar
+
+      - name: play_type
+        description: High-level MLB type assigned to the plate appearance result.
+        data_type: varchar
+
+      - name: post_on_first_id
+        description: MLB identifier of the runner on first base after the play.
+        data_type: bigint
+
+      - name: post_on_second_id
+        description: MLB identifier of the runner on second base after the play.
+        data_type: bigint
+
+      - name: post_on_third_id
+        description: MLB identifier of the runner on third base after the play.
+        data_type: bigint
+
+      - name: rbi
+        description: Runs batted in credited on the plate appearance.
+        data_type: integer
+
+      - name: started_at
+        description: UTC timestamp when the plate appearance started.
+        data_type: timestamp
+
+      - name: strikes
+        description: Strike count reported for the plate appearance.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

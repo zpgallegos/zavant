@@ -1,0 +1,154 @@
+version: 2
+
+models:
+  - name: stg_game_teams
+    description: >-
+      Away and home team snapshots from the currently selected revision of
+      each MLB game. Each row combines team identity and organizational
+      attributes with the record and game score reported by MLB. Its grain is
+      one team side per game_pk.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - team_side
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: abbreviation
+        description: Standard abbreviation used by MLB for the team.
+        data_type: varchar
+
+      - name: active
+        description: Whether MLB identifies the team as active.
+        data_type: boolean
+
+      - name: club_name
+        description: Club portion of the team's name, such as Dodgers or Nationals.
+        data_type: varchar
+
+      - name: division_id
+        description: MLB identifier of the team's division.
+        data_type: bigint
+
+      - name: division_leader
+        description: Whether the team was identified as its division leader.
+        data_type: boolean
+
+      - name: division_name
+        description: Name of the team's division.
+        data_type: varchar
+
+      - name: file_code
+        description: Short file code assigned to the team by MLB.
+        data_type: varchar
+
+      - name: first_year_of_play
+        description: First season in which the franchise began play, as reported by MLB.
+        data_type: varchar
+
+      - name: franchise_name
+        description: Franchise portion of the team's name.
+        data_type: varchar
+
+      - name: games_played
+        description: Number of games played in the team record reported by the feed.
+        data_type: integer
+
+      - name: league_id
+        description: MLB identifier of the team's league.
+        data_type: bigint
+
+      - name: league_name
+        description: Name of the team's league.
+        data_type: varchar
+
+      - name: location_name
+        description: Geographic location represented by the team.
+        data_type: varchar
+
+      - name: losses
+        description: Losses in the team record reported by the feed.
+        data_type: integer
+
+      - name: score
+        description: Runs scored by the team in the game.
+        data_type: integer
+
+      - name: short_name
+        description: Short display name used by MLB for the team.
+        data_type: varchar
+
+      - name: team_code
+        description: Team code assigned by MLB.
+        data_type: varchar
+
+      - name: team_id
+        description: MLB's stable identifier for the team.
+        data_type: bigint
+
+      - name: team_name
+        description: Full name of the team.
+        data_type: varchar
+
+      - name: team_name_short
+        description: Club-style team name reported in MLB's teamName field.
+        data_type: varchar
+
+      - name: ties
+        description: Ties in the team record reported by the feed.
+        data_type: integer
+
+      - name: venue_id
+        description: MLB identifier of the team's associated venue.
+        data_type: bigint
+
+      - name: venue_name
+        description: Name of the team's associated venue.
+        data_type: varchar
+
+      - name: winning_percentage
+        description: Winning percentage in the team record reported by the feed.
+        data_type: varchar
+
+      - name: wins
+        description: Wins in the team record reported by the feed.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_current_game_revisions
+    description: >-
+      One currently selected raw-game revision per MLB game for the supported
+      analytical projection contract. This model is the revision-selection
+      spine used to restrict revision-aware staging models to their current
+      rows. Its grain is game_pk.
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game and this model's grain.
+        data_type: bigint
+        data_tests:
+          - unique
+          - not_null
+
+      # metadata
+      - name: projection_contract_version
+        description: >-
+          Version of the analytical projection contract under which the
+          selected revision was published.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: projection_run_id
+        description: >-
+          UUID of the Glue reconciliation run that most recently confirmed
+          this game-to-revision mapping.
+        data_type: varchar
+
+      - name: raw_object_uri
+        description: S3 URI of the immutable raw game JSON for the selected revision.
+        data_type: varchar
+
+      - name: reconciled_at
+        description: UTC timestamp when the Glue run last reconciled this mapping.
+        data_type: timestamp
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: >-
+          SHA-256 content identity of the raw game revision currently selected
+          by the acquisition layer.
+        data_type: varchar
+        data_tests:
+          - not_null

@@ -1,0 +1,80 @@
+with current_revision as (
+    select
+        game_pk,
+        source_revision_id,
+        projection_contract_version
+    from {{ ref("stg_current_game_revisions") }}
+),
+
+pitches as (
+    select * from {{ source("zavant_analytical_prod", "pitches") }}
+)
+
+select
+    -- grain
+    pitches.game_pk,
+    pitches.at_bat_index,
+    pitches.event_index,
+
+    -- attributes
+    pitches.balls,
+    pitches.break_angle,
+    pitches.break_horizontal,
+    pitches.break_length,
+    pitches.break_vertical,
+    pitches.break_vertical_induced,
+    pitches.break_y,
+    pitches.call_code,
+    pitches.call_description,
+    pitches.coordinate_a_x,
+    pitches.coordinate_a_y,
+    pitches.coordinate_a_z,
+    pitches.coordinate_p_x,
+    pitches.coordinate_p_z,
+    pitches.coordinate_pfx_x,
+    pitches.coordinate_pfx_z,
+    pitches.coordinate_v_x0,
+    pitches.coordinate_v_y0,
+    pitches.coordinate_v_z0,
+    pitches.coordinate_x,
+    pitches.coordinate_x0,
+    pitches.coordinate_y,
+    pitches.coordinate_y0,
+    pitches.coordinate_z0,
+    pitches.description,
+    pitches.end_speed,
+    pitches.extension,
+    pitches.has_review,
+    pitches.is_ball,
+    pitches.is_in_play,
+    pitches.is_out,
+    pitches.is_strike,
+    pitches.outs,
+    pitches.pitch_number,
+    pitches.pitch_type_code,
+    pitches.pitch_type_description,
+    pitches.plate_time,
+    pitches.play_id,
+    pitches.spin_direction,
+    pitches.spin_rate,
+    pitches.start_speed,
+    pitches.strike_zone_bottom,
+    pitches.strike_zone_depth,
+    pitches.strike_zone_top,
+    pitches.strike_zone_width,
+    pitches.strikes,
+    pitches.type_confidence,
+    pitches.zone,
+
+    -- metadata
+    pitches.official_date,
+    pitches.projected_at,
+    pitches.projection_contract_version,
+    pitches.projection_run_id,
+    pitches.season,
+    pitches.source_revision_id
+from pitches
+inner join current_revision on
+    pitches.game_pk = current_revision.game_pk
+    and pitches.source_revision_id = current_revision.source_revision_id
+    and pitches.projection_contract_version = current_revision.projection_contract_version

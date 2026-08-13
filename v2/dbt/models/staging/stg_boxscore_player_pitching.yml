@@ -1,0 +1,301 @@
+version: 2
+
+models:
+  - name: stg_boxscore_player_pitching
+    description: >-
+      Game-level pitching lines reported by MLB for players in the currently
+      selected revision of each game's boxscore. These are statistics for the
+      individual game rather than season-to-date totals. Its grain is game_pk,
+      player_id, and team_id.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - player_id
+              - team_id
+    columns:
+      # grain
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: player_id
+        description: MLB identifier of the player represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_id
+        description: MLB identifier of the team represented by the row.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # attributes
+      - name: air_outs
+        description: Air outs recorded in the pitching line.
+        data_type: integer
+
+      - name: at_bats
+        description: Official opponent at-bats recorded against the pitcher or team.
+        data_type: integer
+
+      - name: balks
+        description: Balks charged in the pitching line.
+        data_type: integer
+
+      - name: balls
+        description: Balls thrown in the pitching line.
+        data_type: integer
+
+      - name: base_on_balls
+        description: Walks allowed in the pitching line.
+        data_type: integer
+
+      - name: batters_faced
+        description: Batters faced in the pitching line.
+        data_type: integer
+
+      - name: blown_saves
+        description: Blown saves charged in the pitching line.
+        data_type: integer
+
+      - name: catchers_interference
+        description: Catcher-interference events recorded in the pitching line.
+        data_type: integer
+
+      - name: caught_stealing
+        description: Runners caught stealing during the pitching line.
+        data_type: integer
+
+      - name: caught_stealing_percentage
+        description: Caught-stealing rate as formatted by MLB.
+        data_type: varchar
+
+      - name: complete_games
+        description: Complete games recorded in the pitching line.
+        data_type: integer
+
+      - name: doubles
+        description: Doubles allowed in the pitching line.
+        data_type: integer
+
+      - name: earned_run_average
+        description: Earned run average as formatted by MLB.
+        data_type: varchar
+
+      - name: earned_runs
+        description: Earned runs allowed in the pitching line.
+        data_type: integer
+
+      - name: fly_outs
+        description: Fly outs recorded in the pitching line.
+        data_type: integer
+
+      - name: games_finished
+        description: Games finished represented by the pitching line.
+        data_type: integer
+
+      - name: games_pitched
+        description: Games pitched represented by the boxscore line, normally one.
+        data_type: integer
+
+      - name: games_played
+        description: Games played represented by the boxscore line, normally one.
+        data_type: integer
+
+      - name: games_started
+        description: Games started represented by the pitching line.
+        data_type: integer
+
+      - name: ground_outs
+        description: Ground outs recorded in the pitching line.
+        data_type: integer
+
+      - name: ground_outs_to_air_outs
+        description: Ground-out-to-air-out ratio as formatted by MLB.
+        data_type: varchar
+
+      - name: hit_batsmen
+        description: Batters hit as reported in MLB's hitBatsmen field.
+        data_type: integer
+
+      - name: hit_by_pitch
+        description: Hit-by-pitch events recorded in the pitching line.
+        data_type: integer
+
+      - name: hits
+        description: Hits allowed in the pitching line.
+        data_type: integer
+
+      - name: holds
+        description: Holds credited in the pitching line.
+        data_type: integer
+
+      - name: home_runs
+        description: Home runs allowed in the pitching line.
+        data_type: integer
+
+      - name: home_runs_per_nine
+        description: Home runs allowed per nine innings as formatted by MLB.
+        data_type: varchar
+
+      - name: inherited_runners
+        description: Inherited runners in the pitching line.
+        data_type: integer
+
+      - name: inherited_runners_scored
+        description: Inherited runners who scored in the pitching line.
+        data_type: integer
+
+      - name: innings_pitched
+        description: Innings pitched using baseball's outs-based decimal notation.
+        data_type: varchar
+
+      - name: intentional_walks
+        description: Intentional walks allowed in the pitching line.
+        data_type: integer
+
+      - name: line_outs
+        description: Line outs recorded in the pitching line.
+        data_type: integer
+
+      - name: losses
+        description: Losses charged in the pitching line.
+        data_type: integer
+
+      - name: note
+        description: Optional MLB note attached to the pitching line.
+        data_type: varchar
+
+      - name: number_of_pitches
+        description: Number of pitches reported by MLB for the pitching line.
+        data_type: integer
+
+      - name: outs
+        description: Outs recorded in the pitching line.
+        data_type: integer
+
+      - name: passed_balls
+        description: Passed balls recorded in the pitching line.
+        data_type: integer
+
+      - name: pickoffs
+        description: Pickoffs recorded in the pitching line.
+        data_type: integer
+
+      - name: pitches_per_inning
+        description: Pitches per inning as formatted by MLB.
+        data_type: varchar
+
+      - name: pitches_thrown
+        description: Pitches thrown in the pitching line.
+        data_type: integer
+
+      - name: pop_outs
+        description: Pop outs recorded in the pitching line.
+        data_type: integer
+
+      - name: rbi
+        description: Runs batted in reported against the pitching line.
+        data_type: integer
+
+      - name: runs
+        description: Runs allowed in the pitching line.
+        data_type: integer
+
+      - name: runs_scored_per_nine
+        description: Runs allowed per nine innings as formatted by MLB.
+        data_type: varchar
+
+      - name: sac_bunts
+        description: Sacrifice bunts allowed in the pitching line.
+        data_type: integer
+
+      - name: sac_flies
+        description: Sacrifice flies allowed in the pitching line.
+        data_type: integer
+
+      - name: save_opportunities
+        description: Save opportunities recorded in the pitching line.
+        data_type: integer
+
+      - name: saves
+        description: Saves credited in the pitching line.
+        data_type: integer
+
+      - name: shutouts
+        description: Shutouts recorded in the pitching line.
+        data_type: integer
+
+      - name: stolen_base_percentage
+        description: Opponent stolen-base success rate as formatted by MLB.
+        data_type: varchar
+
+      - name: stolen_bases
+        description: Stolen bases allowed in the pitching line.
+        data_type: integer
+
+      - name: strike_outs
+        description: Strikeouts recorded in the pitching line.
+        data_type: integer
+
+      - name: strike_percentage
+        description: Percentage of pitches recorded as strikes, as formatted by MLB.
+        data_type: varchar
+
+      - name: strikes
+        description: Strikes thrown in the pitching line.
+        data_type: integer
+
+      - name: summary
+        description: Compact human-readable summary of the pitching line.
+        data_type: varchar
+
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+
+      - name: triples
+        description: Triples allowed in the pitching line.
+        data_type: integer
+
+      - name: walks_hits_per_inning
+        description: Walks plus hits per inning pitched as formatted by MLB.
+        data_type: varchar
+
+      - name: wild_pitches
+        description: Wild pitches charged in the pitching line.
+        data_type: integer
+
+      - name: wins
+        description: Wins credited in the pitching line.
+        data_type: integer
+
+      # metadata
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+
+      - name: projected_at
+        description: UTC timestamp when this raw revision was projected.
+        data_type: timestamp
+
+      - name: projection_contract_version
+        description: Version of the analytical projection contract used for this row.
+        data_type: varchar
+
+      - name: projection_run_id
+        description: UUID of the Glue reconciliation run that projected this row.
+        data_type: varchar
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+
+      - name: source_revision_id
+        description: SHA-256 content identity of the raw game response used for this row.
+        data_type: varchar

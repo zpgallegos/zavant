@@ -1,22 +1,22 @@
-.vscode
-.env
-.venv/
-.local/
-build/
 *.egg-info/
-__pycache__/
 *.py[cod]
-.pytest_cache/
 .coverage
-htmlcov/
 .DS_Store
-/scripts/
+.env
+.local/
+.pytest_cache/
+.venv/
+.vscode
+__pycache__/
+build/
+htmlcov/
+/logs/
 package-lock.yml
+/scripts/
 
 # dbt-generated and machine-local state
+/dbt/.user.yml
 /dbt/dbt_packages/
 /dbt/logs/
-/dbt/target/
 /dbt/profiles.yml
-/dbt/.user.yml
-/logs/
+/dbt/target/

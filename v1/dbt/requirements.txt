@@ -1,2 +1,0 @@
-dbt-core==1.7.13
-dbt-athena-community==1.7.2

@@ -120,4 +120,6 @@ and publishes changes pushed to `master`. It can also be started manually from
 the GitHub Actions page.
 
 Hex's older semantic-ingestion workflow is deprecated. The repository uses the
-current `hex-inc/action-context-toolkit@v2` workflow instead.
+current `hex-inc/action-context-toolkit@v2.0.0` workflow instead. Hex's generated
+example currently references `@v2`, but the action repository does not publish
+that moving tag, so the workflow pins the available release tag explicitly.

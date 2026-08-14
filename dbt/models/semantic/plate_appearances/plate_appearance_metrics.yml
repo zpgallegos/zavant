@@ -1,0 +1,196 @@
+version: 2
+
+metrics:
+  - name: plate_appearances
+    label: Plate Appearances
+    description: Number of completed plate appearances.
+    type: simple
+    type_params:
+      measure: plate_appearances
+
+  - name: at_bats
+    label: At-Bats
+    description: Number of official at-bats.
+    type: simple
+    type_params:
+      measure: at_bats
+
+  - name: hits
+    label: Hits
+    description: Number of hits of any type.
+    type: simple
+    type_params:
+      measure: hits
+
+  - name: singles
+    label: Singles
+    description: Number of singles.
+    type: simple
+    type_params:
+      measure: singles
+
+  - name: doubles
+    label: Doubles
+    description: Number of doubles.
+    type: simple
+    type_params:
+      measure: doubles
+
+  - name: triples
+    label: Triples
+    description: Number of triples.
+    type: simple
+    type_params:
+      measure: triples
+
+  - name: home_runs
+    label: Home Runs
+    description: Number of home runs.
+    type: simple
+    type_params:
+      measure: home_runs
+
+  - name: total_bases
+    label: Total Bases
+    description: Total bases credited on hits.
+    type: simple
+    type_params:
+      measure: total_bases
+
+  - name: walks
+    label: Walks
+    description: Number of walks, including intentional walks.
+    type: simple
+    type_params:
+      measure: walks
+
+  - name: intentional_walks
+    label: Intentional Walks
+    description: Number of intentional walks.
+    type: simple
+    type_params:
+      measure: intentional_walks
+
+  - name: hit_by_pitch
+    label: Hit by Pitch
+    description: Number of times a batter was hit by a pitch.
+    type: simple
+    type_params:
+      measure: hit_by_pitch
+
+  - name: strikeouts
+    label: Strikeouts
+    description: Number of strikeouts.
+    type: simple
+    type_params:
+      measure: strikeouts
+
+  - name: sacrifices
+    label: Sacrifices
+    description: Number of sacrifice bunts and sacrifice flies.
+    type: simple
+    type_params:
+      measure: sacrifices
+
+  - name: sacrifice_bunts
+    label: Sacrifice Bunts
+    description: Number of sacrifice bunts.
+    type: simple
+    type_params:
+      measure: sacrifice_bunts
+
+  - name: sacrifice_flies
+    label: Sacrifice Flies
+    description: Number of sacrifice flies.
+    type: simple
+    type_params:
+      measure: sacrifice_flies
+
+  - name: reached_on_error
+    label: Reached on Error
+    description: Number of ordinary reached-on-error outcomes.
+    type: simple
+    type_params:
+      measure: reached_on_error
+
+  - name: runs_batted_in
+    label: Runs Batted In
+    description: Runs batted in credited on plate appearances.
+    type: simple
+    type_params:
+      measure: runs_batted_in
+
+  - name: runs_scored_during_plate_appearances
+    label: Runs Scored During Plate Appearances
+    description: >-
+      Batting-team runs that scored during plate appearances, excluding runs on
+      independent baserunning events.
+    type: simple
+    type_params:
+      measure: runs_scored_during_plate_appearances
+
+  - name: pitches
+    label: Pitches
+    description: Number of pitch records attached to plate appearances.
+    type: simple
+    type_params:
+      measure: pitches
+
+  - name: batting_average
+    label: Batting Average (AVG)
+    description: Hits divided by official at-bats.
+    type: ratio
+    type_params:
+      numerator: hits
+      denominator: at_bats
+
+  - name: times_on_base
+    label: Times on Base
+    description: Hits, walks, and hit-by-pitch outcomes used in on-base percentage.
+    type: derived
+    type_params:
+      expr: hits + walks + hit_by_pitch
+      metrics:
+        - name: hits
+        - name: walks
+        - name: hit_by_pitch
+
+  - name: on_base_opportunities
+    label: On-Base Opportunities
+    description: >-
+      Official at-bats, walks, hit-by-pitch outcomes, and sacrifice flies used
+      as the denominator of on-base percentage.
+    type: derived
+    type_params:
+      expr: at_bats + walks + hit_by_pitch + sacrifice_flies
+      metrics:
+        - name: at_bats
+        - name: walks
+        - name: hit_by_pitch
+        - name: sacrifice_flies
+
+  - name: on_base_percentage
+    label: On-Base Percentage (OBP)
+    description: Times on base divided by on-base opportunities.
+    type: ratio
+    type_params:
+      numerator: times_on_base
+      denominator: on_base_opportunities
+
+  - name: slugging_percentage
+    label: Slugging Percentage (SLG)
+    description: Total bases divided by official at-bats.
+    type: ratio
+    type_params:
+      numerator: total_bases
+      denominator: at_bats
+
+  - name: on_base_plus_slugging
+    label: On-Base Plus Slugging (OPS)
+    description: On-base percentage plus slugging percentage.
+    type: derived
+    type_params:
+      expr: on_base_percentage + slugging_percentage
+      metrics:
+        - name: on_base_percentage
+        - name: slugging_percentage

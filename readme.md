@@ -261,8 +261,10 @@ Bootstrap configuration is consulted only while its corresponding watermark is a
 This completes the local application, historical CLI reconciliation, production
 API-to-raw Lambda, Glue-to-Iceberg projection, scheduled Step Functions
 orchestration, and business-grained dbt staging over Glue-owned current views. Workflow verification,
-alarms, conformed dbt models, semantics, and presentation remain later layers of
-the project.
+alarms and additional conformed dbt models remain later layers. The first
+plate-appearance semantic model is consumed by Lightdash, whose separate stack
+provides a cost-bounded Athena workgroup, expiring query-result storage, and a
+read-only production warehouse identity.
 
 ## Local analytical projection
 

@@ -20,7 +20,7 @@ Acquisition --------> immutable raw object store
                        semantic definitions
                               |
                               v
-                    API / application / notebooks
+                       Lightdash / notebooks
 ```
 
 Acquisition begins with a bounded schedule snapshot. The exact response and its request provenance are retained, while a run manifest records the games discovered for eligibility and retrieval processing. This provides the expected-work set used to measure completeness. Each eligible complete-game response is validated before revision-aware landing, and each outcome is atomically recorded without preventing independent games from proceeding. Resumption reuses the stored schedule snapshot and retries only unfinished or failed work.
@@ -97,11 +97,15 @@ the workflow reports the retained acquisition error.
 - The daily workflow stack owns EventBridge Scheduler and the Step Functions
   Standard workflow that sequences acquisition and one batch Glue projection;
   later dbt execution can become a subsequent state.
+- Lightdash consumes the MetricFlow definitions in dbt's compiled manifest,
+  translates the supported metrics into its own semantic layer, and queries
+  Athena through a dedicated cost-bounded workgroup and read-only warehouse
+  identity.
 - Cloud infrastructure is defined as code and separated by workload ownership.
 
-The semantic-layer implementation and presentation framework remain deliberate
-follow-up decisions. They should be selected with thin vertical slices and
-recorded as ADRs rather than inherited accidentally from the legacy stack.
+MetricFlow YAML is the source-controlled metric specification. Lightdash is the
+initial semantic-query and BI runtime; its MetricFlow translation remains Beta,
+so unsupported metric shapes must be identified during deployment validation.
 
 ## Environments
 

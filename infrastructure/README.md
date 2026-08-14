@@ -5,7 +5,10 @@ execution role, and log group. The separate
 [daily workflow infrastructure](daily-workflow.md) owns EventBridge Scheduler
 and Step Functions, while the
 [analytical projection infrastructure](analytical.md) references this bucket
-and owns the Glue/Iceberg execution boundary. Monitoring remains a later slice.
+and owns the Glue/Iceberg execution boundary. The
+[Lightdash integration infrastructure](lightdash.md) owns its Athena workgroup,
+ephemeral query-result bucket, and warehouse identity. Monitoring remains a
+later slice.
 
 ## Bucket guarantees
 

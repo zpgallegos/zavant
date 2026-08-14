@@ -14,6 +14,9 @@ export ZAVANT_DATA_DIR
 export ZAVANT_DEPLOYMENT_ENVIRONMENT
 export ZAVANT_INITIAL_CORRECTION_WATERMARK
 export ZAVANT_INITIAL_SCHEDULE_DATE
+export ZAVANT_LIGHTDASH_BYTES_SCANNED_CUTOFF
+export ZAVANT_LIGHTDASH_DATABASE
+export ZAVANT_LIGHTDASH_QUERY_RESULT_RETENTION_DAYS
 export ZAVANT_MLB_API_BASE_URL
 export ZAVANT_S3_BUCKET
 export ZAVANT_S3_PREFIX
@@ -71,6 +74,17 @@ ANALYTICAL_GLUE_CODE_PREFIX := deployments/glue
 ANALYTICAL_MAX_PROJECTION_PARTITIONS ?= $(call configuration_or_default, \
 	$(ZAVANT_ANALYTICAL_MAX_PROJECTION_PARTITIONS),64)
 
+# Lightdash integration
+
+LIGHTDASH_TEMPLATE := infrastructure/lightdash-integration-stack.yaml
+LIGHTDASH_STACK_NAME ?= $(PROJECT_NAME)-lightdash-$(DEPLOYMENT_ENVIRONMENT)
+LIGHTDASH_DATABASE ?= $(call configuration_or_default, \
+	$(ZAVANT_LIGHTDASH_DATABASE),zavant_dbt_$(DEPLOYMENT_ENVIRONMENT))
+LIGHTDASH_QUERY_RESULT_RETENTION_DAYS ?= $(call configuration_or_default, \
+	$(ZAVANT_LIGHTDASH_QUERY_RESULT_RETENTION_DAYS),7)
+LIGHTDASH_BYTES_SCANNED_CUTOFF ?= $(call configuration_or_default, \
+	$(ZAVANT_LIGHTDASH_BYTES_SCANNED_CUTOFF),10737418240)
+
 # Daily workflow
 
 DAILY_WORKFLOW_TEMPLATE := infrastructure/daily-workflow-stack.yaml
@@ -95,6 +109,7 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	dbt-debug \
 	dbt-lint \
 	dbt-parse \
+	dbt-prod-build \
 	dbt-source-freshness \
 	dbt-staging-build \
 	glue-package \
@@ -102,6 +117,9 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	help \
 	lambda-invoke \
 	lambda-package \
+	lightdash-infra-deploy \
+	lightdash-infra-outputs \
+	lightdash-infra-validate \
 	test \
 	workflow-check-schedule \
 	workflow-infra-deploy \
@@ -116,16 +134,20 @@ help:
 	@echo "dbt-debug                   validate the dev dbt/Athena connection"
 	@echo "dbt-lint                    lint dbt SQL with the Athena dialect"
 	@echo "dbt-parse                   parse dbt resources without querying Athena"
+	@echo "dbt-prod-build              build and test the production dbt project"
 	@echo "dbt-source-freshness        check the analytical reconciliation timestamp"
 	@echo "dbt-staging-build           build and test staging against Athena"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
+	@echo "lightdash-infra-validate    validate the Lightdash/Athena template"
 	@echo "workflow-infra-validate     validate the Step Functions template"
 	@echo "acquisition-infra-bootstrap create the acquisition bucket and role"
 	@echo "lambda-package              build the Lambda deployment archive"
 	@echo "glue-package                build the Glue Python library archive"
 	@echo "acquisition-infra-deploy    deploy the acquisition Lambda"
 	@echo "analytics-infra-deploy      deploy the Glue projection job"
+	@echo "lightdash-infra-deploy      deploy the Lightdash/Athena integration"
+	@echo "lightdash-infra-outputs     show Lightdash connection settings"
 	@echo "workflow-infra-deploy       deploy the daily workflow and schedule"
 	@echo "lambda-invoke               manually invoke acquisition"
 	@echo "glue-start                  manually start analytical projection"
@@ -163,6 +185,9 @@ dbt-lint:
 dbt-parse:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) parse --no-partial-parse
 
+dbt-prod-build:
+	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) build --target prod
+
 dbt-source-freshness:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) source freshness \
 		--target dev \
@@ -182,6 +207,11 @@ analytics-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \
 		--region $(AWS_REGION) \
 		--template-body file://$(abspath $(ANALYTICAL_TEMPLATE))
+
+lightdash-infra-validate:
+	@$(AWS_CLI) cloudformation validate-template \
+		--region $(AWS_REGION) \
+		--template-body file://$(abspath $(LIGHTDASH_TEMPLATE))
 
 workflow-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \
@@ -312,6 +342,38 @@ analytics-infra-deploy: aws-check-account glue-package
 			AthenaWorkGroup=$(ANALYTICAL_ATHENA_WORKGROUP) \
 			MaximumProjectionPartitions=$(ANALYTICAL_MAX_PROJECTION_PARTITIONS) \
 		--tags Project=$(PROJECT_NAME) Component=analytical-projection Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
+
+lightdash-infra-deploy: aws-check-account
+	@bucket="$$($(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(ACQUISITION_STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`AcquisitionBucketName`].OutputValue | [0]' \
+		--output text)"; \
+	prefix="$$($(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(ACQUISITION_STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`AcquisitionPrefix`].OutputValue | [0]' \
+		--output text)"; \
+	$(AWS_CLI) cloudformation deploy \
+		--region $(AWS_REGION) \
+		--template-file $(LIGHTDASH_TEMPLATE) \
+		--stack-name $(LIGHTDASH_STACK_NAME) \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--parameter-overrides \
+			EnvironmentName=$(DEPLOYMENT_ENVIRONMENT) \
+			DataBucketName="$$bucket" \
+			DataPrefix="$$prefix" \
+			DbtDatabaseName=$(LIGHTDASH_DATABASE) \
+			QueryResultsRetentionDays=$(LIGHTDASH_QUERY_RESULT_RETENTION_DAYS) \
+			BytesScannedCutoffPerQuery=$(LIGHTDASH_BYTES_SCANNED_CUTOFF) \
+		--tags Project=$(PROJECT_NAME) Component=lightdash Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
+
+lightdash-infra-outputs: aws-check-account
+	@$(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(LIGHTDASH_STACK_NAME) \
+		--query 'Stacks[0].Outputs[].{Setting:OutputKey,Value:OutputValue}' \
+		--output table
 
 workflow-infra-deploy: aws-check-account workflow-check-schedule
 	@lambda_arn="$$($(AWS_CLI) cloudformation describe-stacks \

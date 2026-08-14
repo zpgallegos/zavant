@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Athena query boundary and least-privilege identity for Zavant Lightdash.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  DataBucketName:
+    Type: String
+    Description: Existing bucket containing the materialized dbt tables.
+  DataPrefix:
+    Type: String
+    Default: lake
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+  DbtDatabaseName:
+    Type: String
+    Description: Glue Data Catalog database exposed to Lightdash.
+  QueryResultsRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 365
+    Description: Days to retain ephemeral Athena query-result objects.
+  BytesScannedCutoffPerQuery:
+    Type: Number
+    Default: 10737418240
+    MinValue: 10485760
+    Description: Maximum bytes an individual Lightdash query may scan.
+
+Resources:
+  LightdashQueryResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireQueryResults
+            Status: Enabled
+            ExpirationInDays: !Ref QueryResultsRetentionDays
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: lightdash
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  LightdashQueryResultsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref LightdashQueryResultsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt LightdashQueryResultsBucket.Arn
+              - !Sub "${LightdashQueryResultsBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  LightdashAthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Description: Cost-bounded Athena queries issued by Lightdash.
+      Name: !Sub "zavant-lightdash-${EnvironmentName}"
+      RecursiveDeleteOption: true
+      State: ENABLED
+      WorkGroupConfiguration:
+        BytesScannedCutoffPerQuery: !Ref BytesScannedCutoffPerQuery
+        EnforceWorkGroupConfiguration: true
+        EngineVersion:
+          SelectedEngineVersion: AUTO
+        PublishCloudWatchMetricsEnabled: true
+        RequesterPaysEnabled: false
+        ResultConfiguration:
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+          OutputLocation: !Sub "s3://${LightdashQueryResultsBucket}/"
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: lightdash
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  LightdashWarehouseUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub "zavant-lightdash-${EnvironmentName}"
+      Policies:
+        - PolicyName: QueryZavantDbtTables
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: RunLightdashQueries
+                Effect: Allow
+                Action:
+                  - athena:BatchGetQueryExecution
+                  - athena:GetQueryExecution
+                  - athena:GetQueryResults
+                  - athena:GetQueryResultsStream
+                  - athena:GetQueryRuntimeStatistics
+                  - athena:GetWorkGroup
+                  - athena:ListQueryExecutions
+                  - athena:StartQueryExecution
+                  - athena:StopQueryExecution
+                Resource: !Sub >-
+                  arn:${AWS::Partition}:athena:${AWS::Region}:${AWS::AccountId}:workgroup/${LightdashAthenaWorkGroup}
+              - Sid: ReadDbtCatalog
+                Effect: Allow
+                Action:
+                  - glue:BatchGetPartition
+                  - glue:GetCatalog
+                  - glue:GetDatabase
+                  - glue:GetPartition
+                  - glue:GetPartitions
+                  - glue:GetTable
+                  - glue:GetTables
+                  - glue:GetTableVersion
+                  - glue:GetTableVersions
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${DbtDatabaseName}"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${DbtDatabaseName}/*"
+              - Sid: ListDbtTableObjects
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${DataBucketName}"
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - !Sub "${DataPrefix}/transformation/dbt/${EnvironmentName}/tables"
+                      - !Sub "${DataPrefix}/transformation/dbt/${EnvironmentName}/tables/*"
+              - Sid: ReadDbtTableObjects
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub >-
+                  arn:${AWS::Partition}:s3:::${DataBucketName}/${DataPrefix}/transformation/dbt/${EnvironmentName}/tables/*
+              - Sid: UseQueryResultsBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !GetAtt LightdashQueryResultsBucket.Arn
+              - Sid: ManageQueryResultObjects
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:ListMultipartUploadParts
+                  - s3:PutObject
+                Resource: !Sub "${LightdashQueryResultsBucket.Arn}/*"
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: lightdash
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+  LightdashAthenaWorkGroupName:
+    Description: Athena workgroup configured in the Lightdash warehouse connection.
+    Value: !Ref LightdashAthenaWorkGroup
+  LightdashDatabaseName:
+    Description: Athena database configured in the Lightdash warehouse connection.
+    Value: !Ref DbtDatabaseName
+  LightdashQueryResultsS3Uri:
+    Description: S3 staging directory configured in the Lightdash warehouse connection.
+    Value: !Sub "s3://${LightdashQueryResultsBucket}/"
+  LightdashWarehouseUserName:
+    Description: IAM user for which an access key is created outside CloudFormation.
+    Value: !Ref LightdashWarehouseUser

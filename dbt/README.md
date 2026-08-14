@@ -22,6 +22,10 @@ The project currently includes:
   after each appearance. The fact incrementally replaces complete games through
   transactional Iceberg merges so corrections can update, add, or remove rows
   without rebuilding unaffected games.
+- A plate-appearance semantic model with game, participant, and team entities;
+  baseball dimensions; additive measures; governed counting statistics; and
+  AVG, OBP, SLG, and OPS metrics. A daily calendar table supplies MetricFlow's
+  required time spine.
 
 Each analytical table generation is produced by one projection contract.
 Breaking projection releases rebuild the analytical tables and dependent dbt
@@ -56,3 +60,10 @@ make dbt-source-freshness
 ```
 
 Run `make dbt-deps` after changing `packages.yml`.
+
+MetricFlow is installed with the development environment. Validate the semantic
+manifest without issuing warehouse queries from the dbt project directory:
+
+```shell
+DBT_PROFILES_DIR="$HOME/.dbt" ../.venv/bin/mf validate-configs --skip-dw
+```

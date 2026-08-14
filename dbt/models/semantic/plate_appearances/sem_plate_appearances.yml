@@ -1,0 +1,177 @@
+version: 2
+
+semantic_models:
+  - name: plate_appearances
+    description: >-
+      One current MLB plate appearance, with batting outcomes, participants,
+      game state, and additive measures suitable for aggregation.
+    model: ref('fct_plate_appearances')
+    defaults:
+      agg_time_dimension: official_date
+
+    entities:
+      - name: plate_appearance
+        type: primary
+        expr: plate_appearance_key
+
+      - name: game
+        type: foreign
+        expr: game_pk
+
+      - name: batter
+        type: foreign
+        expr: result_batter_id
+
+      - name: pitcher
+        type: foreign
+        expr: result_pitcher_id
+
+      - name: offense_team
+        type: foreign
+        expr: offense_team_id
+
+      - name: defense_team
+        type: foreign
+        expr: defense_team_id
+
+    dimensions:
+      - name: official_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: season
+        type: categorical
+
+      - name: inning
+        type: categorical
+
+      - name: half_inning
+        type: categorical
+
+      - name: is_top_inning
+        type: categorical
+
+      - name: outcome_group
+        type: categorical
+
+      - name: event_type
+        type: categorical
+
+      - name: bat_side_code
+        type: categorical
+
+      - name: pitch_hand_code
+        type: categorical
+
+      - name: batter_split
+        type: categorical
+
+      - name: pitcher_split
+        type: categorical
+
+      - name: men_on_base_split
+        type: categorical
+
+      - name: base_state_before
+        type: categorical
+
+      - name: base_state_after
+        type: categorical
+
+    measures:
+      - name: plate_appearances
+        description: Number of completed plate appearances.
+        agg: sum
+        expr: plate_appearance_ind
+
+      - name: at_bats
+        description: Number of official at-bats.
+        agg: sum
+        expr: at_bat_ind
+
+      - name: hits
+        description: Number of hits of any type.
+        agg: sum
+        expr: hit_ind
+
+      - name: singles
+        description: Number of singles.
+        agg: sum
+        expr: single_ind
+
+      - name: doubles
+        description: Number of doubles.
+        agg: sum
+        expr: double_ind
+
+      - name: triples
+        description: Number of triples.
+        agg: sum
+        expr: triple_ind
+
+      - name: home_runs
+        description: Number of home runs.
+        agg: sum
+        expr: home_run_ind
+
+      - name: total_bases
+        description: Total bases credited on hits.
+        agg: sum
+
+      - name: walks
+        description: Number of walks, including intentional walks.
+        agg: sum
+        expr: walk_ind
+
+      - name: intentional_walks
+        description: Number of intentional walks.
+        agg: sum
+        expr: intentional_walk_ind
+
+      - name: hit_by_pitch
+        description: Number of times a batter was hit by a pitch.
+        agg: sum
+        expr: hit_by_pitch_ind
+
+      - name: strikeouts
+        description: Number of strikeouts.
+        agg: sum
+        expr: strikeout_ind
+
+      - name: sacrifices
+        description: Number of sacrifice bunts and sacrifice flies.
+        agg: sum
+        expr: sacrifice_ind
+
+      - name: sacrifice_bunts
+        description: Number of sacrifice bunts.
+        agg: sum
+        expr: sac_bunt_ind
+
+      - name: sacrifice_flies
+        description: Number of sacrifice flies.
+        agg: sum
+        expr: sac_fly_ind
+
+      - name: reached_on_error
+        description: Number of ordinary reached-on-error outcomes.
+        agg: sum
+        expr: reached_on_error_ind
+
+      - name: runs_batted_in
+        description: Runs batted in credited on plate appearances.
+        agg: sum
+        expr: coalesce(rbi, 0)
+
+      - name: runs_scored_during_plate_appearances
+        description: >-
+          Batting-team runs that scored during plate appearances. This excludes
+          runs on independent baserunning events.
+        agg: sum
+        expr: runs_scored_during_plate_appearance
+
+      - name: pitches
+        description: Number of pitch records attached to plate appearances.
+        agg: sum
+        expr: pitch_count

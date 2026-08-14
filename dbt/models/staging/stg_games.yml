@@ -6,17 +6,13 @@ models:
       Game-level identity, scheduling, status, scoring, venue, weather, rules,
       and operational information from the current version of
       each MLB game. Its grain is one row per game_pk.
-    data_tests:
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            combination_of_columns:
-              - game_pk
     columns:
       # grain
       - name: game_pk
         description: MLB's stable identifier for the game within the game.
         data_type: bigint
         data_tests:
+          - unique
           - not_null
 
       # attributes

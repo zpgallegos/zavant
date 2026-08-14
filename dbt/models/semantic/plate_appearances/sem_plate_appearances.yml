@@ -79,10 +79,15 @@ semantic_models:
         type: categorical
 
     measures:
+      - name: distinct_games
+        description: Number of distinct games represented by the plate appearances.
+        agg: count_distinct
+        expr: game_pk
+
       - name: plate_appearances
         description: Number of completed plate appearances.
-        agg: sum
-        expr: plate_appearance_ind
+        agg: count
+        expr: plate_appearance_key
 
       - name: at_bats
         description: Number of official at-bats.
@@ -117,6 +122,7 @@ semantic_models:
       - name: total_bases
         description: Total bases credited on hits.
         agg: sum
+        expr: total_bases
 
       - name: walks
         description: Number of walks, including intentional walks.
@@ -165,8 +171,8 @@ semantic_models:
 
       - name: runs_scored_during_plate_appearances
         description: >-
-          Batting-team runs that scored during plate appearances. This excludes
-          runs on independent baserunning events.
+          Batting-team runs scored during plate appearances, excluding runs on
+          independent baserunning events.
         agg: sum
         expr: runs_scored_during_plate_appearance
 
@@ -174,3 +180,17 @@ semantic_models:
         description: Number of pitch records attached to plate appearances.
         agg: sum
         expr: pitch_count
+
+      - name: times_on_base
+        description: >-
+          Number of times batters reached base via a hit, walk, or hit by
+          pitch; the numerator used for on-base percentage.
+        agg: sum
+        expr: hit_ind + walk_ind + hit_by_pitch_ind
+
+      - name: on_base_opportunities
+        description: >-
+          At-bats, walks, hit-by-pitches, and sacrifice flies; the denominator
+          used for on-base percentage.
+        agg: sum
+        expr: at_bat_ind + walk_ind + hit_by_pitch_ind + sac_fly_ind

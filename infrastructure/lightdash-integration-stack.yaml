@@ -139,6 +139,11 @@ Resources:
                   - athena:StopQueryExecution
                 Resource: !Sub >-
                   arn:${AWS::Partition}:athena:${AWS::Region}:${AWS::AccountId}:workgroup/${LightdashAthenaWorkGroup}
+              - Sid: ReadAthenaTableMetadata
+                Effect: Allow
+                Action: athena:GetTableMetadata
+                Resource: !Sub >-
+                  arn:${AWS::Partition}:athena:${AWS::Region}:${AWS::AccountId}:datacatalog/AwsDataCatalog
               - Sid: ReadDbtCatalog
                 Effect: Allow
                 Action:

@@ -40,6 +40,16 @@ class LightdashInfrastructureTests(unittest.TestCase):
         self.assertNotIn("${DataPrefix}/raw", template)
         self.assertNotIn("s3:PutObject", data_object_access)
 
+    def test_warehouse_identity_can_read_athena_table_metadata(self) -> None:
+        template = LIGHTDASH_TEMPLATE.read_text()
+
+        self.assertIn("Action: athena:GetTableMetadata", template)
+        self.assertIn(
+            "arn:${AWS::Partition}:athena:${AWS::Region}:"
+            "${AWS::AccountId}:datacatalog/AwsDataCatalog",
+            template,
+        )
+
     def test_access_key_is_not_managed_by_cloudformation(self) -> None:
         template = LIGHTDASH_TEMPLATE.read_text()
 

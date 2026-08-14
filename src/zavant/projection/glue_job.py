@@ -467,26 +467,6 @@ def _current_revision_cache(
     return cache
 
 
-def _validate_projection_release(
-    spark: Any,
-    configuration: GlueProjectionConfiguration,
-) -> None:
-    """Require a table rebuild before publishing a new projection contract."""
-
-    table = spark.table(
-        qualified_table(
-            configuration.catalog,
-            configuration.database,
-            TABLE_CONTRACTS["games"].name,
-        )
-    )
-    observed = {
-        str(row["projection_contract_version"])
-        for row in table.select("projection_contract_version").distinct().collect()
-    }
-    _validate_projection_versions(observed)
-
-
 def _validate_projection_versions(observed: Set[str]) -> None:
     incompatible = observed - {PROJECTION_CONTRACT_VERSION}
     if incompatible:

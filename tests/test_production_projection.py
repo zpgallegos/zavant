@@ -19,9 +19,9 @@ from zavant.projection.current_views import (
 from zavant.projection.glue_job import (
     GlueProjectionConfiguration,
     _analytical_merge_contracts,
+    _completed_projections,
     _ensure_tables,
     _schema_drift_details,
-    _validate_projection_release,
     run_glue_projection,
 )
 from zavant.projection.iceberg import create_table_sql, merge_table_sql
@@ -165,11 +165,18 @@ class S3ProjectionSourceTests(unittest.TestCase):
 
 
 class IcebergDefinitionTests(unittest.TestCase):
-    def test_rejects_existing_rows_from_another_projection_release(self) -> None:
+    def test_completed_projection_scan_rejects_another_projection_release(
+        self,
+    ) -> None:
         spark = MagicMock()
-        versions = spark.table.return_value.select.return_value.distinct.return_value
-        versions.collect.return_value = [
-            {"projection_contract_version": "zavant-analytical-game-projection/v2"}
+        spark.table.return_value.select.return_value.collect.return_value = [
+            {
+                "game_pk": 744863,
+                "source_revision_id": "revision-one",
+                "projection_contract_version": (
+                    "zavant-analytical-game-projection/v2"
+                ),
+            }
         ]
         configuration = GlueProjectionConfiguration(
             bucket="example-bucket",
@@ -177,7 +184,7 @@ class IcebergDefinitionTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(RuntimeError, "rebuild every analytical table"):
-            _validate_projection_release(spark, configuration)
+            _completed_projections(spark, configuration)
 
     def test_schema_drift_reports_actionable_column_differences(self) -> None:
         details = _schema_drift_details(
@@ -342,7 +349,6 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
 
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
-            patch("zavant.projection.glue_job._validate_projection_release"),
             patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
             patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
             patch("zavant.projection.glue_job.publish_current_views"),
@@ -408,7 +414,6 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
 
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
-            patch("zavant.projection.glue_job._validate_projection_release"),
             patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
             patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
             patch("zavant.projection.glue_job.publish_current_views"),
@@ -463,7 +468,6 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
 
         with (
             patch("zavant.projection.glue_job._ensure_tables"),
-            patch("zavant.projection.glue_job._validate_projection_release"),
             patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
             patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
             patch(

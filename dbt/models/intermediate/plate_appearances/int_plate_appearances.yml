@@ -7,9 +7,10 @@ models:
       plays. The model excludes independent baserunning, pitching, and advisory
       plays that MLB also emits in allPlays with an at_bat_index. Qualification
       is based on terminal event types and reconciles to MLB's official
-      team-game plate-appearance totals. Its grain is game_pk and
-      at_bat_index; filtered rows are not
-      renumbered.
+      team-game plate-appearance totals. Pre-appearance state is calculated
+      over the complete play stream before qualification so intervening
+      non-plate-appearance plays remain visible. Its grain is game_pk and
+      at_bat_index; filtered rows are not renumbered.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -33,6 +34,10 @@ models:
       # attributes
       - name: away_score
         description: Away-team score after the plate appearance.
+        data_type: integer
+
+      - name: away_score_before
+        description: Away-team score immediately before the plate appearance.
         data_type: integer
 
       - name: balls
@@ -98,6 +103,10 @@ models:
         description: Home-team score after the plate appearance.
         data_type: integer
 
+      - name: home_score_before
+        description: Home-team score immediately before the plate appearance.
+        data_type: integer
+
       - name: inning
         description: Numeric inning in which the plate appearance occurred.
         data_type: integer
@@ -130,6 +139,10 @@ models:
 
       - name: outs
         description: Out count after the plate appearance.
+        data_type: integer
+
+      - name: outs_before
+        description: Out count immediately before the plate appearance.
         data_type: integer
 
       - name: pitch_hand_code
@@ -166,6 +179,18 @@ models:
         description: Runs batted in credited on the plate appearance.
         data_type: integer
 
+      - name: runner_on_first_id_before
+        description: MLB identifier of the runner occupying first base before the plate appearance.
+        data_type: bigint
+
+      - name: runner_on_second_id_before
+        description: MLB identifier of the runner occupying second base before the plate appearance.
+        data_type: bigint
+
+      - name: runner_on_third_id_before
+        description: MLB identifier of the runner occupying third base before the plate appearance.
+        data_type: bigint
+
       - name: started_at
         description: UTC timestamp when the plate appearance started.
         data_type: timestamp
@@ -175,6 +200,14 @@ models:
         data_type: integer
 
       # metadata
+      - name: source_revision_id
+        description: >-
+          Identifier of the current raw game revision inherited from the
+          current game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: official_date
         description: Official MLB date of the game.
         data_type: date

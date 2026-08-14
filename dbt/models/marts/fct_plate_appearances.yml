@@ -5,7 +5,9 @@ models:
     description: >-
       Current official plate appearances derived from Glue-published game
       state. The physical grain is game_pk and at_bat_index. The table is
-      rebuilt so a corrected MLB game replaces its earlier analytical state.
+      maintained by replacing every row belonging to a newly revised game;
+      obsolete plate appearances are transactionally deleted during the same
+      Iceberg merge.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -283,32 +285,32 @@ models:
         description: Whether the plate appearance includes at least one out.
         data_type: boolean
 
-      # additive measures
-      - name: plate_appearance_count
+      # additive indicators and measures
+      - name: plate_appearance_ind
         description: Additive plate-appearance indicator, always one per fact row.
         data_type: integer
 
-      - name: at_bat_count
+      - name: at_bat_ind
         description: Additive official at-bat indicator.
         data_type: integer
 
-      - name: hit_count
+      - name: hit_ind
         description: Additive hit indicator.
         data_type: integer
 
-      - name: single_count
+      - name: single_ind
         description: Additive single indicator.
         data_type: integer
 
-      - name: double_count
+      - name: double_ind
         description: Additive double indicator.
         data_type: integer
 
-      - name: triple_count
+      - name: triple_ind
         description: Additive triple indicator.
         data_type: integer
 
-      - name: home_run_count
+      - name: home_run_ind
         description: Additive home-run indicator.
         data_type: integer
 
@@ -316,35 +318,35 @@ models:
         description: Bases credited for the hit, ranging from zero through four.
         data_type: integer
 
-      - name: walk_count
+      - name: walk_ind
         description: Additive walk indicator, including intentional walks.
         data_type: integer
 
-      - name: intentional_walk_count
+      - name: intentional_walk_ind
         description: Additive intentional-walk indicator.
         data_type: integer
 
-      - name: hit_by_pitch_count
+      - name: hit_by_pitch_ind
         description: Additive hit-by-pitch indicator.
         data_type: integer
 
-      - name: strikeout_count
+      - name: strikeout_ind
         description: Additive strikeout indicator.
         data_type: integer
 
-      - name: sacrifice_count
+      - name: sacrifice_ind
         description: Additive sacrifice-bunt or sacrifice-fly indicator.
         data_type: integer
 
-      - name: sac_bunt_count
+      - name: sac_bunt_ind
         description: Additive sacrifice-bunt indicator.
         data_type: integer
 
-      - name: sac_fly_count
+      - name: sac_fly_ind
         description: Additive sacrifice-fly indicator.
         data_type: integer
 
-      - name: reached_on_error_count
+      - name: reached_on_error_ind
         description: Additive ordinary reached-on-error indicator.
         data_type: integer
 
@@ -413,6 +415,14 @@ models:
         data_type: integer
 
       # metadata
+      - name: source_revision_id
+        description: >-
+          Identifier of the current raw game revision used to replace the
+          complete game's fact rows when MLB revises the game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
       - name: official_date
         description: Official MLB date of the game.
         data_type: date

@@ -2,16 +2,16 @@ with derived_statistics as (
     select
         game_pk,
         offense_team_id as team_id,
-        sum(plate_appearance_count) as plate_appearances,
-        sum(at_bat_count) as at_bats,
-        sum(hit_count) as hits,
+        sum(plate_appearance_ind) as plate_appearances,
+        sum(at_bat_ind) as at_bats,
+        sum(hit_ind) as hits,
         sum(total_bases) as total_bases,
-        sum(walk_count) as base_on_balls,
-        sum(intentional_walk_count) as intentional_walks,
-        sum(hit_by_pitch_count) as hit_by_pitch,
-        sum(strikeout_count) as strike_outs,
-        sum(sac_bunt_count) as sac_bunts,
-        sum(sac_fly_count) as sac_flies,
+        sum(walk_ind) as base_on_balls,
+        sum(intentional_walk_ind) as intentional_walks,
+        sum(hit_by_pitch_ind) as hit_by_pitch,
+        sum(strikeout_ind) as strike_outs,
+        sum(sac_bunt_ind) as sac_bunts,
+        sum(sac_fly_ind) as sac_flies,
         sum(coalesce(rbi, 0)) as rbi
     from {{ ref("fct_plate_appearances") }}
     group by 1, 2

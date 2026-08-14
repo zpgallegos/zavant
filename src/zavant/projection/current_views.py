@@ -75,6 +75,7 @@ def create_current_view_sql(database: str, contract: TableContract) -> str:
     ]
     if contract.name == "games":
         columns.append('    current_revision."reconciled_at"')
+        columns.append('    current_revision."source_revision_id"')
     selection = ",\n".join(columns)
     return (
         f'CREATE OR REPLACE VIEW "{current_view_name(contract.name)}" AS\n'

@@ -18,13 +18,17 @@ reconciling those tables, the Glue job creates or replaces one ordinary Athena
 view named `current_<table>` for each projected dataset. Every view joins its
 history table to `current_game_revisions` on `game_pk` and
 `source_revision_id`, uses an explicit column list, and excludes revision,
-projection-run, contract-version, and raw-object lineage fields.
+projection-run, contract-version, and raw-object lineage fields by default.
 
 The dbt source names remain the business dataset names but use `identifier` to
 resolve to these physical views. Staging and downstream models therefore use
 business grains such as `(game_pk, at_bat_index)` and never select the revision
-pointer. `current_games` additionally exposes `reconciled_at` only for source
-freshness evaluation.
+pointer. `current_games` additionally exposes `reconciled_at` for source
+freshness evaluation and `source_revision_id` as game-level lineage. The
+revision identifier is stable while a game continues to point at the same raw
+revision, allowing dbt to incrementally replace complete games while keeping it
+out of business keys and grains. `reconciled_at` retains its original
+job-reconciliation semantics.
 
 View publication must succeed before Glue advances `current_game_revisions`.
 The views are logical and dynamically read that mapping, so the mapping's
@@ -36,8 +40,9 @@ leaves the prior current mapping intact.
 Corrections become a Glue concern: after a successful projection, every dbt
 query sees the newly current game without repeating revision-selection logic.
 Physical history remains available to platform operators, but it is not part of
-the dbt source contract. dbt current-state tables must replace or merge corrected
-business keys rather than append immutable revision facts.
+the dbt source contract. Incremental dbt models use the current source revision
+identifier to replace corrected business keys rather than append immutable
+revision facts.
 
 The Glue role requires narrowly scoped Athena query permissions and writes DDL
 query metadata under the analytical S3 prefix. A content fingerprint under the

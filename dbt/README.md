@@ -19,7 +19,9 @@ The project currently includes:
   official team-game boxscore totals.
 - A current-state plate-appearance fact exposing governed outcome flags,
   additive batting measures, matchup attributes, and game state before and
-  after each appearance.
+  after each appearance. The fact incrementally replaces complete games through
+  transactional Iceberg merges so corrections can update, add, or remove rows
+  without rebuilding unaffected games.
 
 Each analytical table generation is produced by one projection contract.
 Breaking projection releases rebuild the analytical tables and dependent dbt

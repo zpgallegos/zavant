@@ -62,6 +62,7 @@ select
     games.wind,
 
     -- metadata
+    games.source_revision_id,
     games.official_date,
     games.season
 from games

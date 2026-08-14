@@ -284,13 +284,14 @@ class CurrentViewTests(unittest.TestCase):
         for private_column in PRIVATE_COLUMNS:
             self.assertNotIn(f'history."{private_column}"', selection)
 
-    def test_current_games_exposes_reconciliation_time_for_freshness(self) -> None:
+    def test_current_games_exposes_freshness_time_and_source_revision(self) -> None:
         sql = create_current_view_sql(
             "zavant_analytical_prod",
             TABLE_CONTRACTS["games"],
         )
 
         self.assertIn('current_revision."reconciled_at"', sql)
+        self.assertIn('current_revision."source_revision_id"', sql)
 
     def test_publisher_waits_for_each_athena_ddl(self) -> None:
         client = _FakeAthenaClient()

@@ -60,6 +60,7 @@ select
     plate_appearances.strikes,
 
     -- metadata
+    plate_appearances.source_revision_id,
     plate_appearances.official_date,
     plate_appearances.season
 from plate_appearances

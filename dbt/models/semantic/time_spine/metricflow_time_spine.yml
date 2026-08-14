@@ -5,6 +5,10 @@ models:
     description: >-
       Daily calendar required by MetricFlow, covering the history of major
       league baseball through two years beyond the dbt build date.
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.metricflow_time_spine
     time_spine:
       standard_granularity_column: date_day
     columns:

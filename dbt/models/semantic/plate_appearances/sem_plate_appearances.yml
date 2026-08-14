@@ -18,26 +18,6 @@ semantic_models:
         type: primary
         expr: plate_appearance_key
 
-      - name: game
-        type: foreign
-        expr: game_pk
-
-      - name: batter
-        type: foreign
-        expr: result_batter_id
-
-      - name: pitcher
-        type: foreign
-        expr: result_pitcher_id
-
-      - name: offense_team
-        type: foreign
-        expr: offense_team_id
-
-      - name: defense_team
-        type: foreign
-        expr: defense_team_id
-
     dimensions:
       - name: official_date
         type: time
@@ -45,6 +25,21 @@ semantic_models:
           time_granularity: day
 
       - name: season
+        type: categorical
+
+      - name: game_pk
+        type: categorical
+
+      - name: result_batter_id
+        type: categorical
+
+      - name: result_pitcher_id
+        type: categorical
+
+      - name: offense_team_id
+        type: categorical
+
+      - name: defense_team_id
         type: categorical
 
       - name: inning

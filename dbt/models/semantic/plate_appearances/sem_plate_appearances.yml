@@ -6,6 +6,10 @@ semantic_models:
       One current MLB plate appearance, with batting outcomes, participants,
       game state, and additive measures suitable for aggregation.
     model: ref('fct_plate_appearances')
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.fct_plate_appearances
     defaults:
       agg_time_dimension: official_date
 

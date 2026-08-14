@@ -14,6 +14,11 @@ export ZAVANT_DATA_DIR
 export ZAVANT_DEPLOYMENT_ENVIRONMENT
 export ZAVANT_INITIAL_CORRECTION_WATERMARK
 export ZAVANT_INITIAL_SCHEDULE_DATE
+export ZAVANT_HEX_AWS_EXTERNAL_ID
+export ZAVANT_HEX_AWS_PRINCIPAL_ARN
+export ZAVANT_HEX_BYTES_SCANNED_CUTOFF
+export ZAVANT_HEX_DATABASE
+export ZAVANT_HEX_QUERY_RESULT_RETENTION_DAYS
 export ZAVANT_LIGHTDASH_BYTES_SCANNED_CUTOFF
 export ZAVANT_LIGHTDASH_DATABASE
 export ZAVANT_LIGHTDASH_QUERY_RESULT_RETENTION_DAYS
@@ -25,6 +30,7 @@ export ZAVANT_S3_PREFIX
 
 PYTHON ?= python3
 AWS_CLI ?= aws
+LIGHTDASH_CLI ?= lightdash
 
 BUILD_DIR := build
 DBT_PROJECT_DIR := dbt
@@ -84,6 +90,21 @@ LIGHTDASH_QUERY_RESULT_RETENTION_DAYS ?= $(call configuration_or_default, \
 	$(ZAVANT_LIGHTDASH_QUERY_RESULT_RETENTION_DAYS),7)
 LIGHTDASH_BYTES_SCANNED_CUTOFF ?= $(call configuration_or_default, \
 	$(ZAVANT_LIGHTDASH_BYTES_SCANNED_CUTOFF),10737418240)
+LIGHTDASH_DBT_SELECTOR := tag:lightdash+
+LIGHTDASH_DBT_TARGET := prod
+
+# Hex integration
+
+HEX_TEMPLATE := infrastructure/hex-integration-stack.yaml
+HEX_STACK_NAME ?= $(PROJECT_NAME)-hex-$(DEPLOYMENT_ENVIRONMENT)
+HEX_DATABASE ?= $(call configuration_or_default, \
+	$(ZAVANT_HEX_DATABASE),zavant_dbt_$(DEPLOYMENT_ENVIRONMENT))
+HEX_QUERY_RESULT_RETENTION_DAYS ?= $(call configuration_or_default, \
+	$(ZAVANT_HEX_QUERY_RESULT_RETENTION_DAYS),7)
+HEX_BYTES_SCANNED_CUTOFF ?= $(call configuration_or_default, \
+	$(ZAVANT_HEX_BYTES_SCANNED_CUTOFF),1073741824)
+HEX_AWS_PRINCIPAL_ARN ?= $(ZAVANT_HEX_AWS_PRINCIPAL_ARN)
+HEX_AWS_EXTERNAL_ID ?= $(ZAVANT_HEX_AWS_EXTERNAL_ID)
 
 # Daily workflow
 
@@ -115,8 +136,12 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	glue-package \
 	glue-start \
 	help \
+	hex-infra-deploy \
+	hex-infra-outputs \
+	hex-infra-validate \
 	lambda-invoke \
 	lambda-package \
+	lightdash-deploy \
 	lightdash-infra-deploy \
 	lightdash-infra-outputs \
 	lightdash-infra-validate \
@@ -139,6 +164,7 @@ help:
 	@echo "dbt-staging-build           build and test staging against Athena"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
+	@echo "hex-infra-validate          validate the Hex/Athena template"
 	@echo "lightdash-infra-validate    validate the Lightdash/Athena template"
 	@echo "workflow-infra-validate     validate the Step Functions template"
 	@echo "acquisition-infra-bootstrap create the acquisition bucket and role"
@@ -146,6 +172,9 @@ help:
 	@echo "glue-package                build the Glue Python library archive"
 	@echo "acquisition-infra-deploy    deploy the acquisition Lambda"
 	@echo "analytics-infra-deploy      deploy the Glue projection job"
+	@echo "hex-infra-deploy            deploy the Hex/Athena integration"
+	@echo "hex-infra-outputs           show Hex connection settings"
+	@echo "lightdash-deploy            deploy the Lightdash semantic layer"
 	@echo "lightdash-infra-deploy      deploy the Lightdash/Athena integration"
 	@echo "lightdash-infra-outputs     show Lightdash connection settings"
 	@echo "workflow-infra-deploy       deploy the daily workflow and schedule"
@@ -198,6 +227,17 @@ dbt-staging-build:
 		--target dev \
 		--select path:models/staging
 
+lightdash-deploy:
+	@command -v $(LIGHTDASH_CLI) >/dev/null 2>&1 || { \
+		echo "Lightdash CLI is required: npm install --global @lightdash/cli@1.146.2" >&2; \
+		exit 1; \
+	}
+	@cd $(DBT_PROJECT_DIR) && \
+		PATH="$(abspath $(VENV_DIR))/bin:$$PATH" \
+		$(LIGHTDASH_CLI) deploy \
+			--target $(LIGHTDASH_DBT_TARGET) \
+			--select $(LIGHTDASH_DBT_SELECTOR)
+
 acquisition-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \
 		--region $(AWS_REGION) \
@@ -207,6 +247,11 @@ analytics-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \
 		--region $(AWS_REGION) \
 		--template-body file://$(abspath $(ANALYTICAL_TEMPLATE))
+
+hex-infra-validate:
+	@$(AWS_CLI) cloudformation validate-template \
+		--region $(AWS_REGION) \
+		--template-body file://$(abspath $(HEX_TEMPLATE))
 
 lightdash-infra-validate:
 	@$(AWS_CLI) cloudformation validate-template \
@@ -342,6 +387,40 @@ analytics-infra-deploy: aws-check-account glue-package
 			AthenaWorkGroup=$(ANALYTICAL_ATHENA_WORKGROUP) \
 			MaximumProjectionPartitions=$(ANALYTICAL_MAX_PROJECTION_PARTITIONS) \
 		--tags Project=$(PROJECT_NAME) Component=analytical-projection Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
+
+hex-infra-deploy: aws-check-account
+	@bucket="$$($(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(ACQUISITION_STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`AcquisitionBucketName`].OutputValue | [0]' \
+		--output text)"; \
+	prefix="$$($(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(ACQUISITION_STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`AcquisitionPrefix`].OutputValue | [0]' \
+		--output text)"; \
+	$(AWS_CLI) cloudformation deploy \
+		--region $(AWS_REGION) \
+		--template-file $(HEX_TEMPLATE) \
+		--stack-name $(HEX_STACK_NAME) \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--parameter-overrides \
+			EnvironmentName=$(DEPLOYMENT_ENVIRONMENT) \
+			DataBucketName="$$bucket" \
+			DataPrefix="$$prefix" \
+			DbtDatabaseName=$(HEX_DATABASE) \
+			QueryResultsRetentionDays=$(HEX_QUERY_RESULT_RETENTION_DAYS) \
+			BytesScannedCutoffPerQuery=$(HEX_BYTES_SCANNED_CUTOFF) \
+			HexPrincipalArn="$(HEX_AWS_PRINCIPAL_ARN)" \
+			HexExternalId="$(HEX_AWS_EXTERNAL_ID)" \
+		--tags Project=$(PROJECT_NAME) Component=hex Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
+
+hex-infra-outputs: aws-check-account
+	@$(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(HEX_STACK_NAME) \
+		--query 'Stacks[0].Outputs[].{Setting:OutputKey,Value:OutputValue}' \
+		--output table
 
 lightdash-infra-deploy: aws-check-account
 	@bucket="$$($(AWS_CLI) cloudformation describe-stacks \

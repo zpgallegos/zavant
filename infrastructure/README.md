@@ -7,8 +7,10 @@ and Step Functions, while the
 [analytical projection infrastructure](analytical.md) references this bucket
 and owns the Glue/Iceberg execution boundary. The
 [Lightdash integration infrastructure](lightdash.md) owns its Athena workgroup,
-ephemeral query-result bucket, and warehouse identity. Monitoring remains a
-later slice.
+ephemeral query-result bucket, and warehouse identity. The independent
+[Hex evaluation infrastructure](hex.md) provides the same isolation through a
+temporary-credential IAM role while Hex is evaluated. Monitoring remains a later
+slice.
 
 ## Bucket guarantees
 

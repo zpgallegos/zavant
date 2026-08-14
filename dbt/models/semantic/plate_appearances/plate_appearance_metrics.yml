@@ -50,7 +50,7 @@ metrics:
     type_params:
       measure: home_runs
 
-  - name: total_bases
+  - name: total_bases_sum
     label: Total Bases
     description: Total bases credited on hits.
     type: simple
@@ -182,7 +182,7 @@ metrics:
     description: Total bases divided by official at-bats.
     type: ratio
     type_params:
-      numerator: total_bases
+      numerator: total_bases_sum
       denominator: at_bats
 
   - name: on_base_plus_slugging

@@ -98,9 +98,9 @@ the workflow reports the retained acquisition error.
   Standard workflow that sequences acquisition and one batch Glue projection;
   later dbt execution can become a subsequent state.
 - Lightdash consumes the MetricFlow definitions in dbt's compiled manifest,
-  translates the supported metrics into its own semantic layer, and queries
-  Athena through a dedicated cost-bounded workgroup and read-only warehouse
-  identity.
+  translates the supported metrics during a Lightdash CLI deployment, and
+  queries Athena through a dedicated cost-bounded workgroup and read-only
+  warehouse identity.
 - Cloud infrastructure is defined as code and separated by workload ownership.
 
 MetricFlow YAML is the source-controlled metric specification. Lightdash is the

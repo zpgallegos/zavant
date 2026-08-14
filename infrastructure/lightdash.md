@@ -81,14 +81,29 @@ Choose Amazon Athena as the warehouse and use the stack outputs:
 
 Leave the optional S3 data directory empty. Lightdash queries dbt relations but
 does not materialize this project's dbt models. The dbt project directory in
-the repository is `/dbt`. Set the Lightdash dbt selector to `tag:lightdash` so
-only intentional presentation marts become Explores; staging and intermediate
-models remain implementation details. This selector controls what Lightdash
-exposes; it is deliberately not used to truncate the production dbt build,
-whose complete test graph references models outside the presentation mart's
-direct dependency graph.
+the repository is `/dbt`. Set the Lightdash dbt selector to `tag:lightdash+` so
+intentional presentation marts and their downstream semantic models and metrics
+are compiled into Lightdash; staging and intermediate models remain
+implementation details. This selector controls what Lightdash exposes; it is
+deliberately not used to truncate the production dbt build, whose complete test
+graph references models outside the presentation mart's direct dependency graph.
 
 Lightdash reads MetricFlow resources from the compiled dbt manifest and
 translates the supported metrics into its own Athena SQL. It does not use the
 MetricFlow Athena runtime, so MetricFlow's missing Athena adapter does not
 affect Lightdash query execution.
+
+## Deploy the semantic layer
+
+MetricFlow translation runs through the Lightdash CLI. A Git-connected project
+refresh compiles ordinary dbt model metadata but does not replace this deployment
+step. After authenticating the CLI and selecting the production Lightdash
+project, deploy from the dbt project directory:
+
+```shell
+make lightdash-deploy
+```
+
+The production target is explicit because `lightdash deploy` uses the local dbt
+profile and replaces the production project's compiled semantic layer. Use
+`lightdash preview` instead while developing uncommitted semantic changes.

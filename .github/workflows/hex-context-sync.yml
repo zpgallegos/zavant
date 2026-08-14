@@ -1,0 +1,40 @@
+name: Publish Hex context
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/hex-context-sync.yml
+      - dbt/dbt_project.yml
+      - dbt/models/semantic/**
+      - hex_context.config.json
+  pull_request:
+    paths:
+      - .github/workflows/hex-context-sync.yml
+      - dbt/dbt_project.yml
+      - dbt/models/semantic/**
+      - hex_context.config.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  publish_hex_context:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Upload context resources
+        uses: hex-inc/action-context-toolkit@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          token: ${{ secrets.HEX_API_TOKEN }}
+          comment_on_pr: true

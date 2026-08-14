@@ -21,7 +21,9 @@ metrics, all of which are supported by that translation.
 Keep MetricFlow YAML as the source-controlled metric specification and use
 Lightdash as the initial semantic-query and BI runtime. Lightdash executes its
 own generated SQL through a dedicated Athena workgroup rather than relying on
-MetricFlow's warehouse runtime.
+MetricFlow's warehouse runtime. Deploy MetricFlow resources through the
+Lightdash CLI, whose compile step translates them from dbt's manifest into the
+Lightdash semantic layer.
 
 Use Lightdash Cloud initially. A separate CloudFormation stack owns an
 encrypted, lifecycle-managed query-results bucket, a per-query scan limit, and
@@ -40,7 +42,8 @@ can assume a role with the same policy boundary.
 Lightdash's MetricFlow translation is Beta. It does not currently translate
 cumulative or conversion metrics, MetricFlow implicit entity joins,
 cross-model ratio or derived metrics, or time-spine behavior. Deployment
-validation must surface unsupported definitions. Dimensions come from the
+validation must surface unsupported definitions. A Git-connected project
+refresh does not replace the CLI translation step. Dimensions come from the
 physical dbt model columns, and cross-model joins must be declared explicitly
 for Lightdash. A `lightdash` dbt tag and matching project selector expose only
 intentional presentation marts rather than the entire transformation graph.

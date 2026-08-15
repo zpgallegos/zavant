@@ -1,0 +1,86 @@
+version: 2
+
+semantic_models:
+  - name: teams
+    description: >-
+      One current Type 1 record per MLB team, with identity, organizational,
+      league, division, venue, and most-recent-game attributes.
+    model: ref("dim_teams")
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.dim_teams
+
+    entities:
+      - name: team
+        type: primary
+        expr: team_id
+
+    dimensions:
+      - name: team_id
+        type: categorical
+
+      - name: team_name
+        type: categorical
+
+      - name: team_name_short
+        type: categorical
+
+      - name: short_name
+        type: categorical
+
+      - name: abbreviation
+        type: categorical
+
+      - name: team_code
+        type: categorical
+
+      - name: file_code
+        type: categorical
+
+      - name: club_name
+        type: categorical
+
+      - name: franchise_name
+        type: categorical
+
+      - name: location_name
+        type: categorical
+
+      - name: first_year_of_play
+        type: categorical
+
+      - name: is_active_as_of_most_recent_game
+        type: categorical
+
+      - name: league_id
+        type: categorical
+
+      - name: league_name
+        type: categorical
+
+      - name: division_id
+        type: categorical
+
+      - name: division_name
+        type: categorical
+
+      - name: venue_id
+        type: categorical
+
+      - name: venue_name
+        type: categorical
+
+      - name: most_recent_game_pk
+        type: categorical
+
+      - name: most_recent_game_official_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: most_recent_game_season
+        type: categorical
+
+      - name: most_recent_game_team_side
+        type: categorical

@@ -22,6 +22,10 @@ semantic_models:
         type: foreign
         expr: result_batter_id
 
+      - name: team
+        type: foreign
+        expr: offense_team_id
+
     dimensions:
       - name: official_date
         type: time

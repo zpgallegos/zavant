@@ -1,0 +1,113 @@
+version: 2
+
+models:
+  - name: dim_teams
+    description: >-
+      Type 1 team dimension derived from the most chronologically recent
+      current game-team record available for each MLB team. Team attributes
+      describe MLB's values in that game response rather than a historically
+      effective or independently acquired current team profile. Its grain is
+      one row per team_id.
+    columns:
+      # grain
+      - name: team_id
+        description: MLB's stable identifier for the team.
+        data_type: bigint
+        data_tests:
+          - unique
+          - not_null
+
+      # team attributes
+      - name: abbreviation
+        description: Standard abbreviation used by MLB for the team.
+        data_type: varchar
+
+      - name: club_name
+        description: Club portion of the team's name, such as Dodgers or Nationals.
+        data_type: varchar
+
+      - name: division_id
+        description: MLB identifier of the team's division in the selected record.
+        data_type: bigint
+
+      - name: division_name
+        description: Name of the team's division in the selected record.
+        data_type: varchar
+
+      - name: file_code
+        description: Short file code assigned to the team by MLB.
+        data_type: varchar
+
+      - name: first_year_of_play
+        description: First season in which the franchise began play, as reported by MLB.
+        data_type: varchar
+
+      - name: franchise_name
+        description: Franchise portion of the team's name.
+        data_type: varchar
+
+      - name: is_active_as_of_most_recent_game
+        description: >-
+          Whether MLB marked the team active in the selected game response;
+          this is not an authoritative current operating-status indicator.
+        data_type: boolean
+
+      - name: league_id
+        description: MLB identifier of the team's league in the selected record.
+        data_type: bigint
+
+      - name: league_name
+        description: Name of the team's league in the selected record.
+        data_type: varchar
+
+      - name: location_name
+        description: Geographic location represented by the team.
+        data_type: varchar
+
+      - name: short_name
+        description: Short display name used by MLB for the team.
+        data_type: varchar
+
+      - name: team_code
+        description: Team code assigned by MLB.
+        data_type: varchar
+
+      - name: team_name
+        description: Full name of the team.
+        data_type: varchar
+
+      - name: team_name_short
+        description: Club-style team name reported in MLB's teamName field.
+        data_type: varchar
+
+      - name: venue_id
+        description: MLB identifier of the team's associated venue in the selected record.
+        data_type: bigint
+
+      - name: venue_name
+        description: Name of the team's associated venue in the selected record.
+        data_type: varchar
+
+      # most recent game context
+      - name: most_recent_game_pk
+        description: MLB identifier of the game supplying the selected team profile.
+        data_type: bigint
+
+      - name: most_recent_game_official_date
+        description: Official MLB date assigned to the selected most recent game.
+        data_type: date
+
+      - name: most_recent_game_season
+        description: MLB season containing the selected most recent game.
+        data_type: integer
+
+      - name: most_recent_game_started_at
+        description: >-
+          Reported first-pitch timestamp for the selected game, falling back
+          to its scheduled start timestamp. This timestamp, rather than the
+          official date, distinguishes the ordering of doubleheader games.
+        data_type: timestamp
+
+      - name: most_recent_game_team_side
+        description: Team's away or home assignment in the selected most recent game.
+        data_type: varchar

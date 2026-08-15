@@ -30,6 +30,7 @@ export ZAVANT_S3_PREFIX
 
 PYTHON ?= python3
 AWS_CLI ?= aws
+GH_CLI ?= gh
 LIGHTDASH_CLI ?= lightdash
 
 BUILD_DIR := build
@@ -105,6 +106,7 @@ HEX_BYTES_SCANNED_CUTOFF ?= $(call configuration_or_default, \
 	$(ZAVANT_HEX_BYTES_SCANNED_CUTOFF),1073741824)
 HEX_AWS_PRINCIPAL_ARN ?= $(ZAVANT_HEX_AWS_PRINCIPAL_ARN)
 HEX_AWS_EXTERNAL_ID ?= $(ZAVANT_HEX_AWS_EXTERNAL_ID)
+HEX_CONTEXT_WORKFLOW := hex-context-sync.yml
 
 # Daily workflow
 
@@ -136,6 +138,7 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	glue-package \
 	glue-start \
 	help \
+	hex-context-sync \
 	hex-infra-deploy \
 	hex-infra-outputs \
 	hex-infra-validate \
@@ -164,6 +167,7 @@ help:
 	@echo "dbt-staging-build           build and test staging against Athena"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
+	@echo "hex-context-sync            publish the Hex semantic context via GitHub Actions"
 	@echo "hex-infra-validate          validate the Hex/Athena template"
 	@echo "lightdash-infra-validate    validate the Lightdash/Athena template"
 	@echo "workflow-infra-validate     validate the Step Functions template"
@@ -226,6 +230,13 @@ dbt-staging-build:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) build \
 		--target dev \
 		--select path:models/staging
+
+hex-context-sync:
+	@command -v $(GH_CLI) >/dev/null 2>&1 || { \
+		echo "GitHub CLI is required: https://cli.github.com/" >&2; \
+		exit 1; \
+	}
+	@$(GH_CLI) workflow run $(HEX_CONTEXT_WORKFLOW)
 
 lightdash-deploy:
 	@command -v $(LIGHTDASH_CLI) >/dev/null 2>&1 || { \

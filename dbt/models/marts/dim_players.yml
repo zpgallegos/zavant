@@ -2,4 +2,181 @@ version: 2
 
 models:
   - name: dim_players
-    
+    description: >-
+      Type 1 player dimension derived from the most chronologically recent
+      current boxscore record available for each MLB player. Profile
+      attributes describe MLB's values in that game response rather than an
+      independently acquired current player profile. Its grain is one row per
+      player_id.
+    columns:
+      # grain
+      - name: player_id
+        description: MLB's stable identifier for the player.
+        data_type: bigint
+        data_tests:
+          - unique
+          - not_null
+
+      # profile attributes
+      - name: bat_side_code
+        description: MLB code for the player's batting side in the selected profile.
+        data_type: varchar
+
+      - name: bat_side_description
+        description: Human-readable batting-side description in the selected profile.
+        data_type: varchar
+
+      - name: birth_city
+        description: Player's reported city of birth.
+        data_type: varchar
+
+      - name: birth_country
+        description: Player's reported country of birth.
+        data_type: varchar
+
+      - name: birth_date
+        description: Player's date of birth.
+        data_type: date
+
+      - name: birth_state_province
+        description: Player's reported state or province of birth.
+        data_type: varchar
+
+      - name: boxscore_name
+        description: Player name formatted by MLB for boxscore display.
+        data_type: varchar
+
+      - name: draft_year
+        description: Year in which the player was drafted.
+        data_type: integer
+
+      - name: first_name
+        description: Player's first name.
+        data_type: varchar
+
+      - name: full_name
+        description: Player's full name.
+        data_type: varchar
+
+      - name: gender
+        description: Player's gender code as reported by MLB.
+        data_type: varchar
+
+      - name: height
+        description: Player's listed height.
+        data_type: varchar
+
+      - name: is_active_as_of_most_recent_game
+        description: >-
+          Whether MLB marked the player active in the selected game response;
+          this is not an authoritative current roster-status indicator.
+        data_type: boolean
+
+      - name: last_name
+        description: Player's last name.
+        data_type: varchar
+
+      - name: middle_name
+        description: Player's middle name.
+        data_type: varchar
+
+      - name: mlb_debut_date
+        description: Date of the player's MLB debut.
+        data_type: date
+
+      - name: name_slug
+        description: URL-friendly player name supplied by MLB.
+        data_type: varchar
+
+      - name: nickname
+        description: Player's nickname.
+        data_type: varchar
+
+      - name: pitch_hand_code
+        description: MLB code for the player's throwing hand in the selected profile.
+        data_type: varchar
+
+      - name: pitch_hand_description
+        description: Human-readable throwing-hand description in the selected profile.
+        data_type: varchar
+
+      - name: primary_number
+        description: Player's primary uniform number in the selected profile.
+        data_type: varchar
+
+      - name: primary_position_abbreviation
+        description: Abbreviation of the player's primary position in the selected profile.
+        data_type: varchar
+
+      - name: primary_position_code
+        description: MLB code for the player's primary position in the selected profile.
+        data_type: varchar
+
+      - name: primary_position_name
+        description: Name of the player's primary position in the selected profile.
+        data_type: varchar
+
+      - name: primary_position_type
+        description: Broad type of the player's primary position in the selected profile.
+        data_type: varchar
+
+      - name: pronunciation
+        description: Pronunciation guide for the player's name.
+        data_type: varchar
+
+      - name: strike_zone_bottom
+        description: Bottom of the player's strike zone in feet in the selected profile.
+        data_type: double
+
+      - name: strike_zone_top
+        description: Top of the player's strike zone in feet in the selected profile.
+        data_type: double
+
+      - name: use_last_name
+        description: Player's preferred last name.
+        data_type: varchar
+
+      - name: use_name
+        description: Player's preferred first name.
+        data_type: varchar
+
+      - name: weight
+        description: Player's listed weight in pounds.
+        data_type: integer
+
+      # most recent game context
+      - name: most_recent_game_activity_date
+        description: >-
+          Most recent date on which the selected game was played, using its
+          resume date for a suspended game and otherwise its official date.
+        data_type: date
+
+      - name: most_recent_game_jersey_number
+        description: Player's jersey number in the selected most recent game record.
+        data_type: varchar
+
+      - name: most_recent_game_official_date
+        description: Official MLB date assigned to the selected most recent game.
+        data_type: date
+
+      - name: most_recent_game_pk
+        description: MLB identifier of the game supplying the selected player profile.
+        data_type: bigint
+
+      - name: most_recent_game_season
+        description: MLB season containing the selected most recent game.
+        data_type: integer
+
+      - name: most_recent_game_started_at
+        description: >-
+          Reported first-pitch timestamp for the selected game, falling back
+          to its scheduled start timestamp.
+        data_type: timestamp
+
+      - name: most_recent_game_team_id
+        description: >-
+          MLB identifier of the only team represented by the player in the
+          selected most recent game. Null when that game contains legitimate
+          player records for multiple teams. This is not an authoritative
+          current-team identifier.
+        data_type: bigint

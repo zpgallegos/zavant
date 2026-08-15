@@ -18,6 +18,10 @@ semantic_models:
         type: primary
         expr: plate_appearance_key
 
+      - name: player
+        type: foreign
+        expr: result_batter_id
+
     dimensions:
       - name: official_date
         type: time

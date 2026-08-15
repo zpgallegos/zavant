@@ -1,0 +1,64 @@
+version: 2
+
+semantic_models:
+  - name: players
+    model: ref("dim_players")
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.dim_players
+
+    entities:
+      - name: player
+        type: primary
+        expr: player_id
+
+    dimensions:
+      - name: player_id
+        type: categorical
+
+      - name: full_name
+        type: categorical
+
+      - name: name_slug
+        type: categorical
+
+      - name: bat_side_description
+        type: categorical
+
+      - name: pitch_hand_description
+        type: categorical
+
+      - name: primary_position_name
+        type: categorical
+
+      - name: primary_position_type
+        type: categorical
+
+      - name: birth_country
+        type: categorical
+
+      - name: mlb_debut_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: most_recent_game_season
+        description: MLB season containing the selected most recent game.
+        type: categorical
+
+      - name: most_recent_game_activity_date
+        description: >-
+          Most recent date on which the selected game was played, using its
+          resume date for a suspended game and otherwise its official date.
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: most_recent_game_team_id
+        type: categorical
+        description: >-
+            MLB identifier of the only team represented by the player in the
+            selected most recent game. Null when that game contains legitimate
+            player records for multiple teams. This is not an authoritative
+            current-team identifier.

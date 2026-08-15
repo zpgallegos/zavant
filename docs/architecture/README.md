@@ -25,8 +25,8 @@ This directory records why Zavant is built the way it is. The target architectur
 | Transformation | dbt on Athena | Build business-grained staging, intermediate, and mart models over current Glue views | Accepted in ADR 0021; initial models implemented |
 | Production orchestration | AWS Step Functions plus S3 events | A workflow-owned EventBridge schedule starts one daily Standard workflow that sequences acquisition, batch projection, and later dbt | Accepted in ADR 0017; schedule plus acquisition and projection states implemented |
 | Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with separate acquisition, analytical, and workflow stacks, scoped roles, packaged compute, controlled log retention, and one explicit schedule | Accepted in ADRs 0010–0012 and 0014–0017; Lambda, Glue, and Step Functions definitions implemented |
-| Semantics | Presentation-specific SQL and exported files | MetricFlow definitions translated and served by Lightdash | Accepted in ADR 0022; initial plate-appearance metrics implemented |
-| Presentation | Create React App consuming generated artifacts | Lightdash exploration, metrics, charts, and dashboards over Athena | Accepted in ADR 0022; integration infrastructure implemented |
+| Semantics | Presentation-specific SQL and exported files | Source-controlled MetricFlow definitions synchronized into Hex | Accepted in ADR 0022; initial plate-appearance metrics implemented |
+| Presentation | Create React App consuming generated artifacts | Hex semantic exploration, Threads, notebooks, and published data products over Athena | Accepted in ADR 0022; integration infrastructure implemented |
 
 ## Adding an ADR
 

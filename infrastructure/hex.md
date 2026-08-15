@@ -1,7 +1,6 @@
 # Hex integration infrastructure
 
-The `zavant-hex-prod` stack creates a warehouse boundary for evaluating Hex
-without changing or deleting the existing Lightdash integration. It owns:
+The `zavant-hex-prod` stack creates the warehouse boundary used by Hex. It owns:
 
 - A dedicated Athena workgroup named `zavant-hex-prod`.
 - A private, encrypted S3 bucket for ephemeral Athena query results.

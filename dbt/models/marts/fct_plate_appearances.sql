@@ -8,8 +8,7 @@
         on_schema_change="ignore",
         table_type="iceberg",
         format="parquet",
-        partitioned_by=["season"],
-        tags=["lightdash"]
+        partitioned_by=["season"]
     )
 }}
 

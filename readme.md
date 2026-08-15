@@ -262,9 +262,9 @@ This completes the local application, historical CLI reconciliation, production
 API-to-raw Lambda, Glue-to-Iceberg projection, scheduled Step Functions
 orchestration, and business-grained dbt staging over Glue-owned current views. Workflow verification,
 alarms and additional conformed dbt models remain later layers. The first
-plate-appearance semantic model is consumed by Lightdash, whose separate stack
+plate-appearance semantic model is synchronized into Hex, whose separate stack
 provides a cost-bounded Athena workgroup, expiring query-result storage, and a
-read-only production warehouse identity.
+temporary-credential production warehouse role.
 
 ## Local analytical projection
 

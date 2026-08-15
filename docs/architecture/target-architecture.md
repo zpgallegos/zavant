@@ -20,7 +20,7 @@ Acquisition --------> immutable raw object store
                        semantic definitions
                               |
                               v
-                       Lightdash / notebooks
+                        Hex / notebooks
 ```
 
 Acquisition begins with a bounded schedule snapshot. The exact response and its request provenance are retained, while a run manifest records the games discovered for eligibility and retrieval processing. This provides the expected-work set used to measure completeness. Each eligible complete-game response is validated before revision-aware landing, and each outcome is atomically recorded without preventing independent games from proceeding. Resumption reuses the stored schedule snapshot and retries only unfinished or failed work.
@@ -97,15 +97,14 @@ the workflow reports the retained acquisition error.
 - The daily workflow stack owns EventBridge Scheduler and the Step Functions
   Standard workflow that sequences acquisition and one batch Glue projection;
   later dbt execution can become a subsequent state.
-- Lightdash consumes the MetricFlow definitions in dbt's compiled manifest,
-  translates the supported metrics during a Lightdash CLI deployment, and
-  queries Athena through a dedicated cost-bounded workgroup and read-only
-  warehouse identity.
+- Hex synchronizes the source-controlled MetricFlow definitions through a
+  GitHub Actions context workflow and queries Athena through a dedicated
+  cost-bounded workgroup and temporary-credential warehouse role.
 - Cloud infrastructure is defined as code and separated by workload ownership.
 
-MetricFlow YAML is the source-controlled metric specification. Lightdash is the
-initial semantic-query and BI runtime; its MetricFlow translation remains Beta,
-so unsupported metric shapes must be identified during deployment validation.
+MetricFlow YAML is the source-controlled metric specification. Hex provides the
+semantic exploration, agent, notebook, and published presentation surfaces;
+semantic imports are previewed and validated before publication.
 
 ## Environments
 

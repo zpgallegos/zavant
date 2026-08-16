@@ -39,6 +39,11 @@ final as (
         a.active as is_active_as_of_most_recent_game,
         a.league_id,
         a.league_name,
+        case
+            when a.league_name = 'American League' then 'AL'
+            when a.league_name = 'National League' then 'NL'
+            else a.league_name
+        end as league_name_short,
         a.location_name,
         a.short_name,
         a.team_code,

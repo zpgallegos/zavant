@@ -60,6 +60,10 @@ models:
         description: Name of the team's league in the selected record.
         data_type: varchar
 
+      - name: league_name_short
+        description: Shortened name of the team's league in the selected record.
+        data_type: varchar
+
       - name: location_name
         description: Geographic location represented by the team.
         data_type: varchar

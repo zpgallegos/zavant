@@ -59,6 +59,9 @@ semantic_models:
       - name: league_name
         type: categorical
 
+      - name: league_name_short
+        type: categorical
+
       - name: division_id
         type: categorical
 

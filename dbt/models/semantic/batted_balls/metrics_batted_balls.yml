@@ -1,0 +1,237 @@
+version: 2
+
+metrics:
+  - name: distinct_batted_ball_games
+    label: Distinct Batted-Ball Games
+    description: Number of distinct games containing at least one batted-ball event.
+    type: simple
+    type_params:
+      measure: distinct_batted_ball_games
+
+  - name: batted_ball_events
+    label: Batted Ball Events (BBE)
+    description: Number of batted-ball events.
+    type: simple
+    type_params:
+      measure: batted_ball_events
+
+  - name: statcast_tracked_batted_balls
+    label: Statcast-Tracked Batted Balls
+    description: >-
+      Number of batted-ball events with both exit velocity and launch angle
+      available.
+    type: simple
+    type_params:
+      measure: statcast_tracked_batted_balls
+
+  - name: hard_hits
+    label: Hard Hits
+    description: Number of batted balls with exit velocity of at least 95 mph.
+    type: simple
+    type_params:
+      measure: hard_hits
+
+  - name: sweet_spots
+    label: Sweet Spots
+    description: Number of batted balls with launch angle from 8 through 32 degrees.
+    type: simple
+    type_params:
+      measure: sweet_spots
+
+  - name: bunts
+    label: Bunts
+    description: Number of batted balls classified as bunts.
+    type: simple
+    type_params:
+      measure: bunts
+
+  - name: ground_balls
+    label: Ground Balls
+    description: Number of batted balls classified as ground balls.
+    type: simple
+    type_params:
+      measure: ground_balls
+
+  - name: line_drives
+    label: Line Drives
+    description: Number of batted balls classified as line drives.
+    type: simple
+    type_params:
+      measure: line_drives
+
+  - name: fly_balls
+    label: Fly Balls
+    description: Number of batted balls classified as fly balls.
+    type: simple
+    type_params:
+      measure: fly_balls
+
+  - name: popups
+    label: Popups
+    description: Number of batted balls classified as popups.
+    type: simple
+    type_params:
+      measure: popups
+
+  - name: maximum_exit_velocity
+    label: Maximum Exit Velocity
+    description: Highest measured exit velocity, in miles per hour.
+    type: simple
+    type_params:
+      measure: maximum_exit_velocity
+
+  - name: maximum_batted_ball_distance
+    label: Maximum Batted-Ball Distance
+    description: Longest measured batted-ball distance, in feet.
+    type: simple
+    type_params:
+      measure: maximum_batted_ball_distance
+
+  - name: exit_velocity_sum
+    label: Exit Velocity Sum
+    description: Sum of measured exit velocities, used to calculate the weighted average.
+    type: simple
+    type_params:
+      measure: exit_velocity_sum
+
+  - name: exit_velocity_tracked_batted_balls
+    label: Exit-Velocity Observations
+    description: Number of batted-ball events with measured exit velocity.
+    type: simple
+    type_params:
+      measure: exit_velocity_tracked_batted_balls
+
+  - name: launch_angle_tracked_batted_balls
+    label: Launch-Angle Observations
+    description: Number of batted-ball events with measured launch angle.
+    type: simple
+    type_params:
+      measure: launch_angle_tracked_batted_balls
+
+  - name: non_bunt_launch_angle_sum
+    label: Non-Bunt Launch Angle Sum
+    description: >-
+      Sum of measured non-bunt launch angles, used to calculate the weighted
+      average.
+    type: simple
+    type_params:
+      measure: non_bunt_launch_angle_sum
+
+  - name: non_bunt_launch_angle_observations
+    label: Non-Bunt Launch-Angle Observations
+    description: Number of non-bunt batted balls with measured launch angle.
+    type: simple
+    type_params:
+      measure: non_bunt_launch_angle_observations
+
+  - name: classified_non_bunt_batted_balls
+    label: Classified Non-Bunt Batted Balls
+    description: >-
+      Number of non-bunt batted balls included in the trajectory-rate
+      denominator.
+    type: simple
+    type_params:
+      measure: classified_non_bunt_batted_balls
+
+  - name: batted_ball_distance_sum
+    label: Batted-Ball Distance Sum
+    description: Sum of measured distances, used to calculate the weighted average.
+    type: simple
+    type_params:
+      measure: batted_ball_distance_sum
+
+  - name: distance_tracked_batted_balls
+    label: Batted-Ball Distance Observations
+    description: Number of batted-ball events with measured distance.
+    type: simple
+    type_params:
+      measure: distance_tracked_batted_balls
+
+  - name: statcast_tracking_rate
+    label: Statcast Tracking Rate
+    description: Share of batted-ball events with both primary Statcast measurements.
+    type: ratio
+    type_params:
+      numerator: statcast_tracked_batted_balls
+      denominator: batted_ball_events
+
+  - name: average_exit_velocity
+    label: Average Exit Velocity
+    description: Average measured exit velocity, in miles per hour.
+    type: ratio
+    type_params:
+      numerator: exit_velocity_sum
+      denominator: exit_velocity_tracked_batted_balls
+
+  - name: average_launch_angle
+    label: Average Launch Angle
+    description: Average measured launch angle for non-bunt batted balls, in degrees.
+    type: ratio
+    type_params:
+      numerator: non_bunt_launch_angle_sum
+      denominator: non_bunt_launch_angle_observations
+
+  - name: average_batted_ball_distance
+    label: Average Batted-Ball Distance
+    description: Average measured batted-ball distance, in feet.
+    type: ratio
+    type_params:
+      numerator: batted_ball_distance_sum
+      denominator: distance_tracked_batted_balls
+
+  - name: hard_hit_rate
+    label: Hard-Hit Rate
+    description: Share of exit-velocity-tracked batted balls hit at least 95 mph.
+    type: ratio
+    type_params:
+      numerator: hard_hits
+      denominator: exit_velocity_tracked_batted_balls
+
+  - name: sweet_spot_rate
+    label: Sweet-Spot Rate
+    description: >-
+      Share of launch-angle-tracked batted balls hit from 8 through 32 degrees.
+    type: ratio
+    type_params:
+      numerator: sweet_spots
+      denominator: launch_angle_tracked_batted_balls
+
+  - name: bunt_rate
+    label: Bunt Rate
+    description: Share of batted-ball events classified as bunts.
+    type: ratio
+    type_params:
+      numerator: bunts
+      denominator: batted_ball_events
+
+  - name: ground_ball_rate
+    label: Ground-Ball Rate
+    description: Share of classified non-bunt batted balls that were ground balls.
+    type: ratio
+    type_params:
+      numerator: ground_balls
+      denominator: classified_non_bunt_batted_balls
+
+  - name: line_drive_rate
+    label: Line-Drive Rate
+    description: Share of classified non-bunt batted balls that were line drives.
+    type: ratio
+    type_params:
+      numerator: line_drives
+      denominator: classified_non_bunt_batted_balls
+
+  - name: fly_ball_rate
+    label: Fly-Ball Rate
+    description: Share of classified non-bunt batted balls that were fly balls.
+    type: ratio
+    type_params:
+      numerator: fly_balls
+      denominator: classified_non_bunt_batted_balls
+
+  - name: popup_rate
+    label: Popup Rate
+    description: Share of classified non-bunt batted balls that were popups.
+    type: ratio
+    type_params:
+      numerator: popups
+      denominator: classified_non_bunt_batted_balls

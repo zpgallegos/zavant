@@ -1,0 +1,294 @@
+version: 2
+
+models:
+  - name: fct_batted_balls
+    description: >-
+      Current batted-ball events enriched with the responsible batter,
+      pitcher, teams, plate-appearance outcome, game state, pitch context, and
+      governed contact-quality classifications. Its physical grain is
+      game_pk, at_bat_index, and event_index. Revised games are replaced as a
+      unit so removed events do not survive a source correction.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # keys and grain
+      - name: batted_ball_key
+        description: >-
+          Deterministic key generated from game_pk, at_bat_index, and
+          event_index.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: plate_appearance_key
+        description: >-
+          Deterministic key of the plate appearance containing the batted-ball
+          event.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the containing play in MLB's allPlays stream.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the contact event within the play.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # participants
+      - name: result_batter_id
+        description: MLB identifier of the batter attached to the plate-appearance result.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: result_pitcher_id
+        description: MLB identifier of the pitcher attached to the plate-appearance result.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: offense_team_id
+        description: MLB identifier of the batting team.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: defense_team_id
+        description: MLB identifier of the fielding team.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # game state
+      - name: inning
+        description: Numeric inning in which contact occurred.
+        data_type: integer
+
+      - name: half_inning
+        description: Inning half in which contact occurred.
+        data_type: varchar
+
+      - name: is_top_inning
+        description: Whether the batting team was the away team.
+        data_type: boolean
+
+      - name: outs_before
+        description: Number of outs immediately before the plate appearance.
+        data_type: integer
+
+      - name: base_state_before
+        description: >-
+          Three-character first/second/third occupancy indicator before the
+          plate appearance, where 1 means occupied and 0 means empty.
+        data_type: varchar
+
+      # plate-appearance outcome
+      - name: event
+        description: Human-readable MLB label for the terminal result.
+        data_type: varchar
+
+      - name: event_type
+        description: Machine-readable MLB classification of the terminal result.
+        data_type: varchar
+
+      - name: result_description
+        description: Human-readable description of the plate-appearance result.
+        data_type: varchar
+
+      - name: is_hit
+        description: Whether the plate appearance resulted in a hit.
+        data_type: boolean
+
+      - name: is_home_run
+        description: Whether the plate appearance resulted in a home run.
+        data_type: boolean
+
+      # contact measurements and classifications
+      - name: play_id
+        description: MLB identifier of the corresponding pitch event.
+        data_type: varchar
+
+      - name: pitch_number
+        description: Sequential pitch number within the plate appearance.
+        data_type: integer
+
+      - name: coordinate_x
+        description: Horizontal coordinate on MLB's hit-location chart.
+        data_type: double
+
+      - name: coordinate_y
+        description: Vertical coordinate on MLB's hit-location chart.
+        data_type: double
+
+      - name: hardness
+        description: MLB's qualitative contact-hardness classification.
+        data_type: varchar
+
+      - name: launch_angle
+        description: Vertical launch angle in degrees.
+        data_type: double
+
+      - name: launch_speed
+        description: Exit velocity in miles per hour.
+        data_type: double
+
+      - name: location
+        description: MLB's coded fielding location for the batted ball.
+        data_type: varchar
+
+      - name: total_distance
+        description: Estimated total distance traveled in feet.
+        data_type: double
+
+      - name: trajectory
+        description: MLB's detailed trajectory classification.
+        data_type: varchar
+
+      - name: has_exit_velocity
+        description: Whether MLB supplied an exit-velocity measurement.
+        data_type: boolean
+
+      - name: has_launch_angle
+        description: Whether MLB supplied a launch-angle measurement.
+        data_type: boolean
+
+      - name: has_statcast_tracking
+        description: Whether both exit velocity and launch angle are available.
+        data_type: boolean
+
+      - name: is_hard_hit
+        description: Whether measured exit velocity is at least 95 miles per hour.
+        data_type: boolean
+
+      - name: is_sweet_spot
+        description: Whether measured launch angle is between 8 and 32 degrees, inclusive.
+        data_type: boolean
+
+      - name: is_bunt
+        description: Whether MLB classifies the trajectory as a bunt.
+        data_type: boolean
+
+      # additive indicators and measures
+      - name: batted_ball_ind
+        description: Additive batted-ball-event indicator, always one per fact row.
+        data_type: integer
+
+      - name: exit_velocity_tracked_ind
+        description: Additive indicator for events with measured exit velocity.
+        data_type: integer
+
+      - name: launch_angle_tracked_ind
+        description: Additive indicator for events with measured launch angle.
+        data_type: integer
+
+      - name: statcast_tracked_batted_ball_ind
+        description: Additive indicator for events with both primary contact measurements.
+        data_type: integer
+
+      - name: hard_hit_ind
+        description: Additive indicator for measured exit velocity of at least 95 mph.
+        data_type: integer
+
+      - name: sweet_spot_ind
+        description: Additive indicator for measured launch angle from 8 through 32 degrees.
+        data_type: integer
+
+      - name: bunt_ind
+        description: Additive bunt indicator.
+        data_type: integer
+
+      - name: hit_ind
+        description: Additive hit indicator.
+        data_type: integer
+
+      - name: home_run_ind
+        description: Additive home-run indicator.
+        data_type: integer
+
+      - name: total_bases
+        description: Bases credited for the result, ranging from zero through four.
+        data_type: integer
+
+      # matchup and pitch attributes
+      - name: bat_side_code
+        description: MLB code for the result batter's batting side.
+        data_type: varchar
+
+      - name: pitch_hand_code
+        description: MLB code for the result pitcher's throwing hand.
+        data_type: varchar
+
+      - name: batter_split
+        description: MLB split classification for the batter's handedness matchup.
+        data_type: varchar
+
+      - name: pitcher_split
+        description: MLB split classification for the pitcher's handedness matchup.
+        data_type: varchar
+
+      - name: men_on_base_split
+        description: MLB classification of the baserunner state for the matchup.
+        data_type: varchar
+
+      - name: pitch_type_code
+        description: MLB code for the pitch that produced contact.
+        data_type: varchar
+
+      - name: pitch_type_description
+        description: Human-readable pitch type that produced contact.
+        data_type: varchar
+
+      - name: pitch_speed
+        description: Velocity near release of the pitch that produced contact, in mph.
+        data_type: double
+
+      - name: pitch_plate_x
+        description: Horizontal location where the pitch crossed home plate, in feet.
+        data_type: double
+
+      - name: pitch_plate_z
+        description: Vertical location where the pitch crossed home plate, in feet.
+        data_type: double
+
+      - name: pitch_zone
+        description: MLB's coded strike-zone location for the pitch that produced contact.
+        data_type: integer
+
+      # metadata
+      - name: source_revision_id
+        description: >-
+          Identifier of the current raw game revision used to replace all of
+          the game's batted-ball rows when MLB revises the game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+        data_tests:
+          - not_null

@@ -9,49 +9,49 @@ metrics:
       measure: distinct_games
 
   - name: plate_appearances
-    label: Plate Appearances
+    label: Plate Appearances (PA)
     description: Number of completed plate appearances.
     type: simple
     type_params:
       measure: plate_appearances
 
   - name: at_bats
-    label: At-Bats
+    label: At-Bats (AB)
     description: Number of official at-bats.
     type: simple
     type_params:
       measure: at_bats
 
   - name: hits
-    label: Hits
+    label: Hits (H)
     description: Number of hits of any type.
     type: simple
     type_params:
       measure: hits
 
   - name: singles
-    label: Singles
+    label: Singles (1B)
     description: Number of singles.
     type: simple
     type_params:
       measure: singles
 
   - name: doubles
-    label: Doubles
+    label: Doubles (2B)
     description: Number of doubles.
     type: simple
     type_params:
       measure: doubles
 
   - name: triples
-    label: Triples
+    label: Triples (3B)
     description: Number of triples.
     type: simple
     type_params:
       measure: triples
 
   - name: home_runs
-    label: Home Runs
+    label: Home Runs (HR)
     description: Number of home runs.
     type: simple
     type_params:
@@ -65,28 +65,28 @@ metrics:
       measure: total_bases
 
   - name: walks
-    label: Walks
+    label: Walks (BB)
     description: Number of walks, including intentional walks.
     type: simple
     type_params:
       measure: walks
 
   - name: intentional_walks
-    label: Intentional Walks
+    label: Intentional Walks (IBB)
     description: Number of intentional walks.
     type: simple
     type_params:
       measure: intentional_walks
 
   - name: hit_by_pitch
-    label: Hit by Pitch
+    label: Hit by Pitch (HBP)
     description: Number of times a batter was hit by a pitch.
     type: simple
     type_params:
       measure: hit_by_pitch
 
   - name: strikeouts
-    label: Strikeouts
+    label: Strikeouts (SO)
     description: Number of strikeouts.
     type: simple
     type_params:
@@ -107,21 +107,21 @@ metrics:
       measure: sacrifice_bunts
 
   - name: sacrifice_flies
-    label: Sacrifice Flies
+    label: Sacrifice Flies (SF)
     description: Number of sacrifice flies.
     type: simple
     type_params:
       measure: sacrifice_flies
 
   - name: reached_on_error
-    label: Reached on Error
+    label: Reached on Error (ROE)
     description: Number of ordinary reached-on-error outcomes.
     type: simple
     type_params:
       measure: reached_on_error
 
   - name: runs_batted_in
-    label: Runs Batted In
+    label: Runs Batted In (RBI)
     description: Runs batted in credited on plate appearances.
     type: simple
     type_params:
@@ -194,3 +194,91 @@ metrics:
       metrics:
         - name: on_base_percentage
         - name: slugging_percentage
+
+  - name: walk_rate
+    label: Walk Rate
+    description: Walks, including intentional walks, divided by plate appearances.
+    type: ratio
+    type_params:
+      numerator: walks
+      denominator: plate_appearances
+
+  - name: strikeout_rate
+    label: Strikeout Rate
+    description: Strikeouts divided by plate appearances.
+    type: ratio
+    type_params:
+      numerator: strikeouts
+      denominator: plate_appearances
+
+  - name: home_run_rate
+    label: Home Run Rate
+    description: Home runs divided by plate appearances.
+    type: ratio
+    type_params:
+      numerator: home_runs
+      denominator: plate_appearances
+
+  - name: isolated_power
+    label: Isolated Power
+    description: >-
+      Slugging percentage minus batting average, measuring extra bases per
+      at-bat beyond the value of a single.
+    type: derived
+    type_params:
+      expr: slugging_percentage - batting_average
+      metrics:
+        - name: slugging_percentage
+        - name: batting_average
+
+  - name: batting_average_on_balls_in_play
+    label: Batting Average on Balls in Play (BABIP)
+    description: >-
+      Non-home-run hits divided by at-bats excluding strikeouts and home runs,
+      with sacrifice flies restored to the balls-in-play denominator.
+    type: derived
+    type_params:
+      expr: >-
+        (hits - home_runs)
+        / nullif(at_bats - strikeouts - home_runs + sacrifice_flies, 0)
+      metrics:
+        - name: hits
+        - name: home_runs
+        - name: at_bats
+        - name: strikeouts
+        - name: sacrifice_flies
+
+  - name: extra_base_hits
+    label: Extra-Base Hits
+    description: Doubles, triples, and home runs.
+    type: derived
+    type_params:
+      expr: doubles + triples + home_runs
+      metrics:
+        - name: doubles
+        - name: triples
+        - name: home_runs
+
+  - name: extra_base_hit_share
+    label: Extra-Base Hit Share
+    description: Extra-base hits divided by all hits.
+    type: ratio
+    type_params:
+      numerator: extra_base_hits
+      denominator: hits
+
+  - name: extra_base_hit_rate
+    label: Extra-Base Hit Rate
+    description: Extra-base hits divided by plate appearances.
+    type: ratio
+    type_params:
+      numerator: extra_base_hits
+      denominator: plate_appearances
+
+  - name: runs_batted_in_per_plate_appearance
+    label: Runs Batted In per Plate Appearance
+    description: Runs batted in divided by plate appearances.
+    type: ratio
+    type_params:
+      numerator: runs_batted_in
+      denominator: plate_appearances

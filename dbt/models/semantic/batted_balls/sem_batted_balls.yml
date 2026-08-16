@@ -1,0 +1,219 @@
+version: 2
+
+semantic_models:
+  - name: batted_balls
+    description: >-
+      One current MLB batted-ball event, with contact measurements,
+      classifications, participants, game state, and pitch context.
+    model: ref('fct_batted_balls')
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.fct_batted_balls
+    defaults:
+      agg_time_dimension: official_date
+
+    entities:
+      - name: batted_ball
+        type: primary
+        expr: batted_ball_key
+
+      - name: player
+        type: foreign
+        expr: result_batter_id
+
+      - name: team
+        type: foreign
+        expr: offense_team_id
+
+    dimensions:
+      - name: official_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: season
+        type: categorical
+
+      - name: game_pk
+        type: categorical
+
+      - name: result_batter_id
+        type: categorical
+
+      - name: result_pitcher_id
+        type: categorical
+
+      - name: offense_team_id
+        type: categorical
+
+      - name: defense_team_id
+        type: categorical
+
+      - name: inning
+        type: categorical
+
+      - name: half_inning
+        type: categorical
+
+      - name: is_top_inning
+        type: categorical
+
+      - name: base_state_before
+        type: categorical
+
+      - name: event_type
+        type: categorical
+
+      - name: trajectory
+        type: categorical
+
+      - name: hardness
+        type: categorical
+
+      - name: location
+        type: categorical
+
+      - name: has_exit_velocity
+        type: categorical
+
+      - name: has_launch_angle
+        type: categorical
+
+      - name: has_statcast_tracking
+        type: categorical
+
+      - name: is_hard_hit
+        type: categorical
+
+      - name: is_sweet_spot
+        type: categorical
+
+      - name: is_bunt
+        type: categorical
+
+      - name: bat_side_code
+        type: categorical
+
+      - name: pitch_hand_code
+        type: categorical
+
+      - name: batter_split
+        type: categorical
+
+      - name: pitcher_split
+        type: categorical
+
+      - name: men_on_base_split
+        type: categorical
+
+      - name: pitch_type_code
+        type: categorical
+
+      - name: pitch_zone
+        type: categorical
+
+    measures:
+      - name: distinct_batted_ball_games
+        description: Number of distinct games containing at least one batted-ball event.
+        agg: count_distinct
+        expr: game_pk
+
+      - name: batted_ball_events
+        description: Number of batted-ball events.
+        agg: count
+        expr: batted_ball_key
+
+      - name: exit_velocity_tracked_batted_balls
+        description: Number of batted-ball events with measured exit velocity.
+        agg: sum
+        expr: exit_velocity_tracked_ind
+
+      - name: launch_angle_tracked_batted_balls
+        description: Number of batted-ball events with measured launch angle.
+        agg: sum
+        expr: launch_angle_tracked_ind
+
+      - name: statcast_tracked_batted_balls
+        description: >-
+          Number of batted-ball events with both exit velocity and launch
+          angle available.
+        agg: sum
+        expr: statcast_tracked_batted_ball_ind
+
+      - name: hard_hits
+        description: Number of batted balls with exit velocity of at least 95 mph.
+        agg: sum
+        expr: hard_hit_ind
+
+      - name: sweet_spots
+        description: Number of batted balls with launch angle from 8 through 32 degrees.
+        agg: sum
+        expr: sweet_spot_ind
+
+      - name: bunts
+        description: Number of batted balls classified as bunts.
+        agg: sum
+        expr: bunt_ind
+
+      - name: exit_velocity_sum
+        description: Sum of measured exit velocities, in miles per hour.
+        agg: sum
+        expr: launch_speed
+
+      - name: maximum_exit_velocity
+        description: Highest measured exit velocity, in miles per hour.
+        agg: max
+        expr: launch_speed
+
+      - name: non_bunt_launch_angle_sum
+        description: Sum of measured launch angles for non-bunt batted balls, in degrees.
+        agg: sum
+        expr: if(not is_bunt, launch_angle, null)
+
+      - name: non_bunt_launch_angle_observations
+        description: Number of non-bunt batted balls with measured launch angle.
+        agg: sum
+        expr: if(has_launch_angle and not is_bunt, 1, 0)
+
+      - name: classified_non_bunt_batted_balls
+        description: >-
+          Number of non-bunt batted balls classified as a ground ball, line
+          drive, fly ball, or popup.
+        agg: sum
+        expr: if(trajectory in ('ground_ball', 'line_drive', 'fly_ball', 'popup'), 1, 0)
+
+      - name: ground_balls
+        description: Number of batted balls classified as ground balls.
+        agg: sum
+        expr: if(trajectory = 'ground_ball', 1, 0)
+
+      - name: line_drives
+        description: Number of batted balls classified as line drives.
+        agg: sum
+        expr: if(trajectory = 'line_drive', 1, 0)
+
+      - name: fly_balls
+        description: Number of batted balls classified as fly balls.
+        agg: sum
+        expr: if(trajectory = 'fly_ball', 1, 0)
+
+      - name: popups
+        description: Number of batted balls classified as popups.
+        agg: sum
+        expr: if(trajectory = 'popup', 1, 0)
+
+      - name: batted_ball_distance_sum
+        description: Sum of measured batted-ball distances, in feet.
+        agg: sum
+        expr: total_distance
+
+      - name: distance_tracked_batted_balls
+        description: Number of batted-ball events with measured distance.
+        agg: sum
+        expr: if(total_distance is not null, 1, 0)
+
+      - name: maximum_batted_ball_distance
+        description: Longest measured batted-ball distance, in feet.
+        agg: max
+        expr: total_distance

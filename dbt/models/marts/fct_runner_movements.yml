@@ -1,0 +1,310 @@
+version: 2
+
+models:
+  - name: fct_runner_movements
+    description: >-
+      Current runner movements enriched with the affected runner, responsible
+      pitcher, teams, game state, and governed baserunning classifications.
+      Its physical grain is game_pk, at_bat_index, and runner_index. Revised
+      games are replaced as a unit so removed movements do not survive a
+      source correction.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - runner_index
+    columns:
+      # keys and grain
+      - name: runner_movement_key
+        description: >-
+          Deterministic key generated from game_pk, at_bat_index, and
+          runner_index.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: play_key
+        description: Deterministic key of the top-level play containing the movement.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the top-level play containing the movement.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: runner_index
+        description: Zero-based index of the runner movement within the top-level play.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # participants
+      - name: runner_id
+        description: MLB identifier of the player affected by the movement.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: responsible_pitcher_id
+        description: MLB identifier of the pitcher responsible for the runner.
+        data_type: bigint
+
+      - name: play_batter_id
+        description: MLB identifier of the batter active during the containing play.
+        data_type: bigint
+
+      - name: play_pitcher_id
+        description: MLB identifier of the pitcher active during the containing play.
+        data_type: bigint
+
+      - name: offense_team_id
+        description: MLB identifier of the runner's batting team.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: defense_team_id
+        description: MLB identifier of the fielding team.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # game state
+      - name: inning
+        description: Numeric inning in which the movement occurred.
+        data_type: integer
+
+      - name: half_inning
+        description: Inning half in which the movement occurred.
+        data_type: varchar
+
+      - name: is_top_inning
+        description: Whether the batting team was the away team.
+        data_type: boolean
+
+      # movement attributes
+      - name: play_event_index
+        description: Index of the play event associated with the movement.
+        data_type: integer
+
+      - name: event
+        description: Human-readable MLB event label associated with the movement.
+        data_type: varchar
+
+      - name: event_type
+        description: >-
+          Machine-readable classification of the shared play event. This can
+          differ from the outcome of an individual runner on a multi-runner
+          play.
+        data_type: varchar
+
+      - name: movement_reason
+        description: >-
+          MLB's runner-specific reason for the movement, used to attribute
+          stolen bases and caught stealing to the correct runner.
+        data_type: varchar
+
+      - name: origin_base
+        description: Original base associated with the runner before the play sequence.
+        data_type: varchar
+
+      - name: start_base
+        description: Base from which the runner began this movement.
+        data_type: varchar
+
+      - name: end_base
+        description: Base reached by the runner at the end of the movement.
+        data_type: varchar
+
+      - name: out_base
+        description: Base at which the runner was put out.
+        data_type: varchar
+
+      - name: out_number
+        description: Sequential out number recorded by the runner movement.
+        data_type: integer
+
+      - name: rbi
+        description: Whether the movement generated a run batted in.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether the affected runner was put out during the movement.
+        data_type: boolean
+
+      - name: is_scoring_event
+        description: Whether the affected runner scored during the movement.
+        data_type: boolean
+
+      - name: earned
+        description: Whether the scored run is charged as earned.
+        data_type: boolean
+
+      - name: team_unearned
+        description: Whether the scored run is classified as team unearned.
+        data_type: boolean
+
+      - name: is_stolen_base
+        description: >-
+          Whether MLB's runner-specific movement reason credits this player
+          with a stolen base.
+        data_type: boolean
+
+      - name: is_caught_stealing
+        description: >-
+          Whether MLB's runner-specific movement reason charges this player
+          with caught stealing, including pickoff caught-stealing events.
+        data_type: boolean
+
+      - name: is_pickoff_caught_stealing
+        description: >-
+          Whether the caught-stealing result was recorded as part of a pickoff
+          attempt.
+        data_type: boolean
+
+      - name: movement_outcome
+        description: >-
+          Governed high-level classification of the runner-specific outcome:
+          stolen_base, caught_stealing, run_scored, runner_out, advanced, or
+          other.
+        data_type: varchar
+
+      # associated pitch
+      - name: has_associated_pitch
+        description: >-
+          Whether play_event_index resolved to a pitch. False indicates that
+          the movement was associated with a non-pitch event or had no event
+          association.
+        data_type: boolean
+
+      - name: pitch_play_id
+        description: MLB identifier of the pitch associated with the movement.
+        data_type: varchar
+
+      - name: pitch_number
+        description: Sequential pitch number within the containing play.
+        data_type: integer
+
+      - name: pitch_call_code
+        description: MLB code for the result of the associated pitch.
+        data_type: varchar
+
+      - name: pitch_call_description
+        description: Human-readable result of the associated pitch.
+        data_type: varchar
+
+      - name: pitch_type_code
+        description: MLB code for the classified pitch type.
+        data_type: varchar
+
+      - name: pitch_type_description
+        description: Human-readable classified pitch type.
+        data_type: varchar
+
+      - name: pitch_speed
+        description: Velocity near release of the associated pitch, in mph.
+        data_type: double
+
+      - name: pitch_plate_x
+        description: Horizontal plate location of the associated pitch, in feet.
+        data_type: double
+
+      - name: pitch_plate_z
+        description: Vertical plate location of the associated pitch, in feet.
+        data_type: double
+
+      - name: pitch_zone
+        description: MLB's coded strike-zone location for the associated pitch.
+        data_type: integer
+
+      - name: pitch_balls
+        description: Ball count after the associated pitch.
+        data_type: integer
+
+      - name: pitch_strikes
+        description: Strike count after the associated pitch.
+        data_type: integer
+
+      - name: pitch_is_ball
+        description: Whether MLB classifies the associated pitch as a ball.
+        data_type: boolean
+
+      - name: pitch_is_strike
+        description: Whether MLB classifies the associated pitch as a strike.
+        data_type: boolean
+
+      - name: pitch_is_in_play
+        description: Whether the associated pitch put the ball in play.
+        data_type: boolean
+
+      # additive indicators
+      - name: runner_movement_ind
+        description: Additive runner-movement indicator, always one per fact row.
+        data_type: integer
+
+      - name: run_scored_ind
+        description: Additive indicator for a run scored by the affected runner.
+        data_type: integer
+
+      - name: earned_run_ind
+        description: Additive indicator for a scored run classified as earned.
+        data_type: integer
+
+      - name: unearned_run_ind
+        description: Additive indicator for a scored run not classified as earned.
+        data_type: integer
+
+      - name: team_unearned_run_ind
+        description: Additive indicator for a scored run classified as team unearned.
+        data_type: integer
+
+      - name: stolen_base_ind
+        description: Additive indicator for a stolen base credited to the runner.
+        data_type: integer
+
+      - name: caught_stealing_ind
+        description: Additive indicator for caught stealing charged to the runner.
+        data_type: integer
+
+      - name: stolen_base_attempt_ind
+        description: >-
+          Additive indicator for a stolen-base attempt resulting in either a
+          stolen base or caught stealing.
+        data_type: integer
+
+      - name: pickoff_caught_stealing_ind
+        description: Additive indicator for caught stealing on a pickoff attempt.
+        data_type: integer
+
+      # metadata
+      - name: source_revision_id
+        description: >-
+          Identifier of the current raw game revision used to replace all of
+          the game's runner-movement rows when MLB revises the game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+        data_tests:
+          - not_null

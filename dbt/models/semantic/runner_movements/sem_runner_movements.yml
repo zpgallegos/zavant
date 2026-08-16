@@ -1,0 +1,204 @@
+version: 2
+
+semantic_models:
+  - name: runner_movements
+    description: >-
+      One current MLB runner movement with the affected player, teams, game
+      state, and runner-specific baserunning outcome classifications.
+    model: ref('fct_runner_movements')
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.fct_runner_movements
+    defaults:
+      agg_time_dimension: official_date
+
+    entities:
+      - name: runner_movement
+        type: primary
+        expr: runner_movement_key
+
+      - name: player
+        type: foreign
+        expr: runner_id
+
+      - name: team
+        type: foreign
+        expr: offense_team_id
+
+    dimensions:
+      - name: official_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: season
+        type: categorical
+
+      - name: game_pk
+        type: categorical
+
+      - name: runner_id
+        type: categorical
+
+      - name: responsible_pitcher_id
+        type: categorical
+
+      - name: play_batter_id
+        type: categorical
+
+      - name: play_pitcher_id
+        type: categorical
+
+      - name: offense_team_id
+        type: categorical
+
+      - name: defense_team_id
+        type: categorical
+
+      - name: inning
+        type: categorical
+
+      - name: half_inning
+        type: categorical
+
+      - name: is_top_inning
+        type: categorical
+
+      - name: event_type
+        type: categorical
+
+      - name: movement_reason
+        type: categorical
+
+      - name: origin_base
+        type: categorical
+
+      - name: start_base
+        type: categorical
+
+      - name: end_base
+        type: categorical
+
+      - name: out_base
+        type: categorical
+
+      - name: is_out
+        type: categorical
+
+      - name: is_scoring_event
+        type: categorical
+
+      - name: earned
+        type: categorical
+
+      - name: team_unearned
+        type: categorical
+
+      - name: is_stolen_base
+        type: categorical
+
+      - name: is_caught_stealing
+        type: categorical
+
+      - name: is_pickoff_caught_stealing
+        type: categorical
+
+      - name: movement_outcome
+        type: categorical
+
+      - name: has_associated_pitch
+        type: categorical
+
+      - name: pitch_call_code
+        type: categorical
+
+      - name: pitch_call_description
+        type: categorical
+
+      - name: pitch_number
+        type: categorical
+
+      - name: pitch_type_code
+        type: categorical
+
+      - name: pitch_type_description
+        type: categorical
+
+      - name: pitch_speed
+        type: categorical
+
+      - name: pitch_plate_x
+        type: categorical
+
+      - name: pitch_plate_z
+        type: categorical
+
+      - name: pitch_zone
+        type: categorical
+
+      - name: pitch_balls
+        type: categorical
+
+      - name: pitch_strikes
+        type: categorical
+
+      - name: pitch_is_ball
+        type: categorical
+
+      - name: pitch_is_strike
+        type: categorical
+
+      - name: pitch_is_in_play
+        type: categorical
+
+    measures:
+      - name: distinct_runner_movement_games
+        description: Number of distinct games containing a runner movement.
+        agg: count_distinct
+        expr: game_pk
+
+      - name: runner_movements
+        description: Number of runner movements.
+        agg: count
+        expr: runner_movement_key
+
+      - name: runs_scored
+        description: Number of runs scored by affected runners.
+        agg: sum
+        expr: run_scored_ind
+
+      - name: earned_runs_scored
+        description: Number of scored runs classified as earned.
+        agg: sum
+        expr: earned_run_ind
+
+      - name: unearned_runs_scored
+        description: Number of scored runs not classified as earned.
+        agg: sum
+        expr: unearned_run_ind
+
+      - name: team_unearned_runs_scored
+        description: Number of scored runs classified as team unearned.
+        agg: sum
+        expr: team_unearned_run_ind
+
+      - name: stolen_bases
+        description: Number of stolen bases credited to affected runners.
+        agg: sum
+        expr: stolen_base_ind
+
+      - name: caught_stealing
+        description: Number of caught-stealing results charged to affected runners.
+        agg: sum
+        expr: caught_stealing_ind
+
+      - name: stolen_base_attempts
+        description: Number of stolen-base attempts resulting in a steal or caught stealing.
+        agg: sum
+        expr: stolen_base_attempt_ind
+
+      - name: pickoff_caught_stealing
+        description: Number of caught-stealing results on pickoff attempts.
+        agg: sum
+        expr: pickoff_caught_stealing_ind

@@ -1,0 +1,80 @@
+version: 2
+
+metrics:
+  - name: distinct_runner_movement_games
+    label: Distinct Runner-Movement Games
+    description: Number of distinct games containing a runner movement.
+    type: simple
+    type_params:
+      measure: distinct_runner_movement_games
+
+  - name: runner_movements
+    label: Runner Movements
+    description: Number of runner movements.
+    type: simple
+    type_params:
+      measure: runner_movements
+
+  - name: runs_scored
+    label: Runs (R)
+    description: Number of runs scored by affected runners.
+    type: simple
+    type_params:
+      measure: runs_scored
+
+  - name: earned_runs_scored
+    label: Earned Runs Scored
+    description: Number of scored runs classified as earned.
+    type: simple
+    type_params:
+      measure: earned_runs_scored
+
+  - name: unearned_runs_scored
+    label: Unearned Runs Scored
+    description: Number of scored runs not classified as earned.
+    type: simple
+    type_params:
+      measure: unearned_runs_scored
+
+  - name: team_unearned_runs_scored
+    label: Team Unearned Runs Scored
+    description: Number of scored runs classified as team unearned.
+    type: simple
+    type_params:
+      measure: team_unearned_runs_scored
+
+  - name: stolen_bases
+    label: Stolen Bases (SB)
+    description: Number of stolen bases credited to affected runners.
+    type: simple
+    type_params:
+      measure: stolen_bases
+
+  - name: caught_stealing
+    label: Caught Stealing (CS)
+    description: Number of caught-stealing results charged to affected runners.
+    type: simple
+    type_params:
+      measure: caught_stealing
+
+  - name: stolen_base_attempts
+    label: Stolen-Base Attempts
+    description: Number of stolen-base attempts resulting in a steal or caught stealing.
+    type: simple
+    type_params:
+      measure: stolen_base_attempts
+
+  - name: pickoff_caught_stealing
+    label: Pickoff Caught Stealing
+    description: Number of caught-stealing results on pickoff attempts.
+    type: simple
+    type_params:
+      measure: pickoff_caught_stealing
+
+  - name: stolen_base_success_rate
+    label: Stolen-Base Percentage (SB%)
+    description: Share of stolen-base attempts that resulted in a stolen base.
+    type: ratio
+    type_params:
+      numerator: stolen_bases
+      denominator: stolen_base_attempts

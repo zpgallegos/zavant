@@ -1,0 +1,39 @@
+version: 2
+
+metrics:
+  - name: games_played
+    label: Games Played (G)
+    description: >-
+      Distinct games in which a player participated, deduplicated across teams
+      for the rare game in which one player represented both clubs.
+    type: simple
+    type_params:
+      measure: games_played
+
+  - name: player_team_game_participations
+    label: Player-Team Game Participations
+    description: Number of physical player-game-team participation records.
+    type: simple
+    type_params:
+      measure: player_team_game_participations
+
+  - name: games_as_substitute
+    label: Games as Substitute
+    description: Distinct games in which MLB marked the player as a substitute.
+    type: simple
+    type_params:
+      measure: games_as_substitute
+
+  - name: games_as_batter
+    label: Games as Batter
+    description: Distinct games with game-level batting participation.
+    type: simple
+    type_params:
+      measure: games_as_batter
+
+  - name: games_as_pitcher
+    label: Games as Pitcher
+    description: Distinct games with game-level pitching participation.
+    type: simple
+    type_params:
+      measure: games_as_pitcher

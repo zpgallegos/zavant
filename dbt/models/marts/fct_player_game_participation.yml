@@ -1,0 +1,147 @@
+version: 2
+
+models:
+  - name: fct_player_game_participation
+    description: >-
+      Player participation in the current revision of each game, selected from
+      final boxscore player status and enriched with batting, pitching, and
+      position evidence. Its physical grain is game_pk, player_id, and team_id
+      because a player can legitimately represent two teams in one suspended
+      game. Revised games are replaced as a unit so removed participants do
+      not survive a source correction.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - player_id
+              - team_id
+    columns:
+      # keys and grain
+      - name: player_game_team_participation_key
+        description: >-
+          Deterministic key generated from game_pk, player_id, and team_id for
+          the physical player-team participation row.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: player_game_key
+        description: >-
+          Deterministic key generated from game_pk and player_id. Distinct
+          counts of this key produce official games played without
+          double-counting a player who represented two teams in one game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: player_id
+        description: MLB identifier of the player who participated.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: team_id
+        description: MLB identifier of the team represented by the player.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # game and team context
+      - name: team_side
+        description: Team's assignment in the game, either away or home.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      # participation attributes
+      - name: batting_order
+        description: MLB batting-order code assigned to the player in the boxscore.
+        data_type: varchar
+
+      - name: boxscore_position_abbreviation
+        description: Abbreviation of the player's final boxscore position.
+        data_type: varchar
+
+      - name: boxscore_position_code
+        description: MLB code for the player's final boxscore position.
+        data_type: varchar
+
+      - name: boxscore_position_name
+        description: Name of the player's final boxscore position.
+        data_type: varchar
+
+      - name: boxscore_position_type
+        description: Broad type of the player's final boxscore position.
+        data_type: varchar
+
+      - name: entered_as_substitute
+        description: >-
+          Whether MLB marked the participant as a substitute. This describes
+          how the player entered and does not determine whether the game
+          counts as played.
+        data_type: boolean
+
+      - name: participated_as_batter
+        description: >-
+          Whether MLB's game-level batting line records a game played for the
+          player and team.
+        data_type: boolean
+
+      - name: participated_as_pitcher
+        description: >-
+          Whether MLB's game-level pitching line records a game played or
+          pitched for the player and team.
+        data_type: boolean
+
+      - name: position_count
+        description: Number of position records listed for the player and team.
+        data_type: bigint
+
+      # additive indicators
+      - name: player_game_team_participation_ind
+        description: >-
+          Additive indicator for a physical player-game-team participation
+          row. Do not sum this field for overall games played because of the
+          possible dual-team game.
+        data_type: integer
+
+      - name: substitute_participation_ind
+        description: Additive indicator for a participant marked as a substitute.
+        data_type: integer
+
+      - name: batter_participation_ind
+        description: Additive indicator for participation evidenced by a batting line.
+        data_type: integer
+
+      - name: pitcher_participation_ind
+        description: Additive indicator for participation evidenced by a pitching line.
+        data_type: integer
+
+      # metadata
+      - name: source_revision_id
+        description: >-
+          Identifier of the current raw game revision used to replace all of
+          the game's participation rows when MLB revises the game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+        data_tests:
+          - not_null

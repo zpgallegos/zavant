@@ -20,8 +20,12 @@ flowchart LR
     teams[dim_teams]
     pa_fact[fct_plate_appearances]
     bb_fact[fct_batted_balls]
+    rm_fact[fct_runner_movements]
+    gp_fact[fct_player_game_participation]
     pa_sem[Plate-appearance semantics]
     bb_sem[Batted-ball semantics]
+    rm_sem[Runner-movement semantics]
+    gp_sem[Game-participation semantics]
     metrics[Governed MetricFlow metrics]
     hex[Hex player profile]
 
@@ -31,14 +35,24 @@ flowchart LR
     staging --> pa_int
     pa_int --> pa_fact
     staging --> bb_fact
+    staging --> rm_fact
+    staging --> gp_fact
     players -. player entity .-> pa_sem
     players -. player entity .-> bb_sem
+    players -. player entity .-> rm_sem
+    players -. player entity .-> gp_sem
     teams -. team entity .-> pa_sem
     teams -. team entity .-> bb_sem
+    teams -. team entity .-> rm_sem
+    teams -. team entity .-> gp_sem
     pa_fact --> pa_sem
     bb_fact --> bb_sem
+    rm_fact --> rm_sem
+    gp_fact --> gp_sem
     pa_sem --> metrics
     bb_sem --> metrics
+    rm_sem --> metrics
+    gp_sem --> metrics
     metrics --> hex
 ```
 
@@ -54,6 +68,8 @@ dimensions available across both fact families.
 | [`int_at_bats`](models/intermediate/at_bats/int_at_bats.sql) | One official at-bat | Applies official outcome exclusions without duplicating plate-appearance logic. |
 | [`fct_plate_appearances`](models/marts/fct_plate_appearances.sql) | One `game_pk`, `at_bat_index` | Stores outcomes, participants, game state, additive indicators, and deterministic keys. |
 | [`fct_batted_balls`](models/marts/fct_batted_balls.sql) | One `game_pk`, `at_bat_index`, `event_index` | Stores contact measurements, pitch context, tracking eligibility, and governed contact classifications. |
+| [`fct_runner_movements`](models/marts/fct_runner_movements.sql) | One `game_pk`, `at_bat_index`, `runner_index` | Stores runner-specific advances, runs, outs, basestealing outcomes, and optional pitch context. |
+| [`fct_player_game_participation`](models/marts/fct_player_game_participation.sql) | One `game_pk`, `player_id`, `team_id` | Preserves team-level participation while supporting deduplicated player-game counts. |
 | [`dim_players`](models/marts/dim_players.sql) | One MLB player | Resolves a Type 1 player record from the most recently observed game context. |
 | [`dim_teams`](models/marts/dim_teams.sql) | One MLB team | Resolves current team attributes from the latest unambiguous game observation. |
 
@@ -91,7 +107,9 @@ Representative metric contracts are:
 The source-controlled definitions live in
 [`metrics_plate_appearances.yml`](models/semantic/plate_appearances/metrics_plate_appearances.yml)
 and
-[`metrics_batted_balls.yml`](models/semantic/batted_balls/metrics_batted_balls.yml).
+[`metrics_batted_balls.yml`](models/semantic/batted_balls/metrics_batted_balls.yml),
+with game participation and baserunning definitions in their neighboring
+semantic-model directories.
 Their measures, dimensions, entities, and default time grains live beside them
 in the corresponding `sem_*.yml` files.
 

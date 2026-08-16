@@ -1,0 +1,103 @@
+version: 2
+
+semantic_models:
+  - name: player_game_participation
+    description: >-
+      One current player-game-team participation record, preserving team
+      attribution while supporting deduplicated player games across teams.
+    model: ref('fct_player_game_participation')
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.fct_player_game_participation
+    defaults:
+      agg_time_dimension: official_date
+
+    entities:
+      - name: player_game_team_participation
+        type: primary
+        expr: player_game_team_participation_key
+
+      - name: player
+        type: foreign
+        expr: player_id
+
+      - name: team
+        type: foreign
+        expr: team_id
+
+    dimensions:
+      - name: official_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: season
+        type: categorical
+
+      - name: game_pk
+        type: categorical
+
+      - name: player_id
+        type: categorical
+
+      - name: team_id
+        type: categorical
+
+      - name: team_side
+        type: categorical
+
+      - name: batting_order
+        type: categorical
+
+      - name: boxscore_position_abbreviation
+        type: categorical
+
+      - name: boxscore_position_code
+        type: categorical
+
+      - name: boxscore_position_name
+        type: categorical
+
+      - name: boxscore_position_type
+        type: categorical
+
+      - name: entered_as_substitute
+        type: categorical
+
+      - name: participated_as_batter
+        type: categorical
+
+      - name: participated_as_pitcher
+        type: categorical
+
+    measures:
+      - name: games_played
+        description: >-
+          Distinct player games. Uses player_game_key so a player who
+          represented two teams in one game counts once in an overall total
+          and once within each team grouping.
+        agg: count_distinct
+        expr: player_game_key
+
+      - name: player_team_game_participations
+        description: >-
+          Number of physical player-game-team participation records. This can
+          exceed games played in the rare dual-team game.
+        agg: count
+        expr: player_game_team_participation_key
+
+      - name: games_as_substitute
+        description: Distinct player games in which MLB marked the player as a substitute.
+        agg: count_distinct
+        expr: if(entered_as_substitute, player_game_key, null)
+
+      - name: games_as_batter
+        description: Distinct player games with game-level batting participation.
+        agg: count_distinct
+        expr: if(participated_as_batter, player_game_key, null)
+
+      - name: games_as_pitcher
+        description: Distinct player games with game-level pitching participation.
+        agg: count_distinct
+        expr: if(participated_as_pitcher, player_game_key, null)

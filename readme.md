@@ -1,16 +1,108 @@
 # Zavant
 
-Zavant is a ground-up, revision-aware MLB analytics platform built through tested vertical slices from API acquisition through Athena-ready analytical data. The former v1 implementation has been archived outside this repository; this repository is now the current implementation.
+**A deployed MLB analytics platform that turns revision-aware API data into
+tested facts, governed metrics, and an interactive player-profile product.**
 
-The current acquisition foundation retrieves, validates, and persists three MLB Stats API response types:
+Zavant is an end-to-end analytics engineering portfolio project. It retains the
+source evidence required to reproduce every result, projects grain-specific
+Iceberg tables, models reusable analytical facts in dbt, defines its metrics in
+MetricFlow, and serves the resulting product through Hex.
 
-- Complete live-game feeds, stored as immutable content-addressed revisions with a pointer to the current revision.
-- Bounded schedule snapshots, stored by request run with a manifest of games discovered for later eligibility and retrieval processing.
-- Pages returned by the corrected-game change feed, stored by poll run with a manifest of games that need to be retrieved again.
+> **Live product:** the public Hex app link will be added after publication.
+>
+> [Review the semantic layer](dbt/) ·
+> [Inspect the data platform](docs/data-platform.md) ·
+> [Read the presentation methodology](docs/hex-methodology.md)
 
-A typed MLB API client supports schedule, corrected-game, and complete live-game requests with explicit timeouts and bounded retries. The complete acquisition workflow combines incremental schedule discovery, corrected-game polling and processing, revision-aware raw landing, independent success watermarks, and a durable daily coordinator manifest. Acquisition depends on typed storage protocols and portable artifact references. Local operation uses atomic filesystem publication; the Lambda composition uses the same persistence state machines over conditionally written S3 objects. Boto3 is the only production acquisition dependency. Local analytical projection uses the optional PyArrow dependency installed by `make bootstrap`; production projection packages the same pure Python mappings for a Glue 5.0 Spark job that reconciles immutable S3 revisions into Iceberg v2.
+## What this project demonstrates
 
-## Local development
+| Surface | Verifiable evidence |
+|---|---|
+| Analytical product | An interactive player profile built from governed batting and contact-quality metrics. |
+| Semantic layer | Source-controlled MetricFlow entities, dimensions, additive measures, ratios, and derived metrics. |
+| Analytics engineering | Tested dbt staging, intermediate, fact, and dimension models with explicit grains and correction-safe incremental merges. |
+| Data engineering | Resumable schedule discovery, historical backfills, correction polling, immutable raw revisions, and current-state reconciliation. |
+| Cloud architecture | EventBridge Scheduler, Step Functions, Lambda, S3, Glue, Iceberg v2, the Glue Catalog, Athena, IAM, and CloudFormation. |
+| Reliability | Boundary contracts, idempotent writes, independent watermarks, durable run manifests, reconciliation tests, and completeness reporting. |
+
+## End-to-end architecture
+
+```mermaid
+flowchart LR
+    api[MLB Stats API]
+    scheduler[EventBridge Scheduler]
+    workflow[Step Functions]
+    lambda[Lambda acquisition]
+    raw[(Revisioned JSON in S3)]
+    glue[Glue projection]
+    iceberg[(Iceberg v2 tables)]
+    athena[Athena]
+    dbt[dbt facts and dimensions]
+    metricflow[MetricFlow semantic layer]
+    hex[Hex player profile]
+
+    scheduler --> workflow
+    workflow --> lambda
+    api --> lambda
+    lambda --> raw
+    workflow --> glue
+    raw --> glue
+    glue --> iceberg
+    iceberg --> athena
+    athena --> dbt
+    dbt --> metricflow
+    metricflow --> hex
+```
+
+The scheduled production workflow currently coordinates acquisition and Glue
+projection. dbt publication and Hex semantic synchronization remain explicit
+deployment boundaries rather than being implied as steps in that state machine.
+
+## Design highlights
+
+- Exact MLB responses are retained as immutable evidence with request
+  provenance and content-addressed game revisions.
+- Schedule discovery, deferred-game processing, and corrected-game polling use
+  independently advancing durable state, so one failure does not erase other
+  successful work.
+- Glue reconciles durable current-revision pointers rather than trusting only
+  the games mentioned by the preceding daily run.
+- Analytical event families are projected at their natural grains instead of
+  forcing pitches, runner movements, actions, and batted balls into one sparse
+  table.
+- dbt facts replace complete revised games during Iceberg merges, including
+  deletion of rows removed by a source correction.
+- Baseball rates are ratios of additive aggregate components, preventing the
+  average-of-averages errors that arise when precomputed row-level rates are
+  regrouped.
+- The Hex connection uses temporary AWS credentials and a dedicated,
+  cost-bounded Athena workgroup rather than embedded long-lived credentials.
+
+## Repository map
+
+| Path | Responsibility |
+|---|---|
+| [`src/zavant/acquisition`](src/zavant/acquisition/) | Daily discovery, corrections, deferred games, bounded acquisition, and season backfills. |
+| [`src/zavant/storage`](src/zavant/storage/) | Storage protocols and shared revision-aware persistence over local files or S3 objects. |
+| [`src/zavant/projection`](src/zavant/projection/) | Explicit JSON projections, analytical contracts, Iceberg reconciliation, and current views. |
+| [`infrastructure`](infrastructure/) | CloudFormation for acquisition, analytical projection, orchestration, and Hex access. |
+| [`dbt`](dbt/) | Staging, grain-first intermediates, facts, dimensions, tests, and MetricFlow definitions. |
+| [`scripts/monitoring`](scripts/monitoring/) | Daily-run inspection, Glue-run inspection, and warehouse-completeness reporting. |
+| [`tests`](tests/) | Contract, workflow, storage, projection, infrastructure, and recovery behavior. |
+
+## Technology
+
+Python 3.12 · AWS Lambda · Step Functions · EventBridge Scheduler · S3 · AWS
+Glue · Apache Iceberg v2 · Glue Data Catalog · Athena · dbt · MetricFlow · Hex ·
+CloudFormation · GitHub Actions
+
+## Development and operations
+
+The sections below are the implementation and operating guide. The
+[data-platform case study](docs/data-platform.md) and
+[semantic-layer case study](dbt/) provide shorter, design-oriented walkthroughs.
+
+### Local development
 
 From this directory:
 
@@ -258,13 +350,14 @@ The optional `through_date` event field supports deterministic smoke tests:
 
 Bootstrap configuration is consulted only while its corresponding watermark is absent. Thereafter the persisted S3 state is authoritative. If any daily branch fails, its manifest remains in S3 and the handler raises so the Lambda invocation is visibly unsuccessful.
 
-This completes the local application, historical CLI reconciliation, production
-API-to-raw Lambda, Glue-to-Iceberg projection, scheduled Step Functions
-orchestration, and business-grained dbt staging over Glue-owned current views. Workflow verification,
-alarms and additional conformed dbt models remain later layers. The first
-plate-appearance semantic model is synchronized into Hex, whose separate stack
-provides a cost-bounded Athena workgroup, expiring query-result storage, and a
-temporary-credential production warehouse role.
+The deployed path includes historical reconciliation, production API-to-raw
+Lambda acquisition, Glue-to-Iceberg projection, scheduled Step Functions
+orchestration, business-grained dbt facts and dimensions, and MetricFlow
+semantic models for plate appearances, batted balls, players, and teams. Hex
+synchronizes those definitions from source control and uses a separate stack
+for its cost-bounded Athena workgroup, expiring query-result storage, and
+temporary-credential production warehouse role. Workflow alarms remain a later
+operational layer.
 
 ## Local analytical projection
 

@@ -43,6 +43,9 @@ semantic_models:
 
       - name: franchise_name
         type: categorical
+      
+      - name: team_name
+        type: categorical
 
       - name: location_name
         type: categorical

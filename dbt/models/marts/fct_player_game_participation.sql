@@ -1,8 +1,10 @@
+{% set fact_grain = ["season", "game_pk", "player_id", "team_id"] %}
+
 {{
     config(
         materialized="incremental",
         incremental_strategy="merge",
-        unique_key=["season", "game_pk", "player_id", "team_id"],
+        unique_key=fact_grain,
         delete_condition="src._dbt_is_deleted",
         insert_condition="not src._dbt_is_deleted",
         on_schema_change="ignore",
@@ -12,27 +14,8 @@
     )
 }}
 
-with current_game_revisions as (
-    select
-        game_pk,
-        source_revision_id
-    from {{ ref("stg_games") }}
-),
-
-changed_games as (
-    select
-        a.game_pk,
-        a.source_revision_id
-    from current_game_revisions as a
-    {% if is_incremental() %}
-        where not exists (
-            select 1 as row_exists
-            from {{ this }} as b
-            where
-                a.game_pk = b.game_pk
-                and a.source_revision_id = b.source_revision_id
-        )
-    {% endif %}
+with changed_games as (
+    {{ changed_game_revisions() }}
 ),
 
 boxscore_players as (
@@ -137,26 +120,4 @@ final as (
     from classified_participations
 )
 
-{% if is_incremental() %}
-    select
-        a.*,
-        false as _dbt_is_deleted
-    from final as a
-
-    union all
-
-    select
-        b.*,
-        true as _dbt_is_deleted
-    from changed_games as a
-    inner join {{ this }} as b on a.game_pk = b.game_pk
-    left join final as c
-        on
-            b.season = c.season
-            and b.game_pk = c.game_pk
-            and b.player_id = c.player_id
-            and b.team_id = c.team_id
-    where c.game_pk is null
-{% else %}
-    select * from final
-{% endif %}
+{{ correction_safe_merge_rows("final", "changed_games", fact_grain) }}

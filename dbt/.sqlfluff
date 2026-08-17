@@ -10,6 +10,9 @@ exclude_rules = ST06
 [sqlfluff:indentation]
 tab_space_size = 4
 
+[sqlfluff:templater:jinja]
+load_macros_from_path = macros
+
 [sqlfluff:layout:type:comma]
 spacing_before = touch
 line_position = trailing

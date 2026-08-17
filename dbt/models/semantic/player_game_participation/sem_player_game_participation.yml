@@ -72,11 +72,12 @@ semantic_models:
         type: categorical
 
     measures:
-      - name: games_played
+      - name: player_games_played
         description: >-
-          Distinct player games. Uses player_game_key so a player who
-          represented two teams in one game counts once in an overall total
-          and once within each team grouping.
+          Distinct player-game pairs. Uses player_game_key so a player who
+          represented two teams in one game counts once overall and once
+          within each team grouping. This does not count distinct team games
+          or distinct MLB games.
         agg: count_distinct
         expr: player_game_key
 

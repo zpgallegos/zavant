@@ -125,15 +125,6 @@ semantic_models:
       - name: pitch_type_description
         type: categorical
 
-      - name: pitch_speed
-        type: categorical
-
-      - name: pitch_plate_x
-        type: categorical
-
-      - name: pitch_plate_z
-        type: categorical
-
       - name: pitch_zone
         type: categorical
 

@@ -1,0 +1,37 @@
+version: 2
+
+macros:
+  - name: changed_game_revisions
+    description: >-
+      Returns the current game and source-revision pairs that a correction-safe
+      fact model must calculate. Full-refresh runs include every current game;
+      incremental runs include only games whose current source revision is not
+      already represented in the target table. The target model must expose
+      game_pk and source_revision_id.
+
+  - name: correction_safe_merge_rows
+    description: >-
+      Produces the rows consumed by an Iceberg merge for a correction-safe fact
+      model. On incremental runs, desired rows are marked for insertion or
+      update and existing rows that disappeared from a changed game's corrected
+      state are emitted as deletion tombstones. Full-refresh runs return the
+      desired rows without the temporary _dbt_is_deleted field. Models using
+      this macro must configure matching delete_condition and insert_condition
+      expressions.
+    arguments:
+      - name: final_cte
+        type: string
+        description: >-
+          Name of the CTE containing the complete desired fact rows for the
+          games selected in the current run.
+      - name: changed_games_cte
+        type: string
+        description: >-
+          Name of the CTE containing the game_pk values selected for
+          recalculation in the current run.
+      - name: unique_key
+        type: list
+        description: >-
+          Ordered column names defining the fact grain. This must match the
+          model's configured unique_key and exist in both the desired rows and
+          target table.

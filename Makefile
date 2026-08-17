@@ -31,9 +31,11 @@ GH_CLI ?= gh
 
 BUILD_DIR := build
 DBT_PROJECT_DIR := dbt
+DBT_PROFILES_DIR ?= $(HOME)/.dbt
 VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_DBT := $(abspath $(VENV_DIR)/bin/dbt)
+VENV_METRICFLOW := $(abspath $(VENV_DIR)/bin/mf)
 VENV_SQLFLUFF := $(abspath $(VENV_DIR)/bin/sqlfluff)
 PYTHON_CONSTRAINTS_FILE := constraints.txt
 
@@ -116,6 +118,7 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	dbt-lint \
 	dbt-parse \
 	dbt-prod-build \
+	dbt-semantic-validate \
 	dbt-source-freshness \
 	dbt-staging-build \
 	glue-package \
@@ -142,6 +145,7 @@ help:
 	@echo "dbt-lint                    lint dbt SQL with the Athena dialect"
 	@echo "dbt-parse                   parse dbt resources without querying Athena"
 	@echo "dbt-prod-build              build and test the production dbt project"
+	@echo "dbt-semantic-validate       validate MetricFlow semantic definitions"
 	@echo "dbt-source-freshness        check the analytical reconciliation timestamp"
 	@echo "dbt-staging-build           build and test staging against Athena"
 	@echo "acquisition-infra-validate  validate the acquisition template"
@@ -172,7 +176,7 @@ bootstrap:
 test:
 	@PYTHONPATH=src $(VENV_PYTHON) -m unittest discover -s tests -v
 
-check: dbt-parse dbt-lint
+check: dbt-parse dbt-lint dbt-semantic-validate
 	@PYTHONPATH=src $(VENV_PYTHON) -m compileall -q src tests jobs
 	@$(VENV_PYTHON) -m ruff check src tests jobs
 	@PYTHONPATH=src $(VENV_PYTHON) -m pyright
@@ -192,6 +196,11 @@ dbt-lint:
 
 dbt-parse:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) parse --no-partial-parse
+
+dbt-semantic-validate:
+	@cd $(DBT_PROJECT_DIR) && \
+		DBT_PROFILES_DIR=$(abspath $(DBT_PROFILES_DIR)) \
+		$(VENV_METRICFLOW) validate-configs --skip-dw
 
 dbt-prod-build:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) build --target prod

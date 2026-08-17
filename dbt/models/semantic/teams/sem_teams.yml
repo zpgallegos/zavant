@@ -43,9 +43,6 @@ semantic_models:
 
       - name: franchise_name
         type: categorical
-      
-      - name: team_name
-        type: categorical
 
       - name: location_name
         type: categorical
@@ -58,7 +55,7 @@ semantic_models:
 
       - name: league_id
         type: categorical
-
+      
       - name: league_name
         type: categorical
 

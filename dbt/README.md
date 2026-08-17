@@ -183,5 +183,7 @@ make dbt-source-freshness
 ```
 
 After changing `packages.yml`, run `make dbt-deps`. MetricFlow is installed in
-the project environment and its manifest is validated as part of the standard
-quality loop.
+the project environment, and `make dbt-semantic-validate` runs its semantic
+validator with data-warehouse validation disabled. That target is also part of
+`make check`. MetricFlow initializes the configured dbt adapter and connection
+before validation, but it does not run its warehouse validation suite.

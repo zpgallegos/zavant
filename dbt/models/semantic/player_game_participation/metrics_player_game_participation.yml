@@ -1,14 +1,15 @@
 version: 2
 
 metrics:
-  - name: games_played
-    label: Games Played (G)
+  - name: player_games_played
+    label: Player Games Played
     description: >-
-      Distinct games in which a player participated, deduplicated across teams
-      for the rare game in which one player represented both clubs.
+      Distinct player-game pairs, deduplicated across teams for the rare game
+      in which one player represented both clubs. This metric does not count
+      distinct team games or distinct MLB games.
     type: simple
     type_params:
-      measure: games_played
+      measure: player_games_played
 
   - name: player_team_game_participations
     label: Player-Team Game Participations

@@ -43,7 +43,8 @@ flowchart LR
 The state machine retains an acquisition error, still runs Glue so successfully
 landed revisions are not stranded, and then restores the acquisition failure as
 the execution's final status. Glue failures remain retriable because incomplete
-revisions never enter its completed-projection registry.
+revisions never reach the `games` table that serves as the projection completion
+marker.
 
 ## Daily acquisition
 
@@ -155,12 +156,13 @@ one mostly-null event table.
 Production Glue processing is reconciliation-driven:
 
 1. Scan immutable raw revisions.
-2. Compare them with the completed-projection registry.
+2. Compare their identities with completed revisions recorded in the `games`
+   table.
 3. Project every missing revision through explicit Python contracts.
 4. Merge the outputs into partitioned Iceberg v2 tables.
 5. Publish Glue-owned `current_*` views that resolve acquisition pointers.
-6. Mark a game revision complete only after its analytical publication reaches
-   the terminal merge boundary.
+6. Merge the revision's `games` row last, using that table as the completion
+   marker only after every other analytical table has been published.
 
 This design does not assume that the immediately preceding Lambda invocation
 listed every revision that needs projection. A retry can repair work left by a

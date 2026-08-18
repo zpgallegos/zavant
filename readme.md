@@ -1,4 +1,4 @@
-# Zavant
+# Baseball Zavant
 
 **A deployed MLB analytics platform that turns revision-aware API data into
 tested facts, governed metrics, and an interactive player-profile product.**

@@ -1,6 +1,7 @@
 # Target architecture
 
-Zavant will be rebuilt as a local-first analytics product whose complete path—from source response to user-facing metric—is reproducible and observable.
+Zavant is a local-first analytics product whose complete path—from source
+response to user-facing metric—is reproducible and observable.
 
 ## System boundaries
 
@@ -44,8 +45,9 @@ persistence state machines over S3, with ETag preconditions protecting mutable
 objects. A Lambda composes the acquisition run; explicit Python mappings project
 every source revision into revision-aware analytical tables. Local Parquet
 runs exercise those contracts without AWS. A Glue Spark job independently
-reconciles every current pointer against its completed-revision registry and
-merges missing revisions into Iceberg v2. EventBridge Scheduler starts one
+reconciles every current pointer against revision identities in the terminal
+`games` completion table and merges missing revisions into Iceberg v2.
+EventBridge Scheduler starts one
 Standard Step Functions execution that invokes acquisition and waits for Glue
 projection, rather than invoking either component on an independent schedule.
 Glue reconciliation still runs when acquisition partially fails, after which

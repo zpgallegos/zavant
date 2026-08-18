@@ -8,7 +8,7 @@ source evidence required to reproduce every result, projects grain-specific
 Iceberg tables, models reusable analytical facts in dbt, defines its metrics in
 MetricFlow, and serves the resulting product through Hex.
 
-> **Live product:** the public Hex app link will be added after publication.
+> **Live product:** [Explore the published Hex player profile](https://app.hex.tech/01a00124-662e-7369-982a-ba58e4f2a22f/app/0347rXGBaRqd4gD8KHxHRr/latest)
 >
 > [Review the semantic layer](dbt/) ·
 > [Inspect the data platform](docs/data-platform.md) ·
@@ -353,11 +353,13 @@ Bootstrap configuration is consulted only while its corresponding watermark is a
 The deployed path includes historical reconciliation, production API-to-raw
 Lambda acquisition, Glue-to-Iceberg projection, scheduled Step Functions
 orchestration, business-grained dbt facts and dimensions, and MetricFlow
-semantic models for plate appearances, batted balls, players, and teams. Hex
-synchronizes those definitions from source control and uses a separate stack
-for its cost-bounded Athena workgroup, expiring query-result storage, and
-temporary-credential production warehouse role. Workflow alarms remain a later
-operational layer.
+semantic models for plate appearances, batted balls, pitches, runner movements,
+player-game participation, players, and teams. Hex synchronizes those
+definitions from source control and uses a separate stack for its cost-bounded
+Athena workgroup, expiring query-result storage, and temporary-credential
+production warehouse role. The published player profile currently presents
+traditional batting and contact-quality results; pitch analysis is the next
+presentation slice. Workflow alarms remain a later operational layer.
 
 ## Local analytical projection
 
@@ -391,4 +393,7 @@ inspection and contract-testing boundary. Production uses the same projection
 contracts in a Glue job that reconciles raw revisions into Iceberg tables;
 the scheduled Step Functions workflow runs that job after daily acquisition.
 
-See the [target architecture](docs/architecture/target-architecture.md), [decision register](docs/architecture/README.md), and [migration roadmap](docs/migration-roadmap.md) for the intended path from acquisition through semantics and presentation.
+See the [target architecture](docs/architecture/target-architecture.md),
+[decision register](docs/architecture/README.md), and
+[migration roadmap](docs/migration-roadmap.md) for the design, decisions, and
+implementation history from acquisition through semantics and presentation.

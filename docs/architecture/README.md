@@ -22,11 +22,11 @@ This directory records why Zavant is built the way it is. The target architectur
 | Player game grain | One player row per game, assuming one club | Player, position, and statistic rows are keyed by both player and team to preserve legitimate dual-team appearances | Accepted in ADR 0020 |
 | Player dimension | Treat the latest boxscore team as current affiliation | Build a Type 1 profile from latest game evidence and label affiliation as the most recent game team | Accepted in ADR 0023; initial model implemented |
 | Current analytical state | Repeat revision-pointer joins in downstream SQL | Glue-owned `current_*` Athena views expose business grains while preserving internal Iceberg history | Accepted in ADR 0021; implemented |
-| Transformation | dbt on Athena | Build business-grained staging, intermediate, and mart models over current Glue views | Accepted in ADR 0021; initial models implemented |
+| Transformation | dbt on Athena | Build business-grained staging, intermediate, and mart models over current Glue views | Accepted in ADR 0021; 25 staging models, five correction-safe facts, two dimensions, shared merge macros, and reconciliation tests implemented |
 | Production orchestration | AWS Step Functions plus S3 events | A workflow-owned EventBridge schedule starts one daily Standard workflow that sequences acquisition, batch projection, and later dbt | Accepted in ADR 0017; schedule plus acquisition and projection states implemented |
-| Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with separate acquisition, analytical, and workflow stacks, scoped roles, packaged compute, controlled log retention, and one explicit schedule | Accepted in ADRs 0010–0012 and 0014–0017; Lambda, Glue, and Step Functions definitions implemented |
-| Semantics | Presentation-specific SQL and exported files | Source-controlled MetricFlow definitions synchronized into Hex | Accepted in ADR 0022; initial plate-appearance metrics implemented |
-| Presentation | Create React App consuming generated artifacts | Hex semantic exploration, Threads, notebooks, and published data products over Athena | Accepted in ADR 0022; integration infrastructure implemented |
+| Infrastructure | Manually configured AWS services and shell deployment | Native CloudFormation with separate acquisition, analytical, workflow, and Hex integration stacks, scoped roles, packaged compute, controlled log retention, and one explicit schedule | Accepted in ADRs 0010–0012, 0014–0017, and 0022; Lambda, Glue, Step Functions, and Hex access definitions implemented |
+| Semantics | Presentation-specific SQL and exported files | Source-controlled MetricFlow definitions synchronized into Hex | Accepted in ADR 0022; plate-appearance, batted-ball, pitch, runner-movement, participation, player, and team models implemented |
+| Presentation | Create React App consuming generated artifacts | Hex semantic exploration, Threads, notebooks, and published data products over Athena | Accepted in ADR 0022; integration infrastructure and published player profile implemented |
 
 ## Adding an ADR
 

@@ -1,6 +1,7 @@
 # Migration roadmap
 
-This is a sequence of independently demonstrable vertical slices, not a commitment to a big-bang rewrite.
+This records the independently demonstrable vertical slices used to replace the
+earlier implementation without a big-bang rewrite.
 
 ## 0. Foundation — established
 
@@ -64,34 +65,46 @@ Production exit demo: deploy the analytical stack, project all S3 revisions,
 query all Iceberg tables in Athena, rerun with zero pending revisions, then land
 a correction and observe one revision reconcile safely.
 
-## 3. Transformation
+## 3. Transformation — established
 
-- Audit existing dbt models and classify them as retain, rewrite, or retire.
-- Establish naming, tests, documentation, lineage, and CI conventions.
-- Build conformed game, team, player, plate-appearance, pitch, and runner models.
-- Make local and production dbt targets behaviorally equivalent.
+- Document one current-state staging view for each analytical dataset.
+- Build correction-safe plate-appearance, batted-ball, pitch, runner-movement,
+  and player-game participation facts plus conformed player and team dimensions.
+- Centralize the repeated changed-game and tombstone invariants in documented
+  dbt macros.
+- Enforce fact grains, current revisions, source reconciliation, relationships,
+  documentation, SQL style, and semantic parsing in the quality loop.
 
-Exit demo: reproduce a selected player/game calculation from raw response through a tested dbt mart.
+Exit demo established: reproduce player-season batting, contact, pitch,
+baserunning, and participation calculations from retained events through tested
+dbt marts.
 
-## 4. Semantics
+## 4. Semantics — established
 
-- Inventory application metrics and their grains, filters, dimensions, and owners.
-- Evaluate semantic-layer options against local operation, dbt integration, caching, API ergonomics, and deployability.
-- Define a small canonical metric set before migrating every statistic.
+- Keep MetricFlow YAML as the source-controlled metric contract.
+- Define entities, shared player and team dimensions, additive measures, and
+  regrouping-safe ratios for every implemented business fact.
+- Preview and publish semantic changes to Hex through the checked-in context
+  synchronization workflow.
 
-Exit demo: query the same metric by player, team, and season without embedding metric SQL in the presentation layer.
+Exit demo established: query governed metrics by player, team, season, matchup,
+count, pitch family, and game context without embedding metric SQL in charts.
 
-## 5. Presentation
+## 5. Presentation — established first product
 
-- Select the first portfolio narrative and user workflow.
-- Rebuild the UI against semantic contracts rather than generated static data files.
-- Add loading, empty, stale-data, and error states plus visual regression coverage.
+- Publish a filterable Hex player profile over the governed semantic project.
+- Present traditional batting and contact-quality metrics with links to the
+  source-controlled methodology and external Baseball Savant comparisons.
+- Expand the existing product with the implemented pitch and baserunning
+  surfaces rather than creating another metric definition layer.
 
-Exit demo: a deployed, documented feature whose displayed value traces back to source records and metric definitions.
+Exit demo established: [open the published Hex player profile](https://app.hex.tech/01a00124-662e-7369-982a-ba58e4f2a22f/app/0347rXGBaRqd4gD8KHxHRr/latest).
 
-## 6. Operations and portfolio polish
+## 6. Operations and portfolio polish — partially established
 
-- Define cloud infrastructure, schedules, permissions, secrets, and data retention as code.
-- Add structured logs, run status, cost visibility, freshness objectives, and alerts.
-- Create architecture diagrams, a public data dictionary, demo data, and a reproducible deployment guide.
-- Rehearse backfills, corrections, disaster recovery, and a clean setup from a new clone.
+- CloudFormation owns schedules, permissions, temporary Hex access, query-cost
+  controls, and data retention.
+- Monitoring scripts report acquisition, Glue, and warehouse completeness;
+  workflow alarms remain a follow-on operational layer.
+- Recruiter-facing architecture, semantic-layer, methodology, and live-product
+  links are maintained alongside the implementation.

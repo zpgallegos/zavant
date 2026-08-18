@@ -5,9 +5,10 @@ separates measurements supplied by MLB from transformations and metrics derived
 by Zavant, documents important denominator choices, and provides a concise
 methodology page for the published analytical product.
 
-[Return to the project overview](../) ·
+[Return to the project overview](../readme.md) ·
 [Review the semantic layer](../dbt/) ·
-[Inspect the data platform](data-platform.md)
+[Inspect the data platform](data-platform.md) ·
+[Open the published Hex player profile](https://app.hex.tech/01a00124-662e-7369-982a-ba58e4f2a22f/app/0347rXGBaRqd4gD8KHxHRr/latest)
 
 ## What the product shows
 
@@ -15,6 +16,12 @@ The player profile combines traditional batting results with batted-ball contact
 quality. Player and season filters apply to both semantic models, allowing the
 same selection to drive counting statistics, rate metrics, contact measurements,
 and batted-ball distributions.
+
+The source-controlled semantic layer also includes pitch, runner-movement, and
+player-game participation grains. Those support complete pitch counts,
+pitch-family and count splits, baserunning totals, and games played without
+forcing unrelated events into the plate-appearance grain. The published app's
+current primary experience remains the batting and contact-quality profile.
 
 The current portfolio includes final regular-season MLB games. Postseason,
 Spring Training, exhibition, unfinished, and cancelled games are not included in
@@ -66,6 +73,8 @@ Zavant derives the reusable analytical product from those observations:
 - qualification of MLB's broader `allPlays` stream into official plate
   appearances and at-bats;
 - deterministic player, team, game, plate-appearance, and batted-ball keys;
+- direct pitch-event qualification, pre-pitch count state, and governed
+  fastball, breaking, offspeed, and other pitch-family classifications;
 - hit, total-base, walk, strikeout, sacrifice, hard-hit, sweet-spot, and tracking
   eligibility indicators;
 - game-state and matchup dimensions;
@@ -89,11 +98,16 @@ Zavant derives the reusable analytical product from those observations:
 | Average launch angle | Sum of measured non-bunt launch angles divided by non-bunt events with a launch-angle observation. |
 | Hard-hit rate | Events hit at least 95 mph divided by events with measured exit velocity. |
 | Sweet-spot rate | Events with launch angle from 8 through 32 degrees divided by events with measured launch angle. |
+| Pitches | Count of actual pitch events, including pitches in plays that do not end in a completed plate appearance. |
+| Pitch-family rate | Pitches in a governed pitch family divided by all actual pitches in the selected population. |
+| Average release velocity | Sum of supplied release velocities divided by pitches with a release-velocity observation. |
 
 The source of truth for the complete definitions is
 [`metrics_plate_appearances.yml`](../dbt/models/semantic/plate_appearances/metrics_plate_appearances.yml)
 and
 [`metrics_batted_balls.yml`](../dbt/models/semantic/batted_balls/metrics_batted_balls.yml).
+Pitch definitions live in
+[`metrics_pitches.yml`](../dbt/models/semantic/pitches/metrics_pitches.yml).
 
 ## Why rates use aggregate components
 
@@ -138,6 +152,9 @@ The published metrics are supported by several independent checks:
   nested event grains.
 - Current-revision tests confirm that incremental facts use the game revision
   selected by Glue.
+- Pitch reconciliation verifies that the pitch fact preserves the complete
+  actual-pitch staging population rather than only pitches attached to completed
+  plate appearances.
 - Warehouse-completeness reporting compares raw games with projected datasets
   by season.
 
@@ -148,7 +165,9 @@ and traceable to retained source evidence.
 ## Current limitations
 
 - The profile does not yet calculate barrels, expected statistics, percentile
-  rankings, swing decisions, baserunning, or fielding value.
+  rankings, swing decisions, or fielding value.
+- Governed pitch and baserunning models exist, but the published profile's
+  current primary view emphasizes batting and contact-quality metrics.
 - Rare mid-plate-appearance batter or pitcher substitutions may require more
   specialized official-credit resolution than the terminal result participant.
 - Player identity comes from retained game observations; the player dimension

@@ -40,8 +40,9 @@ Production dbt relations must exist and the Hex Athena schema must be refreshed
 before a newly synchronized semantic model can infer its columns. Semantic
 changes are not published merely by refreshing the connection: the context
 workflow must also run. The per-query scan cutoff limits one query rather than
-aggregate daily spend, so any future anonymous public access requires an
-additional usage circuit breaker.
+aggregate daily spend. Published access therefore remains bounded by the Athena
+workgroup cutoff and Hex's execution and caching controls rather than being
+treated as an unlimited query endpoint.
 
 ## Alternatives considered
 

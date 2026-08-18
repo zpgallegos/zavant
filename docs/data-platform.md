@@ -5,10 +5,11 @@ evidence to explain how every analytical row entered the system. The platform
 supports daily incremental acquisition, correction reconciliation, deferred
 games, deterministic local runs, and resumable historical backfills.
 
-[Return to the project overview](../) ·
+[Return to the project overview](../readme.md) ·
 [Review the semantic layer](../dbt/) ·
 [Browse the Python source](../src/zavant/) ·
-[Browse the infrastructure](../infrastructure/)
+[Browse the infrastructure](../infrastructure/) ·
+[Open the published Hex player profile](https://app.hex.tech/01a00124-662e-7369-982a-ba58e4f2a22f/app/0347rXGBaRqd4gD8KHxHRr/latest)
 
 ## Production topology
 
@@ -177,6 +178,13 @@ Representative source:
 - [`iceberg.py`](../src/zavant/projection/iceberg.py) owns table publication.
 - [`current_views.py`](../src/zavant/projection/current_views.py) publishes the
   current-game analytical interface consumed by dbt.
+
+dbt turns those current views into correction-safe facts for plate appearances,
+batted balls, pitches, runner movements, and player-game participation, plus
+conformed player and team dimensions. The pitch fact reads the actual event
+stream directly, so pitches in plays that end without a completed plate
+appearance are retained. MetricFlow then governs additive measures and ratios
+across those grains before Hex consumes them.
 
 ## Infrastructure ownership
 

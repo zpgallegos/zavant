@@ -5,9 +5,10 @@ business grains and a source-controlled MetricFlow semantic layer. Its central
 design goal is that every published statistic remains correct when regrouped by
 player, team, season, matchup, game state, or another supported dimension.
 
-[Return to the project overview](../) ·
+[Return to the project overview](../readme.md) ·
 [Inspect the data platform](../docs/data-platform.md) ·
-[Read the Hex methodology](../docs/hex-methodology.md)
+[Read the Hex methodology](../docs/hex-methodology.md) ·
+[Open the published Hex player profile](https://app.hex.tech/01a00124-662e-7369-982a-ba58e4f2a22f/app/0347rXGBaRqd4gD8KHxHRr/latest)
 
 ## Semantic model
 
@@ -20,10 +21,12 @@ flowchart LR
     teams[dim_teams]
     pa_fact[fct_plate_appearances]
     bb_fact[fct_batted_balls]
+    pitch_fact[fct_pitches]
     rm_fact[fct_runner_movements]
     gp_fact[fct_player_game_participation]
     pa_sem[Plate-appearance semantics]
     bb_sem[Batted-ball semantics]
+    pitch_sem[Pitch semantics]
     rm_sem[Runner-movement semantics]
     gp_sem[Game-participation semantics]
     metrics[Governed MetricFlow metrics]
@@ -35,22 +38,27 @@ flowchart LR
     staging --> pa_int
     pa_int --> pa_fact
     staging --> bb_fact
+    staging --> pitch_fact
     staging --> rm_fact
     staging --> gp_fact
     players -. player entity .-> pa_sem
     players -. player entity .-> bb_sem
+    players -. batter entity .-> pitch_sem
     players -. player entity .-> rm_sem
     players -. player entity .-> gp_sem
     teams -. team entity .-> pa_sem
     teams -. team entity .-> bb_sem
+    teams -. offense-team entity .-> pitch_sem
     teams -. team entity .-> rm_sem
     teams -. team entity .-> gp_sem
     pa_fact --> pa_sem
     bb_fact --> bb_sem
+    pitch_fact --> pitch_sem
     rm_fact --> rm_sem
     gp_fact --> gp_sem
     pa_sem --> metrics
     bb_sem --> metrics
+    pitch_sem --> metrics
     rm_sem --> metrics
     gp_sem --> metrics
     metrics --> hex
@@ -58,7 +66,7 @@ flowchart LR
 
 The presentation layer consumes semantic metrics rather than rebuilding
 formulas in charts. Player and team entities make the same descriptive
-dimensions available across both fact families.
+dimensions available across the supported fact families.
 
 ## Business grains
 
@@ -68,6 +76,7 @@ dimensions available across both fact families.
 | [`int_at_bats`](models/intermediate/at_bats/int_at_bats.sql) | One official at-bat | Applies official outcome exclusions without duplicating plate-appearance logic. |
 | [`fct_plate_appearances`](models/marts/fct_plate_appearances.sql) | One `game_pk`, `at_bat_index` | Stores outcomes, participants, game state, additive indicators, and deterministic keys. |
 | [`fct_batted_balls`](models/marts/fct_batted_balls.sql) | One `game_pk`, `at_bat_index`, `event_index` | Stores contact measurements, pitch context, tracking eligibility, and governed contact classifications. |
+| [`fct_pitches`](models/marts/fct_pitches.sql) | One `game_pk`, `at_bat_index`, `event_index` | Stores every actual pitch, including pitches outside completed plate appearances, with pre-pitch count, pitch family, result, and tracking context. |
 | [`fct_runner_movements`](models/marts/fct_runner_movements.sql) | One `game_pk`, `at_bat_index`, `runner_index` | Stores runner-specific advances, runs, outs, basestealing outcomes, and optional pitch context. |
 | [`fct_player_game_participation`](models/marts/fct_player_game_participation.sql) | One `game_pk`, `player_id`, `team_id` | Preserves team-level participation while supporting deduplicated player-game counts. |
 | [`dim_players`](models/marts/dim_players.sql) | One MLB player | Resolves a Type 1 player record from the most recently observed game context. |
@@ -103,13 +112,18 @@ Representative metric contracts are:
 | Average exit velocity | `exit_velocity_sum / exit_velocity_tracked_batted_balls` | Weights regrouped averages by the number of tracked batted balls. |
 | Hard-hit rate | `hard_hits / exit_velocity_tracked_batted_balls` | Excludes events for which MLB supplied no exit velocity. |
 | Sweet-spot rate | `sweet_spots / launch_angle_tracked_batted_balls` | Excludes events for which MLB supplied no launch angle. |
+| Pitches | Count of rows in `fct_pitches` | Counts the pitch event stream directly rather than summing only pitches attached to completed plate appearances. |
+| Fastball pitch rate | `fastball_pitches / pitches` | Preserves pitch-family membership as additive components before division. |
+| Average release velocity | `release_velocity_sum / velocity_tracked_pitches` | Weights regrouped velocity by the number of pitches with a supplied measurement. |
 
 The source-controlled definitions live in
 [`metrics_plate_appearances.yml`](models/semantic/plate_appearances/metrics_plate_appearances.yml)
 and
 [`metrics_batted_balls.yml`](models/semantic/batted_balls/metrics_batted_balls.yml),
-with game participation and baserunning definitions in their neighboring
-semantic-model directories.
+and
+[`metrics_pitches.yml`](models/semantic/pitches/metrics_pitches.yml), with game
+participation and baserunning definitions in their neighboring semantic-model
+directories.
 Their measures, dimensions, entities, and default time grains live beside them
 in the corresponding `sem_*.yml` files.
 
@@ -129,6 +143,11 @@ This game-replacement boundary handles corrections that add, change, or remove
 events without requiring a full-table rebuild and without leaving obsolete
 rows behind.
 
+The documented
+[`correction_safe_incremental.sql`](macros/correction_safe_incremental.sql)
+macros centralize changed-game selection and deletion-set generation while
+leaving each model's business-grain SQL visible for review and debugging.
+
 ## Quality and reconciliation
 
 The project combines generic grain tests with domain-specific singular tests:
@@ -140,6 +159,10 @@ The project combines generic grain tests with domain-specific singular tests:
   verifies that the incremental fact contains the revision selected by Glue.
 - [`batted_ball_fact_uses_current_revision.sql`](tests/batted_ball_fact_uses_current_revision.sql)
   applies the same correction invariant to contact events.
+- [`pitch_fact_reconciles_to_staging.sql`](tests/pitch_fact_reconciles_to_staging.sql)
+  verifies that the pitch fact preserves the complete actual-pitch event stream.
+- [`pitch_fact_uses_current_revision.sql`](tests/pitch_fact_uses_current_revision.sql)
+  applies game-replacement revision safety to pitches.
 - [`batted_balls_have_pitch.sql`](tests/batted_balls_have_pitch.sql) and the
   other relationship tests protect joins across event grains.
 - Model contracts document grain columns and data types, while uniqueness and

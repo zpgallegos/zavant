@@ -184,11 +184,6 @@ semantic_models:
         agg: sum
         expr: runs_scored_during_plate_appearance
 
-      - name: pitches
-        description: Number of pitch records attached to plate appearances.
-        agg: sum
-        expr: pitch_count
-
       - name: times_on_base
         description: >-
           Number of times batters reached base via a hit, walk, or hit by

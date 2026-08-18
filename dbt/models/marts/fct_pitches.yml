@@ -1,0 +1,447 @@
+version: 2
+
+models:
+  - name: fct_pitches
+    description: >-
+      Current actual pitch events enriched with the batter, pitcher, teams,
+      matchup, containing-play result, count, and pitch-tracking measurements.
+      Its physical grain is game_pk, at_bat_index, and event_index. Unlike the
+      plate-appearance fact, it retains pitches from plays that end without a
+      completed plate appearance, such as a caught stealing for the third out.
+      Revised games are replaced as a unit so removed pitches do not survive a
+      source correction.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_pk
+              - at_bat_index
+              - event_index
+    columns:
+      # keys and grain
+      - name: pitch_key
+        description: >-
+          Deterministic key generated from game_pk, at_bat_index, and
+          event_index.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: play_key
+        description: Deterministic key of the top-level play containing the pitch.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: game_pk
+        description: MLB's stable identifier for the game.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_index
+        description: Zero-based index of the containing play in MLB's allPlays stream.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: event_index
+        description: Zero-based index of the pitch within the containing play's events.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # participants
+      - name: batter_id
+        description: MLB identifier of the batter facing the pitch.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB identifier of the pitcher who threw the pitch.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: offense_team_id
+        description: MLB identifier of the batting team.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: defense_team_id
+        description: MLB identifier of the fielding team.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      # game and matchup context
+      - name: inning
+        description: Numeric inning in which the pitch occurred.
+        data_type: integer
+
+      - name: half_inning
+        description: Inning half in which the pitch occurred.
+        data_type: varchar
+
+      - name: is_top_inning
+        description: Whether the batting team was the away team.
+        data_type: boolean
+
+      - name: bat_side_code
+        description: MLB code for the batter's batting side.
+        data_type: varchar
+
+      - name: pitch_hand_code
+        description: MLB code for the pitcher's throwing hand.
+        data_type: varchar
+
+      - name: batter_split
+        description: MLB split classification for the batter's handedness matchup.
+        data_type: varchar
+
+      - name: pitcher_split
+        description: MLB split classification for the pitcher's handedness matchup.
+        data_type: varchar
+
+      - name: men_on_base_split
+        description: MLB classification of the baserunner state for the matchup.
+        data_type: varchar
+
+      - name: pitcher_hand
+        description: Normalized pitcher throwing hand, expressed as left, right, or unknown.
+        data_type: varchar
+
+      # containing play result
+      - name: play_result
+        description: Human-readable MLB label for the containing play's terminal result.
+        data_type: varchar
+
+      - name: play_result_type
+        description: Machine-readable MLB classification of the containing play's result.
+        data_type: varchar
+
+      - name: play_result_description
+        description: Human-readable description of the containing play's terminal result.
+        data_type: varchar
+
+      # pitch sequence and result
+      - name: play_id
+        description: MLB identifier assigned to the pitch event.
+        data_type: varchar
+
+      - name: pitch_number
+        description: Sequential pitch number within the containing play.
+        data_type: integer
+
+      - name: balls_before
+        description: Ball count immediately before the pitch.
+        data_type: integer
+
+      - name: strikes_before
+        description: Strike count immediately before the pitch.
+        data_type: integer
+
+      - name: outs_before
+        description: Out count immediately before the pitch.
+        data_type: integer
+
+      - name: balls_after
+        description: Ball count after the pitch.
+        data_type: integer
+
+      - name: strikes_after
+        description: Strike count after the pitch.
+        data_type: integer
+
+      - name: outs_after
+        description: Out count after the pitch.
+        data_type: integer
+
+      - name: count_before
+        description: Pre-pitch ball-strike count formatted as balls-strikes, such as 3-2.
+        data_type: varchar
+
+      - name: count_leverage
+        description: >-
+          Conventional pre-pitch count grouping: batter_ahead for 1-0, 2-0,
+          2-1, 3-0, or 3-1; batter_behind for 0-1, 0-2, or 1-2; and even for
+          all other counts.
+        data_type: varchar
+
+      - name: is_first_pitch_count
+        description: Whether the pitch was thrown at a 0-0 count.
+        data_type: boolean
+
+      - name: is_two_strike_count
+        description: Whether the pitch was thrown with two strikes.
+        data_type: boolean
+
+      - name: is_three_ball_count
+        description: Whether the pitch was thrown with three balls.
+        data_type: boolean
+
+      - name: is_full_count
+        description: Whether the pitch was thrown at a 3-2 count.
+        data_type: boolean
+
+      - name: call_code
+        description: MLB code for the result of the pitch.
+        data_type: varchar
+
+      - name: call_description
+        description: Human-readable result of the pitch, such as Ball or Called Strike.
+        data_type: varchar
+
+      - name: pitch_description
+        description: Detailed human-readable description of the pitch result.
+        data_type: varchar
+
+      - name: pitch_type_code
+        description: MLB code for the classified pitch type.
+        data_type: varchar
+
+      - name: pitch_type_description
+        description: Human-readable classified pitch type, such as Sinker or Slider.
+        data_type: varchar
+
+      - name: pitch_type_group
+        description: >-
+          Governed pitch-family grouping of fastball, breaking, offspeed, or
+          other, based on MLB's pitch type code.
+        data_type: varchar
+
+      - name: is_ball
+        description: Whether MLB classifies the pitch as a ball.
+        data_type: boolean
+
+      - name: is_strike
+        description: Whether MLB classifies the pitch as a strike.
+        data_type: boolean
+
+      - name: is_in_play
+        description: Whether the pitch put the ball in play.
+        data_type: boolean
+
+      - name: is_out
+        description: Whether MLB marks the pitch event as recording an out.
+        data_type: boolean
+
+      - name: has_review
+        description: Whether the pitch event includes replay-review information.
+        data_type: boolean
+
+      # pitch tracking
+      - name: start_speed
+        description: Pitch velocity near release, in miles per hour.
+        data_type: double
+
+      - name: end_speed
+        description: Pitch velocity near home plate, in miles per hour.
+        data_type: double
+
+      - name: spin_rate
+        description: Pitch spin rate, in revolutions per minute.
+        data_type: double
+
+      - name: spin_direction
+        description: Direction of the pitch's spin axis, in degrees.
+        data_type: double
+
+      - name: extension
+        description: Pitcher's release extension toward home plate, in feet.
+        data_type: double
+
+      - name: plate_time
+        description: Time taken by the pitch to reach home plate, in seconds.
+        data_type: double
+
+      - name: zone
+        description: MLB's coded strike-zone location for the pitch.
+        data_type: integer
+
+      - name: strike_zone_bottom
+        description: Bottom of the batter-specific strike zone, in feet.
+        data_type: double
+
+      - name: strike_zone_top
+        description: Top of the batter-specific strike zone, in feet.
+        data_type: double
+
+      - name: strike_zone_depth
+        description: Depth used for MLB's strike-zone representation, in inches.
+        data_type: double
+
+      - name: strike_zone_width
+        description: Width used for MLB's strike-zone representation, in inches.
+        data_type: double
+
+      - name: type_confidence
+        description: MLB's confidence value for the classified pitch type.
+        data_type: double
+
+      - name: break_angle
+        description: Angle of the pitch's measured break, in degrees.
+        data_type: double
+
+      - name: break_length
+        description: Length of the pitch's measured break, in inches.
+        data_type: double
+
+      - name: break_y
+        description: Distance from home plate where MLB evaluates pitch break, in feet.
+        data_type: double
+
+      - name: break_horizontal
+        description: Horizontal induced movement reported by MLB, in inches.
+        data_type: double
+
+      - name: break_vertical
+        description: Vertical break reported by MLB, in inches.
+        data_type: double
+
+      - name: break_vertical_induced
+        description: Induced vertical movement reported by MLB, in inches.
+        data_type: double
+
+      - name: coordinate_p_x
+        description: Horizontal location where the pitch crossed home plate, in feet.
+        data_type: double
+
+      - name: coordinate_p_z
+        description: Vertical location where the pitch crossed home plate, in feet.
+        data_type: double
+
+      - name: coordinate_pfx_x
+        description: Horizontal pitch movement reported by MLB, in inches.
+        data_type: double
+
+      - name: coordinate_pfx_z
+        description: Vertical pitch movement reported by MLB, in inches.
+        data_type: double
+
+      - name: coordinate_x
+        description: Horizontal display coordinate used by MLB for pitch location.
+        data_type: double
+
+      - name: coordinate_y
+        description: Vertical display coordinate used by MLB for pitch location.
+        data_type: double
+
+      - name: coordinate_x0
+        description: Horizontal release position in MLB's tracking coordinate system.
+        data_type: double
+
+      - name: coordinate_y0
+        description: Longitudinal reference position in MLB's tracking model.
+        data_type: double
+
+      - name: coordinate_z0
+        description: Vertical release position in MLB's tracking coordinate system.
+        data_type: double
+
+      - name: coordinate_v_x0
+        description: Initial horizontal velocity in MLB's tracking coordinate system.
+        data_type: double
+
+      - name: coordinate_v_y0
+        description: Initial velocity toward home plate in MLB's tracking system.
+        data_type: double
+
+      - name: coordinate_v_z0
+        description: Initial vertical velocity in MLB's tracking coordinate system.
+        data_type: double
+
+      - name: coordinate_a_x
+        description: Horizontal acceleration in MLB's tracking coordinate system.
+        data_type: double
+
+      - name: coordinate_a_y
+        description: Acceleration toward home plate in MLB's tracking coordinate system.
+        data_type: double
+
+      - name: coordinate_a_z
+        description: Vertical acceleration in MLB's tracking coordinate system.
+        data_type: double
+
+      # additive indicators
+      - name: pitch_ind
+        description: Additive actual-pitch indicator, always one per fact row.
+        data_type: integer
+
+      - name: ball_ind
+        description: Additive indicator for pitches MLB classifies as balls.
+        data_type: integer
+
+      - name: strike_ind
+        description: Additive indicator for pitches MLB classifies as strikes.
+        data_type: integer
+
+      - name: ball_in_play_ind
+        description: Additive indicator for pitches that put the ball in play.
+        data_type: integer
+
+      - name: out_ind
+        description: Additive indicator for pitch events MLB marks as recording an out.
+        data_type: integer
+
+      - name: velocity_tracked_ind
+        description: Additive indicator for pitches with measured release velocity.
+        data_type: integer
+
+      - name: location_tracked_ind
+        description: Additive indicator for pitches with horizontal and vertical plate location.
+        data_type: integer
+
+      - name: spin_rate_tracked_ind
+        description: Additive indicator for pitches with measured spin rate.
+        data_type: integer
+
+      - name: first_pitch_count_ind
+        description: Additive indicator for pitches thrown at a 0-0 count.
+        data_type: integer
+
+      - name: two_strike_count_ind
+        description: Additive indicator for pitches thrown with two strikes.
+        data_type: integer
+
+      - name: three_ball_count_ind
+        description: Additive indicator for pitches thrown with three balls.
+        data_type: integer
+
+      - name: full_count_ind
+        description: Additive indicator for pitches thrown at a 3-2 count.
+        data_type: integer
+
+      # metadata
+      - name: source_revision_id
+        description: >-
+          Identifier of the current raw game revision used to replace all of
+          the game's pitch rows when MLB revises the game.
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: game_type
+        description: MLB code identifying the game type, such as R for regular season.
+        data_type: varchar
+
+      - name: season_phase
+        description: >-
+          Governed grouping of the MLB game type into regular_season,
+          postseason, spring_training, all_star, or other.
+        data_type: varchar
+
+      - name: official_date
+        description: Official MLB date of the game.
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: season
+        description: MLB season containing the game.
+        data_type: integer
+        data_tests:
+          - not_null

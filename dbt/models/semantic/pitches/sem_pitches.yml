@@ -1,0 +1,255 @@
+version: 2
+
+semantic_models:
+  - name: pitches
+    description: >-
+      One current actual MLB pitch with batter, pitcher, teams, matchup,
+      pre-pitch count, pitch-family classification, result, and tracking
+      measurements. The player and team entities represent the batter and
+      batting team, respectively.
+    model: ref('fct_pitches')
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.fct_pitches
+    defaults:
+      agg_time_dimension: official_date
+
+    entities:
+      - name: pitch
+        type: primary
+        expr: pitch_key
+
+      - name: player
+        type: foreign
+        expr: batter_id
+
+      - name: team
+        type: foreign
+        expr: offense_team_id
+
+    dimensions:
+      - name: official_date
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: season
+        type: categorical
+
+      - name: game_pk
+        type: categorical
+
+      - name: batter_id
+        type: categorical
+
+      - name: pitcher_id
+        type: categorical
+
+      - name: offense_team_id
+        type: categorical
+
+      - name: defense_team_id
+        type: categorical
+
+      - name: inning
+        type: categorical
+
+      - name: half_inning
+        type: categorical
+
+      - name: is_top_inning
+        type: categorical
+
+      - name: bat_side_code
+        type: categorical
+
+      - name: pitch_hand_code
+        type: categorical
+
+      - name: pitcher_hand
+        type: categorical
+
+      - name: batter_split
+        type: categorical
+
+      - name: pitcher_split
+        type: categorical
+
+      - name: men_on_base_split
+        type: categorical
+
+      - name: play_result_type
+        type: categorical
+
+      - name: pitch_number
+        type: categorical
+
+      - name: balls_before
+        type: categorical
+
+      - name: strikes_before
+        type: categorical
+
+      - name: outs_before
+        type: categorical
+
+      - name: count_before
+        type: categorical
+
+      - name: count_leverage
+        type: categorical
+
+      - name: is_first_pitch_count
+        type: categorical
+
+      - name: is_two_strike_count
+        type: categorical
+
+      - name: is_three_ball_count
+        type: categorical
+
+      - name: is_full_count
+        type: categorical
+
+      - name: call_code
+        type: categorical
+
+      - name: call_description
+        type: categorical
+
+      - name: pitch_type_code
+        type: categorical
+
+      - name: pitch_type_description
+        type: categorical
+
+      - name: pitch_type_group
+        type: categorical
+
+      - name: is_ball
+        type: categorical
+
+      - name: is_strike
+        type: categorical
+
+      - name: is_in_play
+        type: categorical
+
+      - name: is_out
+        type: categorical
+
+      - name: zone
+        type: categorical
+
+      - name: game_type
+        type: categorical
+
+      - name: season_phase
+        type: categorical
+
+    measures:
+      - name: distinct_pitch_games
+        description: Number of distinct games containing at least one actual pitch.
+        agg: count_distinct
+        expr: game_pk
+
+      - name: pitches
+        description: Number of actual pitches.
+        agg: count
+        expr: pitch_key
+
+      - name: balls
+        description: Number of pitches MLB classifies as balls.
+        agg: sum
+        expr: ball_ind
+
+      - name: strikes
+        description: Number of pitches MLB classifies as strikes.
+        agg: sum
+        expr: strike_ind
+
+      - name: balls_in_play
+        description: Number of pitches that put the ball in play.
+        agg: sum
+        expr: ball_in_play_ind
+
+      - name: outs_on_pitches
+        description: Number of pitch events MLB marks as recording an out.
+        agg: sum
+        expr: out_ind
+
+      - name: fastball_pitches
+        description: Number of pitches in the governed fastball family.
+        agg: sum
+        expr: if(pitch_type_group = 'fastball', 1, 0)
+
+      - name: breaking_pitches
+        description: Number of pitches in the governed breaking-ball family.
+        agg: sum
+        expr: if(pitch_type_group = 'breaking', 1, 0)
+
+      - name: offspeed_pitches
+        description: Number of pitches in the governed offspeed family.
+        agg: sum
+        expr: if(pitch_type_group = 'offspeed', 1, 0)
+
+      - name: other_pitches
+        description: Number of pitches without a governed fastball, breaking, or offspeed classification.
+        agg: sum
+        expr: if(pitch_type_group = 'other', 1, 0)
+
+      - name: first_pitch_count_pitches
+        description: Number of pitches thrown at a 0-0 count.
+        agg: sum
+        expr: first_pitch_count_ind
+
+      - name: two_strike_count_pitches
+        description: Number of pitches thrown with two strikes.
+        agg: sum
+        expr: two_strike_count_ind
+
+      - name: three_ball_count_pitches
+        description: Number of pitches thrown with three balls.
+        agg: sum
+        expr: three_ball_count_ind
+
+      - name: full_count_pitches
+        description: Number of pitches thrown at a 3-2 count.
+        agg: sum
+        expr: full_count_ind
+
+      - name: velocity_tracked_pitches
+        description: Number of pitches with measured release velocity.
+        agg: sum
+        expr: velocity_tracked_ind
+
+      - name: release_velocity_sum
+        description: Sum of measured release velocities, in miles per hour.
+        agg: sum
+        expr: start_speed
+
+      - name: maximum_release_velocity
+        description: Highest measured release velocity, in miles per hour.
+        agg: max
+        expr: start_speed
+
+      - name: location_tracked_pitches
+        description: Number of pitches with horizontal and vertical plate location.
+        agg: sum
+        expr: location_tracked_ind
+
+      - name: spin_rate_tracked_pitches
+        description: Number of pitches with measured spin rate.
+        agg: sum
+        expr: spin_rate_tracked_ind
+
+      - name: spin_rate_sum
+        description: Sum of measured pitch spin rates, in revolutions per minute.
+        agg: sum
+        expr: spin_rate
+
+      - name: maximum_spin_rate
+        description: Highest measured pitch spin rate, in revolutions per minute.
+        agg: max
+        expr: spin_rate

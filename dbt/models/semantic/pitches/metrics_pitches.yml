@@ -1,0 +1,213 @@
+version: 2
+
+metrics:
+  - name: distinct_pitch_games
+    label: Distinct Pitch Games
+    description: Number of distinct games containing at least one actual pitch.
+    type: simple
+    type_params:
+      measure: distinct_pitch_games
+
+  - name: pitches
+    label: Pitches
+    description: Number of actual pitches, including pitches outside completed plate appearances.
+    type: simple
+    type_params:
+      measure: pitches
+
+  - name: balls
+    label: Balls
+    description: Number of pitches MLB classifies as balls.
+    type: simple
+    type_params:
+      measure: balls
+
+  - name: strikes
+    label: Strikes
+    description: Number of pitches MLB classifies as strikes.
+    type: simple
+    type_params:
+      measure: strikes
+
+  - name: balls_in_play
+    label: Balls in Play
+    description: Number of pitches that put the ball in play.
+    type: simple
+    type_params:
+      measure: balls_in_play
+
+  - name: outs_on_pitches
+    label: Outs on Pitches
+    description: Number of pitch events MLB marks as recording an out.
+    type: simple
+    type_params:
+      measure: outs_on_pitches
+
+  - name: fastball_pitches
+    label: Fastball Pitches
+    description: Number of pitches in the governed fastball family.
+    type: simple
+    type_params:
+      measure: fastball_pitches
+
+  - name: breaking_pitches
+    label: Breaking Pitches
+    description: Number of pitches in the governed breaking-ball family.
+    type: simple
+    type_params:
+      measure: breaking_pitches
+
+  - name: offspeed_pitches
+    label: Offspeed Pitches
+    description: Number of pitches in the governed offspeed family.
+    type: simple
+    type_params:
+      measure: offspeed_pitches
+
+  - name: other_pitches
+    label: Other Pitches
+    description: Number of pitches outside the three governed pitch families.
+    type: simple
+    type_params:
+      measure: other_pitches
+
+  - name: fastball_pitch_rate
+    label: Fastball Pitch Rate
+    description: Share of actual pitches classified in the fastball family.
+    type: ratio
+    type_params:
+      numerator: fastball_pitches
+      denominator: pitches
+
+  - name: breaking_pitch_rate
+    label: Breaking Pitch Rate
+    description: Share of actual pitches classified in the breaking-ball family.
+    type: ratio
+    type_params:
+      numerator: breaking_pitches
+      denominator: pitches
+
+  - name: offspeed_pitch_rate
+    label: Offspeed Pitch Rate
+    description: Share of actual pitches classified in the offspeed family.
+    type: ratio
+    type_params:
+      numerator: offspeed_pitches
+      denominator: pitches
+
+  - name: first_pitch_count_pitches
+    label: Pitches at 0-0
+    description: Number of pitches thrown at a 0-0 count.
+    type: simple
+    type_params:
+      measure: first_pitch_count_pitches
+
+  - name: two_strike_count_pitches
+    label: Two-Strike Pitches
+    description: Number of pitches thrown with two strikes.
+    type: simple
+    type_params:
+      measure: two_strike_count_pitches
+
+  - name: three_ball_count_pitches
+    label: Three-Ball Pitches
+    description: Number of pitches thrown with three balls.
+    type: simple
+    type_params:
+      measure: three_ball_count_pitches
+
+  - name: full_count_pitches
+    label: Full-Count Pitches
+    description: Number of pitches thrown at a 3-2 count.
+    type: simple
+    type_params:
+      measure: full_count_pitches
+
+  - name: velocity_tracked_pitches
+    label: Velocity-Tracked Pitches
+    description: Number of pitches with measured release velocity.
+    type: simple
+    type_params:
+      measure: velocity_tracked_pitches
+
+  - name: release_velocity_sum
+    label: Release Velocity Sum
+    description: Sum of measured release velocities used to calculate the weighted average.
+    type: simple
+    type_params:
+      measure: release_velocity_sum
+
+  - name: average_release_velocity
+    label: Average Release Velocity
+    description: Average measured pitch velocity near release, in miles per hour.
+    type: ratio
+    type_params:
+      numerator: release_velocity_sum
+      denominator: velocity_tracked_pitches
+
+  - name: maximum_release_velocity
+    label: Maximum Release Velocity
+    description: Highest measured pitch velocity near release, in miles per hour.
+    type: simple
+    type_params:
+      measure: maximum_release_velocity
+
+  - name: velocity_tracking_rate
+    label: Velocity Tracking Rate
+    description: Share of actual pitches with measured release velocity.
+    type: ratio
+    type_params:
+      numerator: velocity_tracked_pitches
+      denominator: pitches
+
+  - name: location_tracked_pitches
+    label: Location-Tracked Pitches
+    description: Number of pitches with horizontal and vertical plate location.
+    type: simple
+    type_params:
+      measure: location_tracked_pitches
+
+  - name: location_tracking_rate
+    label: Location Tracking Rate
+    description: Share of actual pitches with horizontal and vertical plate location.
+    type: ratio
+    type_params:
+      numerator: location_tracked_pitches
+      denominator: pitches
+
+  - name: spin_rate_tracked_pitches
+    label: Spin-Rate-Tracked Pitches
+    description: Number of pitches with measured spin rate.
+    type: simple
+    type_params:
+      measure: spin_rate_tracked_pitches
+
+  - name: spin_rate_sum
+    label: Spin Rate Sum
+    description: Sum of measured spin rates used to calculate the weighted average.
+    type: simple
+    type_params:
+      measure: spin_rate_sum
+
+  - name: average_spin_rate
+    label: Average Spin Rate
+    description: Average measured pitch spin rate, in revolutions per minute.
+    type: ratio
+    type_params:
+      numerator: spin_rate_sum
+      denominator: spin_rate_tracked_pitches
+
+  - name: maximum_spin_rate
+    label: Maximum Spin Rate
+    description: Highest measured pitch spin rate, in revolutions per minute.
+    type: simple
+    type_params:
+      measure: maximum_spin_rate
+
+  - name: spin_rate_tracking_rate
+    label: Spin Rate Tracking Rate
+    description: Share of actual pitches with measured spin rate.
+    type: ratio
+    type_params:
+      numerator: spin_rate_tracked_pitches
+      denominator: pitches

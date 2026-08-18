@@ -136,13 +136,6 @@ metrics:
     type_params:
       measure: runs_scored_during_plate_appearances
 
-  - name: pitches
-    label: Pitches
-    description: Number of pitch records attached to plate appearances.
-    type: simple
-    type_params:
-      measure: pitches
-
   - name: times_on_base
     label: Times on Base
     description: >-

@@ -235,3 +235,30 @@ metrics:
     type_params:
       numerator: popups
       denominator: classified_non_bunt_batted_balls
+
+  - name: barrels
+    label: Barrels
+    description: >-
+      Number of batted balls whose measured exit-velocity and launch-angle
+      combination falls inside MLB's Statcast barrel zone.
+    type: simple
+    type_params:
+      measure: barrels
+
+  - name: barrel_rate
+    label: Barrel Rate
+    description: Barrels divided by all batted-ball events.
+    type: ratio
+    type_params:
+      numerator: barrels
+      denominator: batted_ball_events
+
+  - name: barrels_per_plate_appearance
+    label: Barrels per Plate Appearance
+    description: >-
+      Barrels divided by completed plate appearances, with each component
+      aggregated independently at the requested common query grain.
+    type: ratio
+    type_params:
+      numerator: barrels
+      denominator: plate_appearances

@@ -18,6 +18,7 @@ flowchart LR
     staging[25 documented staging models]
     pa_int[Plate-appearance and at-bat grains]
     players[dim_players]
+    player_seasons[dim_player_seasons]
     teams[dim_teams]
     pa_fact[fct_plate_appearances]
     bb_fact[fct_batted_balls]
@@ -29,6 +30,7 @@ flowchart LR
     pitch_sem[Pitch semantics]
     rm_sem[Runner-movement semantics]
     gp_sem[Game-participation semantics]
+    player_season_sem[Player-season semantics]
     metrics[Governed MetricFlow metrics]
     hex[Hex player profile]
 
@@ -41,11 +43,19 @@ flowchart LR
     staging --> pitch_fact
     staging --> rm_fact
     staging --> gp_fact
+    gp_fact --> player_seasons
+    players --> player_seasons
     players -. player entity .-> pa_sem
     players -. player entity .-> bb_sem
     players -. batter entity .-> pitch_sem
     players -. player entity .-> rm_sem
     players -. player entity .-> gp_sem
+    player_seasons --> player_season_sem
+    player_season_sem -. player-season entity .-> pa_sem
+    player_season_sem -. player-season entity .-> bb_sem
+    player_season_sem -. batter-season entity .-> pitch_sem
+    player_season_sem -. runner-season entity .-> rm_sem
+    player_season_sem -. player-season entity .-> gp_sem
     teams -. team entity .-> pa_sem
     teams -. team entity .-> bb_sem
     teams -. offense-team entity .-> pitch_sem
@@ -65,8 +75,10 @@ flowchart LR
 ```
 
 The presentation layer consumes semantic metrics rather than rebuilding
-formulas in charts. Player and team entities make the same descriptive
-dimensions available across the supported fact families.
+formulas in charts. Player, player-season, and team entities make the same
+descriptive dimensions available across the supported fact families. The
+player-season entity exposes baseball age using the June 30 season-age
+convention without copying the calculation into each fact.
 
 ## Business grains
 
@@ -80,6 +92,7 @@ dimensions available across the supported fact families.
 | [`fct_runner_movements`](models/marts/fct_runner_movements.sql) | One `game_pk`, `at_bat_index`, `runner_index` | Stores runner-specific advances, runs, outs, basestealing outcomes, and optional pitch context. |
 | [`fct_player_game_participation`](models/marts/fct_player_game_participation.sql) | One `game_pk`, `player_id`, `team_id` | Preserves team-level participation while supporting deduplicated player-game counts. |
 | [`dim_players`](models/marts/dim_players.sql) | One MLB player | Resolves a Type 1 player record from the most recently observed game context. |
+| [`dim_player_seasons`](models/marts/dim_player_seasons.sql) | One `player_id`, `season` | Identifies seasons with observed game participation and calculates baseball age on June 30. |
 | [`dim_teams`](models/marts/dim_teams.sql) | One MLB team | Resolves current team attributes from the latest unambiguous game observation. |
 
 The fact grains use stable MLB identifiers plus source sequence indexes. Hash

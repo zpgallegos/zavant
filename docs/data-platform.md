@@ -181,10 +181,12 @@ Representative source:
 
 dbt turns those current views into correction-safe facts for plate appearances,
 batted balls, pitches, runner movements, and player-game participation, plus
-conformed player and team dimensions. The pitch fact reads the actual event
-stream directly, so pitches in plays that end without a completed plate
-appearance are retained. MetricFlow then governs additive measures and ratios
-across those grains before Hex consumes them.
+conformed player, player-season, and team dimensions. The player-season
+dimension derives baseball age on June 30 from a player's birth date and actual
+season participation. The pitch fact reads the actual event stream directly,
+so pitches in plays that end without a completed plate appearance are retained.
+MetricFlow then governs additive measures and ratios across those grains before
+Hex consumes them.
 
 ## Infrastructure ownership
 

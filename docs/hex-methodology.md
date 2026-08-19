@@ -75,6 +75,8 @@ Zavant derives the reusable analytical product from those observations:
 - deterministic player, team, game, plate-appearance, and batted-ball keys;
 - direct pitch-event qualification, pre-pitch count state, and governed
   fastball, breaking, offspeed, and other pitch-family classifications;
+- player-season membership from actual game participation and baseball age as
+  of June 30 of the season year;
 - hit, total-base, walk, strikeout, sacrifice, hard-hit, sweet-spot, and tracking
   eligibility indicators;
 - game-state and matchup dimensions;

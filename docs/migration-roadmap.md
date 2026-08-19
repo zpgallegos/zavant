@@ -69,7 +69,8 @@ a correction and observe one revision reconcile safely.
 
 - Document one current-state staging view for each analytical dataset.
 - Build correction-safe plate-appearance, batted-ball, pitch, runner-movement,
-  and player-game participation facts plus conformed player and team dimensions.
+  and player-game participation facts plus conformed player, player-season, and
+  team dimensions.
 - Centralize the repeated changed-game and tombstone invariants in documented
   dbt macros.
 - Enforce fact grains, current revisions, source reconciliation, relationships,

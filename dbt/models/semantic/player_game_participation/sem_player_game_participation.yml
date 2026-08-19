@@ -22,6 +22,11 @@ semantic_models:
         type: foreign
         expr: player_id
 
+      - name: player_season
+        type: foreign
+        expr: >-
+          concat(cast(player_id as varchar), ':', cast(season as varchar))
+
       - name: team
         type: foreign
         expr: team_id

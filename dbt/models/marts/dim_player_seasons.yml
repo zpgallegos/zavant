@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: dim_player_seasons
+    description: >-
+      One row per MLB player and regular season in which the player appeared
+      in at least one retained game. The dimension provides season-specific
+      context that is not stable at the player grain, including the player's
+      baseball age on June 30 of the season year.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - player_id
+              - season
+    columns:
+      # grain
+      - name: player_season_key
+        description: Deterministic key generated from player_id and season.
+        data_type: varchar
+        data_tests:
+          - unique
+
+      - name: player_id
+        description: MLB's stable identifier for the player.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: season
+        description: MLB season in which the player appeared.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      # season attributes
+      - name: birth_date
+        description: >-
+          Player birth date used to calculate season_age, sourced from the
+          current Type 1 player profile.
+        data_type: date
+
+      - name: first_game_official_date
+        description: >-
+          Earliest official date of a retained game in which the player
+          appeared during the season.
+        data_type: date
+
+      - name: last_game_official_date
+        description: >-
+          Latest official date of a retained game in which the player appeared
+          during the season.
+        data_type: date
+
+      - name: season_age
+        description: >-
+          Player's baseball age for the season, calculated as age on June 30
+          of the season year. Null when MLB did not supply a birth date.
+        data_type: integer
+
+      - name: season_age_cutoff_date
+        description: June 30 date against which season_age is calculated.
+        data_type: date

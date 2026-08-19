@@ -1,0 +1,52 @@
+version: 2
+
+semantic_models:
+  - name: player_seasons
+    description: >-
+      One player-season observed in retained regular-season games, providing
+      baseball age and the first and last represented game dates for that
+      season.
+    model: ref("dim_player_seasons")
+    config:
+      meta:
+        hex:
+          table: AwsDataCatalog.zavant_dbt_prod.dim_player_seasons
+
+    entities:
+      - name: player_season
+        type: primary
+        expr: >-
+          concat(cast(player_id as varchar), ':', cast(season as varchar))
+
+      - name: player
+        type: foreign
+        expr: player_id
+
+    dimensions:
+      - name: player_id
+        type: categorical
+
+      - name: season
+        type: categorical
+
+      - name: season_age
+        description: Player's baseball age on June 30 of the season year.
+        type: categorical
+
+      - name: season_age_cutoff_date
+        description: June 30 date against which season_age is calculated.
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: first_game_official_date
+        description: Earliest represented game date for the player and season.
+        type: time
+        type_params:
+          time_granularity: day
+
+      - name: last_game_official_date
+        description: Latest represented game date for the player and season.
+        type: time
+        type_params:
+          time_granularity: day

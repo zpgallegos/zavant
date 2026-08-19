@@ -72,6 +72,13 @@ classified_batted_balls as (
             'home_run'
         ) as is_hit,
         b.event_type = 'home_run' as is_home_run,
+        coalesce(
+            a.launch_speed >= 98.0
+            and a.launch_angle between 8.0 and 50.0
+            and a.launch_speed + a.launch_angle >= 124.0
+            and a.launch_speed * 1.5 - a.launch_angle >= 117.0,
+            false
+        ) as is_barrel,
         coalesce(a.launch_speed >= 95.0, false) as is_hard_hit,
         coalesce(a.launch_angle between 8.0 and 32.0, false) as is_sweet_spot,
         a.trajectory in (
@@ -149,12 +156,14 @@ final as (
         has_exit_velocity,
         has_launch_angle,
         has_statcast_tracking,
+        is_barrel,
         is_hard_hit,
         is_sweet_spot,
         is_bunt,
 
         -- additive indicators and measures
         1 as batted_ball_ind,
+        if(is_barrel, 1, 0) as barrel_ind,
         if(has_exit_velocity, 1, 0) as exit_velocity_tracked_ind,
         if(has_launch_angle, 1, 0) as launch_angle_tracked_ind,
         if(has_statcast_tracking, 1, 0) as statcast_tracked_batted_ball_ind,

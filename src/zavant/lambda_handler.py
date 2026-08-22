@@ -6,9 +6,9 @@ from importlib import import_module
 import os
 from typing import Any, Dict, Mapping, Optional, cast
 
-from zavant._time import Clock, as_utc, utc_now
+from zavant._time import as_utc
 from zavant.acquisition.daily import DailyAcquisitionCoordinator
-from zavant.application import MlbDailyApi, build_daily_coordinator
+from zavant.application import build_daily_coordinator
 from zavant.clients.mlb_stats_api import (
     DEFAULT_BASE_URL,
     DEFAULT_TIMEOUT_SECONDS,
@@ -165,39 +165,21 @@ class LambdaApplication:
         return payload
 
 
-def build_lambda_application(
-    environ: Optional[Mapping[str, str]] = None,
-    s3_client: Optional[S3Client] = None,
-    api: Optional[MlbDailyApi] = None,
-    clock: Clock = utc_now,
-) -> LambdaApplication:
-    """Compose the production daily application from external adapters.
-
-    Args:
-        environ: Environment mapping used for configuration.
-        s3_client: Injectable S3 client; defaults to a Boto3 client.
-        api: Injectable MLB API; defaults to the HTTP client.
-        clock: Shared UTC time source.
-
-    Returns:
-        Fully composed Lambda application.
-    """
-
-    configuration = LambdaConfiguration.from_environment(environ)
-    resolved_s3_client = s3_client or _boto3_s3_client()
-    resolved_api = api or MlbStatsApiClient(
+def build_lambda_application() -> LambdaApplication:
+    """Compose the production daily application from managed services."""
+    configuration = LambdaConfiguration.from_environment()
+    api = MlbStatsApiClient(
         base_url=configuration.mlb_api_base_url,
         timeout_seconds=configuration.timeout_seconds,
         retry_policy=RetryPolicy(max_attempts=configuration.max_attempts),
     )
     storage = s3_acquisition_storage(
-        client=resolved_s3_client,
+        client=_boto3_s3_client(),
         bucket=configuration.bucket,
         prefix=configuration.prefix,
-        clock=clock,
     )
     return LambdaApplication(
-        coordinator=build_daily_coordinator(resolved_api, storage, clock),
+        coordinator=build_daily_coordinator(api, storage),
         storage=storage,
         configuration=configuration,
     )

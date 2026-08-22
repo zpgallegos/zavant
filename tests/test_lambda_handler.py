@@ -4,10 +4,12 @@ from typing import List
 import unittest
 
 from zavant.clients.mlb_stats_api import RetrievedResource
+from zavant.application import build_daily_coordinator
 from zavant.lambda_handler import (
+    LambdaApplication,
     LambdaConfiguration,
-    build_lambda_application,
 )
+from zavant.storage.bundles import s3_acquisition_storage
 from tests.fake_s3 import FakeS3Client
 
 
@@ -82,16 +84,28 @@ class LambdaApplicationTests(unittest.TestCase):
     def test_runs_complete_daily_workflow_and_returns_s3_manifest(self) -> None:
         client = FakeS3Client()
         api = EmptyDailyApi()
-        application = build_lambda_application(
-            environ={
+        configuration = LambdaConfiguration.from_environment(
+            {
                 "ZAVANT_S3_BUCKET": "example-bucket",
                 "ZAVANT_S3_PREFIX": "portfolio/lake",
                 "ZAVANT_INITIAL_SCHEDULE_DATE": "2026-08-03",
                 "ZAVANT_INITIAL_CORRECTION_WATERMARK": "2026-08-08T00:00:00Z",
-            },
-            s3_client=client,
-            api=api,
+            }
+        )
+        storage = s3_acquisition_storage(
+            client=client,
+            bucket=configuration.bucket,
+            prefix=configuration.prefix,
             clock=lambda: STARTED_AT,
+        )
+        application = LambdaApplication(
+            coordinator=build_daily_coordinator(
+                api,
+                storage,
+                clock=lambda: STARTED_AT,
+            ),
+            storage=storage,
+            configuration=configuration,
         )
 
         result = application.run({"through_date": "2026-08-03"})

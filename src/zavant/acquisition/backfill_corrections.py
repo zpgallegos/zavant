@@ -2,27 +2,16 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Protocol, Set, Tuple
+from typing import List, Set, Tuple
 from uuid import UUID
 
 from zavant.acquisition.correction_pagination import (
     CorrectionPaginationGuard,
 )
-from zavant.clients.mlb_stats_api import RetrievedResource
+from zavant.acquisition.protocols import GameChangesApi
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.protocols import SeasonBackfillStore
-
-
-class MlbBackfillCorrectionsApi(Protocol):
-    def get_game_changes(
-        self,
-        updated_since: datetime,
-        sport_id: int = 1,
-        limit: int = 1000,
-        offset: int = 0,
-    ) -> RetrievedResource:
-        ...
 
 
 @dataclass(frozen=True)
@@ -36,7 +25,7 @@ class SeasonCorrectionDiscoverer:
 
     def __init__(
         self,
-        api: MlbBackfillCorrectionsApi,
+        api: GameChangesApi,
         store: SeasonBackfillStore,
     ) -> None:
         self.api = api

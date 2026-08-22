@@ -329,6 +329,32 @@ class BoundedGameAcquirerTests(unittest.TestCase):
             list(self.data_dir.rglob("game_pk=999999")),
         )
 
+    def test_rejects_live_feed_for_a_different_season(self) -> None:
+        api = FakeMlbGameAcquisitionApi(
+            schedule_raw=SAMPLE_SCHEDULE.read_bytes(),
+            game_outcomes={
+                823514: [
+                    retrieved(
+                        raw_game(823514, date(2025, 8, 8)),
+                        "https://statsapi.example.test/game/823514",
+                    )
+                ],
+                824726: [
+                    retrieved(
+                        raw_game(824726),
+                        "https://statsapi.example.test/game/824726",
+                    )
+                ],
+            },
+        )
+
+        result = self.acquirer(api).acquire(START_DATE, END_DATE)
+
+        self.assertEqual(result.summary["failed"], 1)
+        manifest = json.loads(Path(result.manifest_path.uri).read_text())
+        self.assertEqual(manifest["games"][0]["error_type"], "GameIdentityError")
+        self.assertFalse(list(self.data_dir.rglob("season=2025")))
+
     def test_rejects_resume_arguments_that_conflict_with_stored_request(self) -> None:
         api = FakeMlbGameAcquisitionApi(
             schedule_raw=SAMPLE_SCHEDULE.read_bytes(),

@@ -1,24 +1,23 @@
 """Resumable historical-season acquisition and reconciliation."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import logging
 from typing import Any, Callable, Dict, List, Optional, Protocol, Set, Tuple
 from uuid import UUID, uuid4
 
-from zavant.acquisition.backfill_corrections import (
-    MlbBackfillCorrectionsApi,
-    SeasonCorrectionDiscoverer,
-)
+from zavant._time import Clock, as_utc, utc_now
+from zavant.acquisition.backfill_corrections import SeasonCorrectionDiscoverer
 from zavant.acquisition.backfill_modes import SeasonBackfillMode
-from zavant.acquisition.backfill_month import (
-    BackfillMonthProcessor,
-    MlbBackfillGamesApi,
-)
+from zavant.acquisition.backfill_month import BackfillMonthProcessor
 from zavant.acquisition.game_changes import GameChangesPollingError
 from zavant.acquisition.game_eligibility import (
     FinalRegularSeasonGamePolicy,
     GameEligibilityPolicy,
+)
+from zavant.acquisition.protocols import (
+    GameChangesApi,
+    ScheduleAndLiveGameApi,
 )
 from zavant.clients.mlb_stats_api import MlbStatsApiError
 from zavant.contracts.raw_game import RawGameContractError
@@ -28,18 +27,13 @@ from zavant.storage.models import SeasonBackfillCheckpoint
 from zavant.storage.protocols import RawGameStore, ScheduleStore, SeasonBackfillStore
 
 
-Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
 LOGGER = logging.getLogger(__name__)
 
 
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 class MlbSeasonBackfillApi(
-    MlbBackfillGamesApi,
-    MlbBackfillCorrectionsApi,
+    ScheduleAndLiveGameApi,
+    GameChangesApi,
     Protocol,
 ):
     """Complete MLB client surface needed by historical reconciliation."""
@@ -129,7 +123,7 @@ class SeasonBackfillCoordinator:
             correction_max_pages,
         )
         resolved_run_id = run_id or self.run_id_factory()
-        resolved_started_at = self._utc(started_at or self.clock(), "started_at")
+        resolved_started_at = as_utc(started_at or self.clock(), "started_at")
         future_seasons = tuple(
             season for season in normalized_seasons if season > resolved_started_at.year
         )
@@ -398,9 +392,3 @@ class SeasonBackfillCoordinator:
         if type(correction_max_pages) is not int or correction_max_pages <= 0:
             raise ValueError("correction_max_pages must be a positive integer")
         return tuple(sorted(set(seasons)))
-
-    @staticmethod
-    def _utc(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)

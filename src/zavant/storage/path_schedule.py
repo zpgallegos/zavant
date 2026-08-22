@@ -1,11 +1,12 @@
 """Path-backed storage for schedule snapshots and run manifests."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 from uuid import UUID
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
 from zavant.storage._path_io import (
     atomic_write,
@@ -15,12 +16,12 @@ from zavant.storage._path_io import (
     read_json_object,
     sha256_bytes,
 )
+from zavant.storage._processing_outcomes import apply_processing_outcome
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import ScheduleConflictError
 from zavant.storage.models import LandedSchedule, LoadedScheduleRun
 
 
-Clock = Callable[[], datetime]
 SCHEDULE_GAME_STATUSES = (
     "pending",
     "deferred",
@@ -29,10 +30,6 @@ SCHEDULE_GAME_STATUSES = (
     "failed",
 )
 SCHEDULE_GAME_OUTCOMES = SCHEDULE_GAME_STATUSES[1:]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathScheduleStore:
@@ -54,13 +51,13 @@ class PathScheduleStore:
         raw: bytes,
         run_id: UUID,
     ) -> LandedSchedule:
-        request_date = request.requested_at.astimezone(timezone.utc).date().isoformat()
+        request_date = as_utc(request.requested_at, "requested_at").date().isoformat()
         run_directory = self._run_directory(request.requested_at, run_id)
         response_path = run_directory / "response.json"
         metadata_path = run_directory / "metadata.json"
         manifest_path = run_directory / "manifest.json"
         response_checksum = sha256_bytes(raw)
-        observed_at = self.clock().astimezone(timezone.utc)
+        observed_at = as_utc(self.clock(), "clock result")
         normalized_request = request.as_dict()
 
         created = not response_path.exists()
@@ -116,9 +113,7 @@ class PathScheduleStore:
         requested_at: datetime,
         run_id: UUID,
     ) -> Optional[LoadedScheduleRun]:
-        if requested_at.tzinfo is None or requested_at.utcoffset() is None:
-            raise ValueError("requested_at must include a UTC offset")
-        request_date = requested_at.astimezone(timezone.utc).date().isoformat()
+        request_date = as_utc(requested_at, "requested_at").date().isoformat()
         run_directory = self._run_directory(requested_at, run_id)
         response_path = run_directory / "response.json"
         metadata_path = run_directory / "metadata.json"
@@ -194,33 +189,13 @@ class PathScheduleStore:
             )
 
         game = matching_games[0]
-        recorded_at = self.clock().astimezone(timezone.utc).isoformat()
-        outcome = dict(details or {})
-        outcome["recorded_at"] = recorded_at
-        outcome["status"] = status
+        recorded_at = as_utc(self.clock(), "clock result").isoformat()
         attempts = game.get("processing_attempts", [])
         if not isinstance(attempts, list):
             raise ScheduleConflictError(
                 f"schedule manifest game {game_pk} has invalid attempts"
             )
-        attempts.append(outcome)
-
-        outcome_fields = (
-            "error_message",
-            "error_type",
-            "http_attempts",
-            "reason",
-            "revision_created",
-            "revision_id",
-            "source_uri",
-        )
-        for field in outcome_fields:
-            game.pop(field, None)
-        for field in outcome_fields:
-            if field in outcome:
-                game[field] = outcome[field]
-        game["processing_attempts"] = attempts
-        game["processing_status"] = status
+        apply_processing_outcome(game, status, details, recorded_at)
         manifest["status"] = "open"
         manifest["updated_at"] = recorded_at
         manifest.pop("completed_at", None)
@@ -243,7 +218,7 @@ class PathScheduleStore:
             run_status = "complete"
 
         if manifest.get("status") != run_status or manifest.get("summary") != summary:
-            finalized_at = self.clock().astimezone(timezone.utc).isoformat()
+            finalized_at = as_utc(self.clock(), "clock result").isoformat()
             manifest["status"] = run_status
             manifest["summary"] = summary
             manifest["updated_at"] = finalized_at
@@ -358,7 +333,7 @@ class PathScheduleStore:
         return tuple(games)
 
     def _run_directory(self, requested_at: datetime, run_id: UUID) -> Path:
-        request_date = requested_at.astimezone(timezone.utc).date().isoformat()
+        request_date = as_utc(requested_at, "requested_at").date().isoformat()
         return (
             self.storage_root
             / "raw"

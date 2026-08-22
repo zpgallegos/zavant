@@ -49,8 +49,16 @@ class DeferredGameProcessingTests(unittest.TestCase):
             detailed_state="In Progress",
         )
 
+    def defer_game(self) -> None:
+        self.store.defer(
+            game_pk=self.game.game_pk,
+            season=self.game.season,
+            official_date=self.game.official_date,
+            live_feed_link=self.game.live_feed_link,
+        )
+
     def test_state_survives_store_recomposition(self) -> None:
-        self.store.defer(self.game)
+        self.defer_game()
 
         pending = PathDeferredGameStore(self.data_dir).pending()
 
@@ -59,7 +67,7 @@ class DeferredGameProcessingTests(unittest.TestCase):
         self.assertEqual(pending[0].official_date, self.game.official_date)
 
     def test_non_final_game_remains_until_a_later_final_response(self) -> None:
-        self.store.defer(self.game)
+        self.defer_game()
         api = FakeMlbGameAcquisitionApi(
             schedule_raw=b"{}",
             game_outcomes={
@@ -90,7 +98,7 @@ class DeferredGameProcessingTests(unittest.TestCase):
         )
 
     def test_cancelled_game_is_terminally_removed(self) -> None:
-        self.store.defer(self.game)
+        self.defer_game()
         api = FakeMlbGameAcquisitionApi(
             schedule_raw=b"{}",
             game_outcomes={

@@ -1,13 +1,17 @@
 """Small composition surface for acquisition applications."""
 
-from datetime import datetime
-from typing import Callable, Protocol
+from typing import Protocol
 
-from zavant.acquisition.bounded_games import BoundedGameAcquirer, MlbGameAcquisitionApi
-from zavant.acquisition.corrected_games import CorrectedGameProcessor, MlbCorrectedGameApi
-from zavant.acquisition.daily import DailyAcquisitionCoordinator, utc_now
-from zavant.acquisition.deferred_games import DeferredGameProcessor, MlbDeferredGameApi
-from zavant.acquisition.game_changes import GameChangesPoller, MlbGameChangesApi
+from zavant._time import Clock, utc_now
+from zavant.acquisition.bounded_games import BoundedGameAcquirer
+from zavant.acquisition.corrected_games import CorrectedGameProcessor
+from zavant.acquisition.daily import DailyAcquisitionCoordinator
+from zavant.acquisition.deferred_games import DeferredGameProcessor
+from zavant.acquisition.game_changes import GameChangesPoller
+from zavant.acquisition.protocols import (
+    GameChangesApi,
+    ScheduleAndLiveGameApi,
+)
 from zavant.acquisition.schedule_discovery import ScheduleDiscoverer
 from zavant.acquisition.season_backfill import (
     MlbSeasonBackfillApi,
@@ -16,14 +20,9 @@ from zavant.acquisition.season_backfill import (
 from zavant.storage.bundles import AcquisitionStorage
 
 
-Clock = Callable[[], datetime]
-
-
 class MlbDailyApi(
-    MlbGameAcquisitionApi,
-    MlbCorrectedGameApi,
-    MlbDeferredGameApi,
-    MlbGameChangesApi,
+    ScheduleAndLiveGameApi,
+    GameChangesApi,
     Protocol,
 ):
     """Complete MLB client surface required by the daily workflow."""

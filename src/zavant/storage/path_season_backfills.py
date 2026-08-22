@@ -1,11 +1,12 @@
 """Path-backed persistence for resumable historical-season reconciliation."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.storage._path_io import (
     atomic_write,
@@ -24,12 +25,7 @@ from zavant.storage.models import (
 )
 
 
-Clock = Callable[[], datetime]
 BACKFILL_SEASON_STATUSES = ("pending", "complete", "failed")
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathSeasonBackfillStore:
@@ -48,7 +44,7 @@ class PathSeasonBackfillStore:
         dry_run: bool,
         configuration: Dict[str, Any],
     ) -> StartedSeasonBackfillRun:
-        normalized_started_at = self._utc(started_at, "started_at")
+        normalized_started_at = as_utc(started_at, "started_at")
         manifest_path = self._manifest_path(normalized_started_at, run_id)
         expected = {
             "configuration": configuration,
@@ -75,7 +71,7 @@ class PathSeasonBackfillStore:
                 resumed=True,
             )
 
-        observed_at = self._utc(self.clock(), "backfill store clock")
+        observed_at = as_utc(self.clock(), "backfill store clock")
         manifest = {
             **expected,
             "created_at": observed_at.isoformat(),
@@ -111,7 +107,7 @@ class PathSeasonBackfillStore:
             raise SeasonBackfillConflictError(
                 f"backfill manifest does not contain season {season}"
             )
-        recorded_at = self._utc(self.clock(), "backfill store clock").isoformat()
+        recorded_at = as_utc(self.clock(), "backfill store clock").isoformat()
         entry = matching[0]
         previous_details = entry.get("details")
         merged_details = dict(details)
@@ -146,7 +142,7 @@ class PathSeasonBackfillStore:
             if any(status == "failed" for status in statuses.values())
             else "incomplete"
         )
-        finalized_at = self._utc(self.clock(), "backfill store clock").isoformat()
+        finalized_at = as_utc(self.clock(), "backfill store clock").isoformat()
         manifest["status"] = run_status
         manifest["updated_at"] = finalized_at
         if run_status == "complete":
@@ -226,8 +222,8 @@ class PathSeasonBackfillStore:
             "season": season,
             "status": "complete",
             "total_items": total_items,
-            "updated_since": self._utc(updated_since, "updated_since").isoformat(),
-            "window_end": self._utc(window_end, "window_end").isoformat(),
+            "updated_since": as_utc(updated_since, "updated_since").isoformat(),
+            "window_end": as_utc(window_end, "window_end").isoformat(),
         }
         if manifest_path.exists():
             try:
@@ -266,8 +262,8 @@ class PathSeasonBackfillStore:
             "run_id": str(run_id),
             "season": season,
             "status": "complete",
-            "updated_since": self._utc(updated_since, "updated_since").isoformat(),
-            "window_end": self._utc(window_end, "window_end").isoformat(),
+            "updated_since": as_utc(updated_since, "updated_since").isoformat(),
+            "window_end": as_utc(window_end, "window_end").isoformat(),
         }
         if any(payload.get(key) != value for key, value in expected.items()):
             raise SeasonBackfillConflictError(
@@ -324,10 +320,10 @@ class PathSeasonBackfillStore:
         manifest_path = self.storage_root.joinpath(*manifest_key.split("/"))
         return SeasonBackfillCheckpoint(
             season=season,
-            updated_since=self._utc(updated_since, "checkpoint updated_since"),
+            updated_since=as_utc(updated_since, "checkpoint updated_since"),
             run_id=run_id,
             manifest_path=artifact_reference_for_path(self.storage_root, manifest_path),
-            updated_at=self._utc(updated_at, "checkpoint updated_at"),
+            updated_at=as_utc(updated_at, "checkpoint updated_at"),
         )
 
     def advance_checkpoint(
@@ -338,11 +334,11 @@ class PathSeasonBackfillStore:
         run_id: UUID,
         manifest_path: ArtifactReference,
     ) -> SeasonBackfillCheckpoint:
-        normalized_updated_since = self._utc(updated_since, "updated_since")
+        normalized_updated_since = as_utc(updated_since, "updated_since")
         current = self.read_checkpoint(season)
         observed_current = current.updated_since if current is not None else None
         normalized_expected = (
-            self._utc(expected_current, "expected_current")
+            as_utc(expected_current, "expected_current")
             if expected_current is not None
             else None
         )
@@ -352,7 +348,7 @@ class PathSeasonBackfillStore:
             )
         if observed_current is not None and normalized_updated_since < observed_current:
             raise ValueError("updated_since must not move a checkpoint backward")
-        updated_at = self._utc(self.clock(), "backfill store clock")
+        updated_at = as_utc(self.clock(), "backfill store clock")
         payload = {
             "contract": "zavant-season-backfill-checkpoint/v1",
             "manifest_path": manifest_path.key,
@@ -442,9 +438,3 @@ class PathSeasonBackfillStore:
             entry["season"]: entry["status"]
             for entry in cls._season_entries(manifest)
         }
-
-    @staticmethod
-    def _utc(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)

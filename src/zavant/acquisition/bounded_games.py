@@ -1,20 +1,20 @@
 """Bounded schedule-to-game acquisition workflow."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from typing import Any, Callable, Dict, Optional, Protocol
+from datetime import date, datetime
+from typing import Any, Callable, Dict, Optional
 from uuid import UUID, uuid4
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.acquisition.game_eligibility import (
     EligibilityDisposition,
     FinalRegularSeasonGamePolicy,
     GameEligibilityPolicy,
 )
-from zavant.clients.mlb_stats_api import (
-    MlbStatsApiError,
-    RetrievedResource,
-)
-from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
+from zavant.acquisition.live_games import GameIdentityError, retrieve_live_game
+from zavant.acquisition.protocols import ScheduleAndLiveGameApi
+from zavant.clients.mlb_stats_api import MlbStatsApiError
+from zavant.contracts.raw_game import RawGameContractError
 from zavant.contracts.schedule import (
     ScheduleRequest,
     ScheduleResponse,
@@ -24,51 +24,7 @@ from zavant.storage.errors import RawGameConflictError, ScheduleConflictError
 from zavant.storage.protocols import DeferredGameStore, RawGameStore, ScheduleStore
 
 
-Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-class MlbGameAcquisitionApi(Protocol):
-    """MLB client operations required by bounded game acquisition."""
-
-    def get_schedule(
-        self,
-        start_date: date,
-        end_date: date,
-        sport_id: int = 1,
-    ) -> RetrievedResource:
-        """Retrieve a bounded schedule response.
-
-        Args:
-            start_date: Inclusive first official date requested.
-            end_date: Inclusive last official date requested.
-            sport_id: MLB sport identifier.
-
-        Returns:
-            Exact schedule response and HTTP provenance.
-        """
-
-        ...
-
-    def get_live_game(self, game_pk: int) -> RetrievedResource:
-        """Retrieve one complete live-game response.
-
-        Args:
-            game_pk: MLB's primary game identifier.
-
-        Returns:
-            Exact live-game response and HTTP provenance.
-        """
-
-        ...
-
-
-class GameIdentityError(ValueError):
-    """Raised when a live-game response belongs to another scheduled game."""
 
 
 @dataclass(frozen=True)
@@ -115,7 +71,7 @@ class BoundedGameAcquirer:
 
     def __init__(
         self,
-        api: MlbGameAcquisitionApi,
+        api: ScheduleAndLiveGameApi,
         schedule_store: ScheduleStore,
         game_store: RawGameStore,
         eligibility_policy: Optional[GameEligibilityPolicy] = None,
@@ -176,12 +132,7 @@ class BoundedGameAcquirer:
 
         resolved_run_id = run_id or self.run_id_factory()
         resolved_requested_at = requested_at or self.clock()
-        if (
-            resolved_requested_at.tzinfo is None
-            or resolved_requested_at.utcoffset() is None
-        ):
-            raise ValueError("requested_at must include a UTC offset")
-        resolved_requested_at = resolved_requested_at.astimezone(timezone.utc)
+        resolved_requested_at = as_utc(resolved_requested_at, "requested_at")
 
         loaded_run = self.schedule_store.load_run(
             requested_at=resolved_requested_at,
@@ -254,7 +205,12 @@ class BoundedGameAcquirer:
                     details={"reason": decision.reason},
                 )
                 if self.deferred_game_store is not None:
-                    self.deferred_game_store.defer(scheduled_game)
+                    self.deferred_game_store.defer(
+                        game_pk=scheduled_game.game_pk,
+                        season=scheduled_game.season,
+                        official_date=scheduled_game.official_date,
+                        live_feed_link=scheduled_game.live_feed_link,
+                    )
                 continue
 
             acquired = self._acquire_game(
@@ -303,12 +259,7 @@ class BoundedGameAcquirer:
                     },
                 )
                 return True
-            retrieved_game = self.api.get_live_game(game_pk)
-            game = RawGameResponse.from_bytes(retrieved_game.body)
-            if game.game_pk != game_pk:
-                raise GameIdentityError(
-                    f"expected gamePk {game_pk}, received {game.game_pk}"
-                )
+            retrieved_game, game = retrieve_live_game(self.api, game_pk, season)
             landed_game = self.game_store.land(
                 game=game,
                 raw=retrieved_game.body,

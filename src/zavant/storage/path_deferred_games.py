@@ -1,22 +1,17 @@
 """Path-backed durable state for non-final scheduled games."""
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Dict, Tuple
 
-from zavant.contracts.schedule import ScheduledGame
+from zavant._time import Clock, as_utc, utc_now
 from zavant.storage._path_io import atomic_write, encode_json, read_json_object
 from zavant.storage.errors import DeferredGameConflictError
 from zavant.storage.models import DeferredScheduledGame
 
 
-Clock = Callable[[], datetime]
 CONTRACT = "zavant-deferred-scheduled-games/v1"
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathDeferredGameStore:
@@ -40,19 +35,34 @@ class PathDeferredGameStore:
         payload = self._read()
         return tuple(self._from_payload(value) for value in payload["games"])
 
-    def defer(self, game: ScheduledGame) -> None:
+    def defer(
+        self,
+        *,
+        game_pk: int,
+        season: int,
+        official_date: date,
+        live_feed_link: str,
+    ) -> None:
+        if type(game_pk) is not int or game_pk <= 0:
+            raise ValueError("game_pk must be a positive integer")
+        if type(season) is not int or season <= 0:
+            raise ValueError("season must be a positive integer")
+        if not isinstance(official_date, date):
+            raise ValueError("official_date must be a date")
+        if not isinstance(live_feed_link, str) or not live_feed_link:
+            raise ValueError("live_feed_link must be a non-empty string")
         payload = self._read()
         now = self._now()
         games = payload["games"]
         existing = next(
-            (value for value in games if value.get("game_pk") == game.game_pk),
+            (value for value in games if value.get("game_pk") == game_pk),
             None,
         )
         refreshed = {
-            "game_pk": game.game_pk,
-            "season": game.season,
-            "official_date": game.official_date.isoformat(),
-            "live_feed_link": game.live_feed_link,
+            "game_pk": game_pk,
+            "season": season,
+            "official_date": official_date.isoformat(),
+            "live_feed_link": live_feed_link,
             "first_deferred_at": (
                 existing.get("first_deferred_at")
                 if existing is not None
@@ -146,12 +156,7 @@ class PathDeferredGameStore:
         if not isinstance(raw, str):
             raise ValueError(f"{key} is invalid")
         parsed = datetime.fromisoformat(raw)
-        if parsed.tzinfo is None or parsed.utcoffset() is None:
-            raise ValueError(f"{key} has no UTC offset")
-        return parsed.astimezone(timezone.utc)
+        return as_utc(parsed, key)
 
     def _now(self) -> datetime:
-        now = self.clock()
-        if now.tzinfo is None or now.utcoffset() is None:
-            raise ValueError("clock result must include a UTC offset")
-        return now.astimezone(timezone.utc)
+        return as_utc(self.clock(), "clock result")

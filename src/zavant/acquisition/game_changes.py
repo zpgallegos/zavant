@@ -1,51 +1,22 @@
 """Paginated corrected-game polling with success-only watermark advancement."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, Optional, Protocol
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, Optional
 from uuid import UUID, uuid4
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.acquisition.correction_pagination import (
     CorrectionPaginationGuard,
     GameChangesPollingError,
 )
-from zavant.clients.mlb_stats_api import RetrievedResource
+from zavant.acquisition.protocols import GameChangesApi
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.protocols import GameChangesStore, GameChangesWatermarkStore
 
 
-Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-class MlbGameChangesApi(Protocol):
-    """MLB client operation required by corrected-game polling."""
-
-    def get_game_changes(
-        self,
-        updated_since: datetime,
-        sport_id: int = 1,
-        limit: int = 1000,
-        offset: int = 0,
-    ) -> RetrievedResource:
-        """Retrieve one corrected-game response page.
-
-        Args:
-            updated_since: Inclusive lower query boundary.
-            sport_id: MLB sport identifier.
-            limit: Maximum results requested from this page.
-            offset: Result offset for this page.
-
-        Returns:
-            Exact response bytes and HTTP provenance.
-        """
-
-        ...
 
 
 class GameChangesWatermarkNotInitializedError(GameChangesPollingError):
@@ -93,7 +64,7 @@ class GameChangesPoller:
 
     def __init__(
         self,
-        api: MlbGameChangesApi,
+        api: GameChangesApi,
         changes_store: GameChangesStore,
         watermark_store: GameChangesWatermarkStore,
         clock: Clock = utc_now,
@@ -144,7 +115,7 @@ class GameChangesPoller:
             OSError: If evidence or state cannot be read or written.
         """
 
-        watermark_after = self._normalize_timestamp(self.clock(), "poll clock result")
+        watermark_after = as_utc(self.clock(), "poll clock result")
         self._validate_options(sport_id, limit, overlap, max_pages)
         current = self.watermark_store.read()
         if current is None:
@@ -152,9 +123,7 @@ class GameChangesPoller:
                 raise GameChangesWatermarkNotInitializedError(
                     "the first correction poll requires --initial-watermark"
                 )
-            watermark_before = self._normalize_timestamp(
-                initial_watermark, "initial_watermark"
-            )
+            watermark_before = as_utc(initial_watermark, "initial_watermark")
             expected_current: Optional[datetime] = None
         else:
             if initial_watermark is not None:
@@ -248,9 +217,3 @@ class GameChangesPoller:
             raise ValueError("overlap must not be negative")
         if type(max_pages) is not int or max_pages <= 0:
             raise ValueError("max_pages must be a positive integer")
-
-    @staticmethod
-    def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)

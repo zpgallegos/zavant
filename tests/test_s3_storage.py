@@ -83,7 +83,12 @@ class S3AcquisitionStorageTests(unittest.TestCase):
             SCHEDULE_FIXTURE.read_bytes()
         ).scheduled_games[0]
 
-        first.deferred_games.defer(game)
+        first.deferred_games.defer(
+            game_pk=game.game_pk,
+            season=game.season,
+            official_date=game.official_date,
+            live_feed_link=game.live_feed_link,
+        )
         second = s3_acquisition_storage(
             client=client,
             bucket="example-bucket",

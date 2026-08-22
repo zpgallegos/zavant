@@ -3,8 +3,9 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.contracts.raw_game import RawGameResponse
 from zavant.storage._path_io import (
     atomic_write,
@@ -16,13 +17,6 @@ from zavant.storage._path_io import (
 )
 from zavant.storage.errors import RawGameConflictError
 from zavant.storage.models import CurrentRawGameRevision, LandedRawGame
-
-
-Clock = Callable[[], datetime]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathRawGameStore:
@@ -99,7 +93,7 @@ class PathRawGameStore:
                 )
             revision_previous_id = metadata_previous
 
-        observed_at = self.clock().astimezone(timezone.utc)
+        observed_at = as_utc(self.clock(), "clock result")
         if not object_path.exists():
             atomic_write(object_path, raw)
 

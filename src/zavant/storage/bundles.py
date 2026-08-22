@@ -1,10 +1,10 @@
 """Composition helpers for complete acquisition storage backends."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, cast
+from typing import cast
 
+from zavant._time import Clock, utc_now
 from zavant.storage.path_daily_runs import PathDailyRunStore
 from zavant.storage.path_deferred_games import PathDeferredGameStore
 from zavant.storage.path_game_changes import PathGameChangesStore
@@ -26,13 +26,6 @@ from zavant.storage.protocols import (
     SeasonBackfillStore,
 )
 from zavant.storage.s3_objects import S3Client, S3ObjectBackend
-
-
-Clock = Callable[[], datetime]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True)

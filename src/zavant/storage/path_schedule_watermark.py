@@ -1,11 +1,12 @@
 """Path-backed through-date for incremental schedule discovery."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.storage._path_io import (
     atomic_write,
     encode_json,
@@ -16,13 +17,6 @@ from zavant.storage._path_io import (
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import ScheduleWatermarkConflictError
 from zavant.storage.models import ScheduleWatermark
-
-
-Clock = Callable[[], datetime]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathScheduleWatermarkStore:
@@ -91,7 +85,7 @@ class PathScheduleWatermarkStore:
                 "schedule watermark changed while discovery was running"
             )
 
-        updated_at = self._normalize_timestamp(self.clock(), "clock result")
+        updated_at = as_utc(self.clock(), "clock result")
         watermark = ScheduleWatermark(
             through_date=through_date,
             advanced_from=advanced_from,
@@ -150,10 +144,4 @@ class PathScheduleWatermarkStore:
         value = payload.get(key)
         if not isinstance(value, str):
             raise ValueError(f"schedule watermark {key} is invalid")
-        return cls._normalize_timestamp(datetime.fromisoformat(value), key)
-
-    @staticmethod
-    def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)
+        return as_utc(datetime.fromisoformat(value), key)

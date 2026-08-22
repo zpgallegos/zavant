@@ -1,12 +1,13 @@
 """AWS Lambda entry point and composition boundary for daily acquisition."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from importlib import import_module
 import os
-from typing import Any, Callable, Dict, Mapping, Optional, cast
+from typing import Any, Dict, Mapping, Optional, cast
 
-from zavant.acquisition.daily import DailyAcquisitionCoordinator, utc_now
+from zavant._time import Clock, as_utc, utc_now
+from zavant.acquisition.daily import DailyAcquisitionCoordinator
 from zavant.application import MlbDailyApi, build_daily_coordinator
 from zavant.clients.mlb_stats_api import (
     DEFAULT_BASE_URL,
@@ -16,9 +17,6 @@ from zavant.clients.mlb_stats_api import (
 )
 from zavant.storage.bundles import AcquisitionStorage, s3_acquisition_storage
 from zavant.storage.s3_objects import S3Client
-
-
-Clock = Callable[[], datetime]
 
 
 class DailyAcquisitionFailedError(RuntimeError):
@@ -287,6 +285,4 @@ def _required_timestamp(
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise ValueError(f"{name} must use ISO-8601 format") from exc
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError(f"{name} must include a UTC offset")
-    return parsed.astimezone(timezone.utc)
+    return as_utc(parsed, name)

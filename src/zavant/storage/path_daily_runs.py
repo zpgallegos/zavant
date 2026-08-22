@@ -1,11 +1,12 @@
 """Path-backed manifests for coordinated daily acquisition runs."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 from uuid import UUID
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.storage._path_io import (
     atomic_write,
     encode_json,
@@ -18,7 +19,6 @@ from zavant.storage.errors import DailyRunConflictError
 from zavant.storage.models import StartedDailyRun
 
 
-Clock = Callable[[], datetime]
 DAILY_BRANCHES = (
     "correction_discovery",
     "correction_processing",
@@ -26,10 +26,6 @@ DAILY_BRANCHES = (
     "schedule_discovery",
 )
 DAILY_BRANCH_STATUSES = ("complete", "failed", "skipped")
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathDailyRunStore:
@@ -51,7 +47,7 @@ class PathDailyRunStore:
         through_date: date,
         configuration: Dict[str, Any],
     ) -> StartedDailyRun:
-        normalized_started_at = self._normalize_timestamp(started_at, "started_at")
+        normalized_started_at = as_utc(started_at, "started_at")
         manifest_path = self._manifest_path(normalized_started_at, run_id)
         if manifest_path.exists():
             raise DailyRunConflictError("daily run already exists")
@@ -94,9 +90,7 @@ class PathDailyRunStore:
             raise DailyRunConflictError("daily run branches are invalid")
         if branch in branches:
             raise DailyRunConflictError(f"daily branch already recorded: {branch}")
-        recorded_at = self._normalize_timestamp(
-            self.clock(), "clock result"
-        ).isoformat()
+        recorded_at = as_utc(self.clock(), "clock result").isoformat()
         branches[branch] = {
             "details": details,
             "recorded_at": recorded_at,
@@ -129,9 +123,7 @@ class PathDailyRunStore:
             if any(status == "failed" for status in statuses.values())
             else "complete"
         )
-        finalized_at = self._normalize_timestamp(
-            self.clock(), "clock result"
-        ).isoformat()
+        finalized_at = as_utc(self.clock(), "clock result").isoformat()
         manifest["completed_at"] = finalized_at
         manifest["status"] = run_status
         manifest["summary"] = statuses
@@ -158,9 +150,3 @@ class PathDailyRunStore:
             / f"run_id={run_id}"
             / "manifest.json"
         )
-
-    @staticmethod
-    def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)

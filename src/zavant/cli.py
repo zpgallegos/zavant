@@ -1,7 +1,7 @@
 """Command-line entry point for local development and automation."""
 
 import argparse
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from importlib import import_module
 import json
 import logging
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Protocol, Sequence, cast
 from uuid import UUID, uuid4
 
+from zavant._time import as_utc
 from zavant.acquisition.bounded_games import BoundedGameAcquirer
 from zavant.acquisition.game_changes import (
     GameChangesPoller,
@@ -87,9 +88,34 @@ def parse_utc_datetime(value: str) -> datetime:
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("timestamp must use ISO-8601 format") from exc
-    if parsed.tzinfo is None:
-        raise argparse.ArgumentTypeError("timestamp must include a UTC offset")
-    return parsed.astimezone(timezone.utc)
+    try:
+        return as_utc(parsed, "timestamp")
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _add_http_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+    )
+    parser.add_argument("--max-attempts", type=int, default=3)
+
+
+def _add_data_dir_option(
+    parser: argparse.ArgumentParser,
+    help_text: str = "override ZAVANT_DATA_DIR for this invocation",
+) -> None:
+    parser.add_argument("--data-dir", type=Path, help=help_text)
+
+
+def _build_api_client(settings: Settings, args: Any) -> MlbStatsApiClient:
+    return MlbStatsApiClient(
+        base_url=settings.mlb_api_base_url,
+        timeout_seconds=args.timeout_seconds,
+        retry_policy=RetryPolicy(max_attempts=args.max_attempts),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,17 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
     acquire_games.add_argument("--sport-id", type=int, default=1)
     acquire_games.add_argument("--run-id", type=UUID, default=None)
     acquire_games.add_argument("--requested-at", type=parse_utc_datetime, default=None)
-    acquire_games.add_argument(
-        "--timeout-seconds",
-        type=float,
-        default=DEFAULT_TIMEOUT_SECONDS,
-    )
-    acquire_games.add_argument("--max-attempts", type=int, default=3)
-    acquire_games.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
+    _add_http_options(acquire_games)
+    _add_data_dir_option(acquire_games)
 
     daily = subparsers.add_parser(
         "run-daily",
@@ -134,17 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
     daily.add_argument("--correction-limit", type=int, default=1000)
     daily.add_argument("--correction-overlap-seconds", type=float, default=300.0)
     daily.add_argument("--correction-max-pages", type=int, default=100)
-    daily.add_argument(
-        "--timeout-seconds",
-        type=float,
-        default=DEFAULT_TIMEOUT_SECONDS,
-    )
-    daily.add_argument("--max-attempts", type=int, default=3)
-    daily.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
+    _add_http_options(daily)
+    _add_data_dir_option(daily)
 
     poll_changes = subparsers.add_parser(
         "poll-game-changes",
@@ -159,17 +167,8 @@ def build_parser() -> argparse.ArgumentParser:
     poll_changes.add_argument("--limit", type=int, default=1000)
     poll_changes.add_argument("--overlap-seconds", type=float, default=300.0)
     poll_changes.add_argument("--max-pages", type=int, default=100)
-    poll_changes.add_argument(
-        "--timeout-seconds",
-        type=float,
-        default=DEFAULT_TIMEOUT_SECONDS,
-    )
-    poll_changes.add_argument("--max-attempts", type=int, default=3)
-    poll_changes.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
+    _add_http_options(poll_changes)
+    _add_data_dir_option(poll_changes)
 
     backfill = subparsers.add_parser(
         "backfill-seasons",
@@ -196,17 +195,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     backfill.add_argument("--bucket", help="override ZAVANT_S3_BUCKET")
     backfill.add_argument("--prefix", help="override ZAVANT_S3_PREFIX")
-    backfill.add_argument(
-        "--timeout-seconds",
-        type=float,
-        default=DEFAULT_TIMEOUT_SECONDS,
-    )
-    backfill.add_argument("--max-attempts", type=int, default=3)
-    backfill.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for local storage",
-    )
+    _add_http_options(backfill)
+    _add_data_dir_option(backfill, "override ZAVANT_DATA_DIR for local storage")
 
     project_local = subparsers.add_parser(
         "project-local",
@@ -226,11 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="new output directory; defaults to a run below the local lake",
     )
-    project_local.add_argument(
-        "--data-dir",
-        type=Path,
-        help="override ZAVANT_DATA_DIR for this invocation",
-    )
+    _add_data_dir_option(project_local)
 
     return parser
 
@@ -240,7 +226,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
     settings = Settings.from_environment()
     data_dir = args.data_dir or settings.data_dir
-    storage = local_acquisition_storage(data_dir)
 
     if args.command == "project-local":
         from zavant.projection.local import run_local_projection
@@ -268,11 +253,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "--run-id and --requested-at must be supplied together for resumption"
             )
         try:
-            client = MlbStatsApiClient(
-                base_url=settings.mlb_api_base_url,
-                timeout_seconds=args.timeout_seconds,
-                retry_policy=RetryPolicy(max_attempts=args.max_attempts),
-            )
+            client = _build_api_client(settings, args)
+            storage = local_acquisition_storage(data_dir)
             acquisition = BoundedGameAcquirer(
                 api=client,
                 schedule_store=storage.schedules,
@@ -298,11 +280,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "run-daily":
         try:
-            client = MlbStatsApiClient(
-                base_url=settings.mlb_api_base_url,
-                timeout_seconds=args.timeout_seconds,
-                retry_policy=RetryPolicy(max_attempts=args.max_attempts),
-            )
+            client = _build_api_client(settings, args)
+            storage = local_acquisition_storage(data_dir)
             daily_result = build_daily_coordinator(client, storage).run(
                 initial_schedule_date=args.initial_schedule_date,
                 initial_correction_watermark=args.initial_correction_watermark,
@@ -321,11 +300,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "poll-game-changes":
         try:
-            client = MlbStatsApiClient(
-                base_url=settings.mlb_api_base_url,
-                timeout_seconds=args.timeout_seconds,
-                retry_policy=RetryPolicy(max_attempts=args.max_attempts),
-            )
+            client = _build_api_client(settings, args)
+            storage = local_acquisition_storage(data_dir)
             poll = GameChangesPoller(
                 api=client,
                 changes_store=storage.game_changes,
@@ -360,11 +336,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             parser.error("--run-id and --started-at must be supplied together")
         try:
             backfill_storage = _backfill_storage(args, settings, data_dir)
-            client = MlbStatsApiClient(
-                base_url=settings.mlb_api_base_url,
-                timeout_seconds=args.timeout_seconds,
-                retry_policy=RetryPolicy(max_attempts=args.max_attempts),
-            )
+            client = _build_api_client(settings, args)
             result = build_season_backfill_coordinator(
                 client, backfill_storage
             ).run(

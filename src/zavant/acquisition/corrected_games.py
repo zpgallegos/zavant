@@ -1,33 +1,15 @@
 """Process durable corrected-game manifests into raw-game revisions."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Protocol, Tuple
+from typing import Any, Dict, List, Tuple
 
-from zavant.clients.mlb_stats_api import MlbStatsApiError, RetrievedResource
-from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
+from zavant.acquisition.live_games import GameIdentityError, retrieve_live_game
+from zavant.acquisition.protocols import LiveGameApi
+from zavant.clients.mlb_stats_api import MlbStatsApiError
+from zavant.contracts.raw_game import RawGameContractError
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import RawGameConflictError
 from zavant.storage.protocols import GameChangesStore, RawGameStore
-
-
-class MlbCorrectedGameApi(Protocol):
-    """MLB client operation required by corrected-game processing."""
-
-    def get_live_game(self, game_pk: int) -> RetrievedResource:
-        """Retrieve one complete live-game response.
-
-        Args:
-            game_pk: MLB's primary game identifier.
-
-        Returns:
-            Exact live-game response and HTTP provenance.
-        """
-
-        ...
-
-
-class CorrectedGameIdentityError(ValueError):
-    """Raised when a correction response identifies a different game."""
 
 
 @dataclass(frozen=True)
@@ -81,7 +63,7 @@ class CorrectedGameProcessor:
 
     def __init__(
         self,
-        api: MlbCorrectedGameApi,
+        api: LiveGameApi,
         changes_store: GameChangesStore,
         game_store: RawGameStore,
     ) -> None:
@@ -158,13 +140,9 @@ class CorrectedGameProcessor:
                 continue
 
             try:
-                retrieved = self.api.get_live_game(item.game_pk)
-                game = RawGameResponse.from_bytes(retrieved.body)
-                if game.game_pk != item.game_pk or game.season != item.season:
-                    raise CorrectedGameIdentityError(
-                        f"expected gamePk {item.game_pk} in season {item.season}, "
-                        f"received gamePk {game.game_pk} in season {game.season}"
-                    )
+                retrieved, game = retrieve_live_game(
+                    self.api, item.game_pk, item.season
+                )
                 landed = self.game_store.land(
                     game=game,
                     raw=retrieved.body,
@@ -172,7 +150,7 @@ class CorrectedGameProcessor:
                     trigger="game_changes",
                 )
             except (
-                CorrectedGameIdentityError,
+                GameIdentityError,
                 MlbStatsApiError,
                 OSError,
                 RawGameConflictError,

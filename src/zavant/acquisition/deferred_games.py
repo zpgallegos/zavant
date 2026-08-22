@@ -1,21 +1,14 @@
 """Daily reconciliation of games retained while non-final."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Protocol, Tuple
+from typing import Any, Dict, List, Tuple
 
-from zavant.clients.mlb_stats_api import MlbStatsApiError, RetrievedResource
+from zavant.acquisition.live_games import GameIdentityError, retrieve_live_game
+from zavant.acquisition.protocols import LiveGameApi
+from zavant.clients.mlb_stats_api import MlbStatsApiError
 from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
-from zavant.contracts.schedule import ScheduledGame
 from zavant.storage.errors import DeferredGameConflictError, RawGameConflictError
-from zavant.storage.models import DeferredScheduledGame
 from zavant.storage.protocols import DeferredGameStore, RawGameStore
-
-
-class MlbDeferredGameApi(Protocol):
-    """MLB operation needed to reconsider a deferred game."""
-
-    def get_live_game(self, game_pk: int) -> RetrievedResource:
-        ...
 
 
 @dataclass(frozen=True)
@@ -49,7 +42,7 @@ class DeferredGameProcessor:
 
     def __init__(
         self,
-        api: MlbDeferredGameApi,
+        api: LiveGameApi,
         deferred_game_store: DeferredGameStore,
         game_store: RawGameStore,
     ) -> None:
@@ -73,20 +66,19 @@ class DeferredGameProcessor:
                     self.deferred_game_store.resolve(item.game_pk)
                     outcomes["succeeded"].append(item.game_pk)
                     continue
-                retrieved = self.api.get_live_game(item.game_pk)
-                game = RawGameResponse.from_bytes(retrieved.body)
-                if game.game_pk != item.game_pk or game.season != item.season:
-                    raise ValueError(
-                        f"expected gamePk {item.game_pk} in season {item.season}, "
-                        f"received gamePk {game.game_pk} in season {game.season}"
-                    )
+                retrieved, game = retrieve_live_game(
+                    self.api, item.game_pk, item.season
+                )
                 status_code = _status_code(game)
                 if status_code == "C":
                     self.deferred_game_store.resolve(item.game_pk)
                     outcomes["skipped"].append(item.game_pk)
                 elif status_code != "F":
                     self.deferred_game_store.defer(
-                        _scheduled_game_with_current_status(item, game, status_code)
+                        game_pk=item.game_pk,
+                        season=item.season,
+                        official_date=game.official_date,
+                        live_feed_link=item.live_feed_link,
                     )
                     outcomes["deferred"].append(item.game_pk)
                 else:
@@ -100,6 +92,7 @@ class DeferredGameProcessor:
                     outcomes["succeeded"].append(item.game_pk)
             except (
                 DeferredGameConflictError,
+                GameIdentityError,
                 MlbStatsApiError,
                 OSError,
                 RawGameConflictError,
@@ -125,21 +118,3 @@ def _status_code(game: RawGameResponse) -> str:
     if not isinstance(status_code, str) or not status_code:
         raise RawGameContractError("gameData.status.codedGameState is required")
     return status_code
-
-
-def _scheduled_game_with_current_status(
-    item: DeferredScheduledGame,
-    game: RawGameResponse,
-    status: str,
-) -> ScheduledGame:
-    return ScheduledGame(
-        game_pk=item.game_pk,
-        official_date=game.official_date,
-        scheduled_start=item.last_evaluated_at,
-        season=item.season,
-        game_type="R",
-        status_code=status,
-        detailed_state=status,
-        live_feed_link=item.live_feed_link,
-        series_description="Regular Season",
-    )

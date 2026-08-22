@@ -3,31 +3,22 @@
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Dict, FrozenSet, Optional, Protocol, Set
+from typing import Dict, FrozenSet, Optional, Set
 from uuid import UUID, uuid5
 
 from zavant.acquisition.backfill_modes import SeasonBackfillMode
-from zavant.acquisition.bounded_games import GameIdentityError
 from zavant.acquisition.game_eligibility import (
     EligibilityDisposition,
     GameEligibilityPolicy,
 )
-from zavant.clients.mlb_stats_api import MlbStatsApiError, RetrievedResource
-from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
+from zavant.acquisition.live_games import GameIdentityError, retrieve_live_game
+from zavant.acquisition.protocols import ScheduleAndLiveGameApi
+from zavant.clients.mlb_stats_api import MlbStatsApiError
+from zavant.contracts.raw_game import RawGameContractError
 from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import RawGameConflictError
 from zavant.storage.protocols import RawGameStore, ScheduleStore
-
-
-class MlbBackfillGamesApi(Protocol):
-    def get_schedule(
-        self, start_date: date, end_date: date, sport_id: int = 1
-    ) -> RetrievedResource:
-        ...
-
-    def get_live_game(self, game_pk: int) -> RetrievedResource:
-        ...
 
 
 @dataclass(frozen=True)
@@ -44,7 +35,7 @@ class BackfillMonthProcessor:
 
     def __init__(
         self,
-        api: MlbBackfillGamesApi,
+        api: ScheduleAndLiveGameApi,
         schedule_store: ScheduleStore,
         game_store: RawGameStore,
         eligibility_policy: GameEligibilityPolicy,
@@ -233,13 +224,7 @@ class BackfillMonthProcessor:
         mode: SeasonBackfillMode,
     ) -> Optional[bool]:
         try:
-            retrieved = self.api.get_live_game(game_pk)
-            game = RawGameResponse.from_bytes(retrieved.body)
-            if game.game_pk != game_pk or game.season != season:
-                raise GameIdentityError(
-                    f"expected season {season} gamePk {game_pk}, received "
-                    f"season {game.season} gamePk {game.game_pk}"
-                )
+            retrieved, game = retrieve_live_game(self.api, game_pk, season)
             landed = self.game_store.land(
                 game=game,
                 raw=retrieved.body,

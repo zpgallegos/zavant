@@ -1,10 +1,11 @@
 """Incremental schedule discovery with a durable through-date."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID, uuid4
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.acquisition.bounded_games import (
     BoundedGameAcquirer,
     BoundedGameAcquisitionResult,
@@ -12,12 +13,7 @@ from zavant.acquisition.bounded_games import (
 from zavant.storage.protocols import ScheduleWatermarkStore
 
 
-Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class ScheduleWatermarkNotInitializedError(RuntimeError):
@@ -111,7 +107,7 @@ class ScheduleDiscoverer:
             OSError: If evidence or state cannot be read or written.
         """
 
-        requested_at = self._normalize_timestamp(self.clock(), "discovery clock")
+        requested_at = as_utc(self.clock(), "discovery clock")
         resolved_through_date = through_date or requested_at.date()
         if type(lookback_days) is not int or lookback_days <= 0:
             raise ValueError("lookback_days must be a positive integer")
@@ -179,9 +175,3 @@ class ScheduleDiscoverer:
             watermark_after=watermark.through_date,
             acquisition=acquisition,
         )
-
-    @staticmethod
-    def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)

@@ -1,11 +1,12 @@
 """Daily coordinator for schedule and correction acquisition branches."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 import logging
 from typing import Any, Callable, Dict, Optional
 from uuid import UUID, uuid4
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.acquisition.corrected_games import (
     CorrectedGameProcessingResult,
     CorrectedGameProcessor,
@@ -39,7 +40,6 @@ from zavant.storage.errors import (
 from zavant.storage.protocols import DailyRunStore
 
 
-Clock = Callable[[], datetime]
 RunIdFactory = Callable[[], UUID]
 LOGGER = logging.getLogger(__name__)
 BRANCH_ERRORS = (
@@ -57,10 +57,6 @@ BRANCH_ERRORS = (
     ScheduleWatermarkNotInitializedError,
     ValueError,
 )
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -156,7 +152,7 @@ class DailyAcquisitionCoordinator:
             OSError: If the coordinator manifest cannot be persisted.
         """
 
-        started_at = self._normalize_timestamp(self.clock(), "daily clock result")
+        started_at = as_utc(self.clock(), "daily clock result")
         resolved_through_date = through_date or started_at.date()
         run_id = self.run_id_factory()
         started_run = self.run_store.start(
@@ -351,9 +347,3 @@ class DailyAcquisitionCoordinator:
                 "error_type": type(exc).__name__,
             },
         )
-
-    @staticmethod
-    def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)

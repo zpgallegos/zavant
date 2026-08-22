@@ -3,9 +3,10 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 from uuid import UUID
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.storage._path_io import (
     atomic_write,
@@ -15,18 +16,14 @@ from zavant.storage._path_io import (
     read_json_object,
     sha256_bytes,
 )
+from zavant.storage._processing_outcomes import apply_processing_outcome
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import GameChangesConflictError
 from zavant.storage.models import ChangedGameWorkItem, LandedGameChangesPage
 
 
-Clock = Callable[[], datetime]
 GAME_CHANGE_PROCESSING_STATUSES = ("pending", "skipped", "succeeded", "failed")
 GAME_CHANGE_PROCESSING_OUTCOMES = GAME_CHANGE_PROCESSING_STATUSES[1:]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathGameChangesStore:
@@ -48,7 +45,7 @@ class PathGameChangesStore:
         raw: bytes,
         run_id: UUID,
     ) -> LandedGameChangesPage:
-        poll_date = request.window_end.astimezone(timezone.utc).date().isoformat()
+        poll_date = as_utc(request.window_end, "window_end").date().isoformat()
         run_directory = (
             self.storage_root
             / "raw"
@@ -62,7 +59,7 @@ class PathGameChangesStore:
         metadata_path = page_directory / "metadata.json"
         manifest_path = run_directory / "manifest.json"
         response_checksum = sha256_bytes(raw)
-        observed_at = self.clock().astimezone(timezone.utc)
+        observed_at = as_utc(self.clock(), "clock result")
         manifest = self._load_or_create_manifest(
             manifest_path=manifest_path,
             request=request,
@@ -169,7 +166,7 @@ class PathGameChangesStore:
 
         updated_since = self._manifest_timestamp(manifest, "updated_since")
         window_end = self._manifest_timestamp(manifest, "window_end")
-        normalized_watermark = watermark_before.astimezone(timezone.utc)
+        normalized_watermark = as_utc(watermark_before, "watermark_before")
         if updated_since > normalized_watermark:
             raise GameChangesConflictError(
                 "poll query boundary is after its logical watermark"
@@ -186,7 +183,7 @@ class PathGameChangesStore:
         }
         processing_summary = self._processing_summary(changed_games)
         processing_status = self._processing_status(processing_summary)
-        completed_at = self.clock().astimezone(timezone.utc).isoformat()
+        completed_at = as_utc(self.clock(), "clock result").isoformat()
         normalized_watermark_text = normalized_watermark.isoformat()
         if manifest.get("status") == "complete":
             expected_completion = {
@@ -276,33 +273,13 @@ class PathGameChangesStore:
             )
 
         game = matching_games[0]
-        recorded_at = self.clock().astimezone(timezone.utc).isoformat()
-        outcome = dict(details or {})
-        outcome["recorded_at"] = recorded_at
-        outcome["status"] = status
+        recorded_at = as_utc(self.clock(), "clock result").isoformat()
         attempts = game.get("processing_attempts", [])
         if not isinstance(attempts, list):
             raise GameChangesConflictError(
                 f"poll manifest game {game_pk} has invalid processing attempts"
             )
-        attempts.append(outcome)
-
-        outcome_fields = (
-            "error_message",
-            "error_type",
-            "http_attempts",
-            "reason",
-            "revision_created",
-            "revision_id",
-            "source_uri",
-        )
-        for field in outcome_fields:
-            game.pop(field, None)
-        for field in outcome_fields:
-            if field in outcome:
-                game[field] = outcome[field]
-        game["processing_attempts"] = attempts
-        game["processing_status"] = status
+        apply_processing_outcome(game, status, details, recorded_at)
         processing_summary = self._processing_summary(games)
         manifest["processing_status"] = self._processing_status(processing_summary)
         manifest["processing_summary"] = processing_summary
@@ -323,7 +300,7 @@ class PathGameChangesStore:
             manifest.get("processing_status") != processing_status
             or manifest.get("processing_summary") != summary
         ):
-            updated_at = self.clock().astimezone(timezone.utc).isoformat()
+            updated_at = as_utc(self.clock(), "clock result").isoformat()
             manifest["processing_status"] = processing_status
             manifest["processing_summary"] = summary
             manifest["updated_at"] = updated_at

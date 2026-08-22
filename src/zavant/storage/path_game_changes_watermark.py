@@ -1,11 +1,12 @@
 """Path-backed watermark for MLB corrected-game polling."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
+from zavant._time import Clock, as_utc, utc_now
 from zavant.storage._path_io import (
     atomic_write,
     encode_json,
@@ -16,13 +17,6 @@ from zavant.storage._path_io import (
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.errors import GameChangesWatermarkConflictError
 from zavant.storage.models import GameChangesWatermark
-
-
-Clock = Callable[[], datetime]
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class PathGameChangesWatermarkStore:
@@ -62,10 +56,8 @@ class PathGameChangesWatermarkStore:
         normalized_expected = self._normalize_optional_timestamp(
             expected_current, "expected_current"
         )
-        normalized_from = self._normalize_timestamp(advanced_from, "advanced_from")
-        normalized_updated_since = self._normalize_timestamp(
-            updated_since, "updated_since"
-        )
+        normalized_from = as_utc(advanced_from, "advanced_from")
+        normalized_updated_since = as_utc(updated_since, "updated_since")
         if normalized_from >= normalized_updated_since:
             raise ValueError("updated_since must be after advanced_from")
         if normalized_expected is not None and normalized_expected != normalized_from:
@@ -99,7 +91,7 @@ class PathGameChangesWatermarkStore:
                 "game-changes watermark changed while the poll was running"
             )
 
-        updated_at = self._normalize_timestamp(self.clock(), "clock result")
+        updated_at = as_utc(self.clock(), "clock result")
         watermark = GameChangesWatermark(
             updated_since=normalized_updated_since,
             advanced_from=normalized_from,
@@ -155,13 +147,7 @@ class PathGameChangesWatermarkStore:
             parsed = datetime.fromisoformat(value)
         except ValueError as exc:
             raise ValueError(f"watermark {key} is invalid") from exc
-        return cls._normalize_timestamp(parsed, key)
-
-    @staticmethod
-    def _normalize_timestamp(value: datetime, name: str) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{name} must include a UTC offset")
-        return value.astimezone(timezone.utc)
+        return as_utc(parsed, key)
 
     @classmethod
     def _normalize_optional_timestamp(
@@ -169,4 +155,4 @@ class PathGameChangesWatermarkStore:
         value: Optional[datetime],
         name: str,
     ) -> Optional[datetime]:
-        return None if value is None else cls._normalize_timestamp(value, name)
+        return None if value is None else as_utc(value, name)

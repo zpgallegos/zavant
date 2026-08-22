@@ -6,7 +6,7 @@ from uuid import UUID
 
 from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
 from zavant.contracts.raw_game import RawGameResponse
-from zavant.contracts.schedule import ScheduledGame, ScheduleRequest, ScheduleResponse
+from zavant.contracts.schedule import ScheduleRequest, ScheduleResponse
 from zavant.storage.artifacts import ArtifactReference
 from zavant.storage.models import (
     ChangedGameWorkItem,
@@ -166,7 +166,14 @@ class DeferredGameStore(Protocol):
 
         ...
 
-    def defer(self, game: ScheduledGame) -> None:
+    def defer(
+        self,
+        *,
+        game_pk: int,
+        season: int,
+        official_date: date,
+        live_feed_link: str,
+    ) -> None:
         """Add or refresh a non-final regular-season game."""
 
         ...

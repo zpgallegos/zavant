@@ -47,15 +47,19 @@ def local_acquisition_storage(
     clock: Clock = utc_now,
 ) -> AcquisitionStorage:
     """Build acquisition storage over a local lake root."""
+    return _acquisition_storage(data_dir, clock)
+
+
+def _acquisition_storage(root: Path, clock: Clock) -> AcquisitionStorage:
     return AcquisitionStorage(
-        raw_games=PathRawGameStore(data_dir, clock=clock),
-        schedules=PathScheduleStore(data_dir, clock=clock),
-        deferred_games=PathDeferredGameStore(data_dir, clock=clock),
-        game_changes=PathGameChangesStore(data_dir, clock=clock),
-        schedule_watermark=PathScheduleWatermarkStore(data_dir, clock=clock),
-        game_changes_watermark=PathGameChangesWatermarkStore(data_dir, clock=clock),
-        daily_runs=PathDailyRunStore(data_dir, clock=clock),
-        season_backfills=PathSeasonBackfillStore(data_dir, clock=clock),
+        raw_games=PathRawGameStore(root, clock=clock),
+        schedules=PathScheduleStore(root, clock=clock),
+        deferred_games=PathDeferredGameStore(root, clock=clock),
+        game_changes=PathGameChangesStore(root, clock=clock),
+        schedule_watermark=PathScheduleWatermarkStore(root, clock=clock),
+        game_changes_watermark=PathGameChangesWatermarkStore(root, clock=clock),
+        daily_runs=PathDailyRunStore(root, clock=clock),
+        season_backfills=PathSeasonBackfillStore(root, clock=clock),
     )
 
 
@@ -83,13 +87,4 @@ def s3_acquisition_storage(
     """
 
     root = cast(Path, S3ObjectBackend(client, bucket, prefix).root())
-    return AcquisitionStorage(
-        raw_games=PathRawGameStore(root, clock=clock),
-        schedules=PathScheduleStore(root, clock=clock),
-        deferred_games=PathDeferredGameStore(root, clock=clock),
-        game_changes=PathGameChangesStore(root, clock=clock),
-        schedule_watermark=PathScheduleWatermarkStore(root, clock=clock),
-        game_changes_watermark=PathGameChangesWatermarkStore(root, clock=clock),
-        daily_runs=PathDailyRunStore(root, clock=clock),
-        season_backfills=PathSeasonBackfillStore(root, clock=clock),
-    )
+    return _acquisition_storage(root, clock)

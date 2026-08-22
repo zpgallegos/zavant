@@ -66,6 +66,17 @@ class DeferredGameProcessingTests(unittest.TestCase):
         self.assertEqual(pending[0].game_pk, self.game.game_pk)
         self.assertEqual(pending[0].official_date, self.game.official_date)
 
+    def test_rejects_datetime_as_official_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, "official_date must be a date"):
+            self.store.defer(
+                game_pk=self.game.game_pk,
+                season=self.game.season,
+                official_date=OBSERVED_AT,
+                live_feed_link=self.game.live_feed_link,
+            )
+
+        self.assertEqual(self.store.pending(), ())
+
     def test_non_final_game_remains_until_a_later_final_response(self) -> None:
         self.defer_game()
         api = FakeMlbGameAcquisitionApi(

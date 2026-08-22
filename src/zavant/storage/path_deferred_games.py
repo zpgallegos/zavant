@@ -47,7 +47,7 @@ class PathDeferredGameStore:
             raise ValueError("game_pk must be a positive integer")
         if type(season) is not int or season <= 0:
             raise ValueError("season must be a positive integer")
-        if not isinstance(official_date, date):
+        if type(official_date) is not date:
             raise ValueError("official_date must be a date")
         if not isinstance(live_feed_link, str) or not live_feed_link:
             raise ValueError("live_feed_link must be a non-empty string")

@@ -3,15 +3,15 @@
 The `zavant-daily-workflow-prod` stack owns the Standard Step Functions state
 machine, its execution role and 30-day CloudWatch log group, the EventBridge
 Scheduler schedule, and Scheduler's start-execution role. It references the
-acquisition Lambda and analytical Glue job without owning either compute
+two acquisition Lambdas and analytical Glue job without owning any compute
 resource.
 
 The scheduled state machine runs:
 
 ```text
 EventBridge Scheduler
-    -> Run daily acquisition Lambda
-    -> retain any acquisition error
+    -> run Stats API and Baseball Savant Lambdas in parallel
+    -> retain either acquisition error independently
     -> start analytical Glue job with .sync
     -> wait for success
     -> report retained acquisition error, otherwise succeed
@@ -32,8 +32,8 @@ registry, so the next workflow reconciles them again.
 - Flexible delivery is disabled. A failed state-machine start can be retried
   twice for up to one hour.
 - Scheduler's role can only call `states:StartExecution` on this state machine.
-- The `{}` input is passed through to Lambda, selecting the ordinary current-date
-  acquisition boundary.
+- The `{}` input is passed through to both Lambdas. Stats API selects its
+  ordinary current-date boundary; Savant selects yesterday in UTC.
 
 The expression, timezone, and state are required values supplied from
 `ZAVANT_DAILY_SCHEDULE_*` in `.env`; the CloudFormation template has no fallback
@@ -47,7 +47,7 @@ make workflow-infra-validate
 make workflow-infra-deploy
 ```
 
-Deployment reads the Lambda ARN and Glue job name from the existing
+Deployment reads both Lambda ARNs and the Glue job name from the existing
 `zavant-acquisition-prod` and `zavant-analytics-prod` stack outputs. It then
 creates or updates the state machine and its schedule in one workflow-owned
 stack.
@@ -77,8 +77,8 @@ make workflow-start
 ```
 
 The default input is the checked-in empty JSON event. Override
-`DAILY_WORKFLOW_INPUT_FILE` with a JSON file containing
-`{"through_date":"YYYY-MM-DD"}` for a deterministic acquisition boundary. Use
+`DAILY_WORKFLOW_INPUT_FILE` with a JSON file containing source-specific
+`through_date` and `savant_through_date` values for deterministic boundaries. Use
 the returned execution ARN with `aws stepfunctions describe-execution` and
 confirm that both states succeeded.
 

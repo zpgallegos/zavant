@@ -7,17 +7,22 @@ from uuid import UUID
 
 import pyarrow.parquet as pq
 
-from zavant.contracts.raw_game import RawGameResponse
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameResponse
 from zavant.projection.contracts import (
-    PROJECTION_CONTRACT_VERSION,
     ProjectionContractError,
+)
+from zavant.projection.mlb_stats_api.contracts import (
+    PROJECTION_CONTRACT_VERSION,
     TABLE_CONTRACTS,
 )
-from zavant.projection.local import projection_sources, run_local_projection
-from zavant.projection.models import ProjectionSource
-from zavant.projection.projector import project_game
+from zavant.projection.mlb_stats_api.local import (
+    projection_sources,
+    run_local_projection,
+)
+from zavant.projection.mlb_stats_api.models import ProjectionSource
+from zavant.projection.mlb_stats_api.projector import project_game
 from zavant.storage._path_io import canonical_json_sha256
-from zavant.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

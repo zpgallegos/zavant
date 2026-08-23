@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from zavant.contracts.raw_game import RawGameContractError, RawGameResponse
-from zavant.storage.path_raw import PathRawGameStore, RawGameConflictError
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameContractError, RawGameResponse
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore, RawGameConflictError
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

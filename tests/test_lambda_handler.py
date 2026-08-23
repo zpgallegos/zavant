@@ -3,13 +3,13 @@ import json
 from typing import List
 import unittest
 
-from zavant.clients.mlb_stats_api import RetrievedResource
-from zavant.application import build_daily_coordinator
-from zavant.lambda_handler import (
+from zavant.ingestion.mlb_stats_api.client import RetrievedResource
+from zavant.ingestion.mlb_stats_api.application import build_daily_coordinator
+from zavant.ingestion.mlb_stats_api.lambda_handler import (
     LambdaApplication,
     LambdaConfiguration,
 )
-from zavant.storage.bundles import s3_acquisition_storage
+from zavant.ingestion.mlb_stats_api.storage.bundles import s3_acquisition_storage
 from tests.fake_s3 import FakeS3Client
 
 

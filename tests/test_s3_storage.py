@@ -3,13 +3,13 @@ from pathlib import Path
 import unittest
 from uuid import UUID
 
-from zavant.contracts.raw_game import RawGameResponse
-from zavant.contracts.schedule import ScheduleResponse
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameResponse
+from zavant.ingestion.mlb_stats_api.contracts.schedule import ScheduleResponse
 from zavant.storage.s3_objects import (
     S3ObjectBackend,
     S3ObjectWriteConflictError,
 )
-from zavant.storage.bundles import s3_acquisition_storage
+from zavant.ingestion.mlb_stats_api.storage.bundles import s3_acquisition_storage
 from tests.fake_s3 import FakeS3Client
 
 

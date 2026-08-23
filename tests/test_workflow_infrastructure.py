@@ -45,33 +45,60 @@ class DailyWorkflowInfrastructureTests(unittest.TestCase):
         ):
             self.assertNotIn("Default:", _parameter_block(workflow_template, parameter))
 
-    def test_state_machine_definition_sequences_lambda_then_synchronous_glue(self) -> None:
+    def test_state_machine_runs_isolated_acquisitions_before_synchronous_glue(
+        self,
+    ) -> None:
         definition = _state_machine_definition(WORKFLOW_TEMPLATE.read_text())
 
         self.assertEqual(definition["StartAt"], "Prepare workflow input")
         preparation = definition["States"]["Prepare workflow input"]
-        acquisition = definition["States"]["Run daily acquisition"]
+        acquisitions = definition["States"]["Run source acquisitions"]
         projection = definition["States"]["Run analytical projection"]
-        decision = definition["States"]["Did acquisition fail"]
-        self.assertEqual(preparation["Next"], "Run daily acquisition")
+        decision = definition["States"]["Did a source acquisition fail"]
+        self.assertEqual(preparation["Next"], "Run source acquisitions")
+        self.assertEqual(acquisitions["Type"], "Parallel")
+        self.assertEqual(len(acquisitions["Branches"]), 2)
+        branch_starts = {
+            branch["StartAt"] for branch in acquisitions["Branches"]
+        }
         self.assertEqual(
-            acquisition["Resource"], "arn:aws:states:::lambda:invoke"
+            branch_starts,
+            {"Run Stats API acquisition", "Run Baseball Savant acquisition"},
         )
-        self.assertEqual(acquisition["Parameters"]["Payload.$"], "$.request")
-        self.assertEqual(acquisition["Next"], "Run analytical projection")
-        self.assertEqual(
-            acquisition["Catch"][0]["Next"],
-            "Run analytical projection",
-        )
+        for branch in acquisitions["Branches"]:
+            task = branch["States"][branch["StartAt"]]
+            self.assertEqual(task["Resource"], "arn:aws:states:::lambda:invoke")
+            self.assertEqual(task["Parameters"]["Payload.$"], "$.request")
+            self.assertEqual(task["Catch"][0]["ErrorEquals"], ["States.ALL"])
+        self.assertEqual(acquisitions["Next"], "Run analytical projection")
         self.assertEqual(
             projection["Resource"], "arn:aws:states:::glue:startJobRun.sync"
         )
-        self.assertEqual(projection["Next"], "Did acquisition fail")
+        self.assertEqual(projection["Next"], "Did a source acquisition fail")
         self.assertEqual(decision["Default"], "Workflow complete")
-        self.assertEqual(
-            decision["Choices"][0]["Next"],
-            "Report acquisition failure",
+        self.assertEqual(len(decision["Choices"]), 2)
+        self.assertTrue(
+            all(
+                choice["Next"] == "Report acquisition failure"
+                for choice in decision["Choices"]
+            )
         )
+
+    def test_acquisition_stack_owns_separate_savant_lambda_and_role(self) -> None:
+        template = ACQUISITION_TEMPLATE.read_text()
+
+        self.assertIn(
+            "Handler: zavant.ingestion.mlb_stats_api.lambda_handler.lambda_handler",
+            template,
+        )
+        self.assertIn("BaseballSavantLambdaFunction:", template)
+        self.assertIn("BaseballSavantLambdaExecutionRole:", template)
+        self.assertIn(
+            "Handler: zavant.ingestion.baseball_savant.lambda_handler.lambda_handler",
+            template,
+        )
+        self.assertIn("/raw/baseball_savant/*", template)
+        self.assertIn("/state/baseball_savant/*", template)
 
     def test_workflow_role_can_monitor_and_stop_the_glue_job(self) -> None:
         template = WORKFLOW_TEMPLATE.read_text()
@@ -99,6 +126,10 @@ def _state_machine_definition(template: str) -> Dict[str, Any]:
     source = source.replace(
         "${AcquisitionLambdaArn}",
         "arn:aws:lambda:us-east-1:123456789012:function:acquisition",
+    )
+    source = source.replace(
+        "${BaseballSavantLambdaArn}",
+        "arn:aws:lambda:us-east-1:123456789012:function:baseball-savant",
     )
     source = source.replace("${AnalyticalProjectionJobName}", "projection-job")
     return cast(Dict[str, Any], json.loads(source))

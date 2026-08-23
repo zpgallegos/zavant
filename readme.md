@@ -30,10 +30,12 @@ MetricFlow, and serves the resulting product through Hex.
 ```mermaid
 flowchart LR
     api[MLB Stats API]
+    savant[Baseball Savant]
     scheduler[EventBridge Scheduler]
     workflow[Step Functions]
-    lambda[Lambda acquisition]
-    raw[(Revisioned JSON in S3)]
+    stats_lambda[Stats API Lambda]
+    savant_lambda[Savant Lambda]
+    raw[(Revisioned JSON and CSV in S3)]
     glue[Glue projection]
     iceberg[(Iceberg v2 tables)]
     athena[Athena]
@@ -42,9 +44,12 @@ flowchart LR
     hex[Hex player profile]
 
     scheduler --> workflow
-    workflow --> lambda
-    api --> lambda
-    lambda --> raw
+    workflow --> stats_lambda
+    workflow --> savant_lambda
+    api --> stats_lambda
+    savant --> savant_lambda
+    stats_lambda --> raw
+    savant_lambda --> raw
     workflow --> glue
     raw --> glue
     glue --> iceberg
@@ -62,6 +67,8 @@ deployment boundaries rather than being implied as steps in that state machine.
 
 - Exact MLB responses are retained as immutable evidence with request
   provenance and content-addressed game revisions.
+- Baseball Savant acquisition is isolated behind its own all-player,
+  one-date CSV client, Lambda, date revisions, run manifests, and watermark.
 - Schedule discovery, deferred-game processing, and corrected-game polling use
   independently advancing durable state, so one failure does not erase other
   successful work.
@@ -82,8 +89,8 @@ deployment boundaries rather than being implied as steps in that state machine.
 
 | Path | Responsibility |
 |---|---|
-| [`src/zavant/acquisition`](src/zavant/acquisition/) | Daily discovery, corrections, deferred games, bounded acquisition, and season backfills. |
-| [`src/zavant/storage`](src/zavant/storage/) | Storage protocols and shared revision-aware persistence over local files or S3 objects. |
+| [`src/zavant/ingestion`](src/zavant/ingestion/) | Shared HTTP boundaries plus isolated MLB Stats API and Baseball Savant clients, contracts, workflows, stores, and Lambda handlers. |
+| [`src/zavant/storage`](src/zavant/storage/) | Source-neutral artifact references and local/S3 path primitives. |
 | [`src/zavant/projection`](src/zavant/projection/) | Explicit JSON projections, analytical contracts, Iceberg reconciliation, and current views. |
 | [`infrastructure`](infrastructure/) | CloudFormation for acquisition, analytical projection, orchestration, and Hex access. |
 | [`dbt`](dbt/) | Staging, grain-first intermediates, facts, dimensions, tests, and MetricFlow definitions. |
@@ -149,7 +156,18 @@ The acquisition workflows create these layouts:
 ├── state/mlb_stats_api/
 │   ├── game_changes/watermark.json
 │   └── schedules/watermark.json
-└── runs/daily/run_date=2026-08-09/
+├── raw/baseball_savant/statcast_search/
+│   └── game_date=2026-08-08/
+│       ├── revision=<response-sha256>/
+│       │   ├── response.csv
+│       │   └── metadata.json
+│       └── current.json
+├── state/baseball_savant/statcast_search/watermark.json
+├── runs/daily/run_date=2026-08-09/
+│   └── run_id=<uuid>/manifest.json
+├── runs/baseball_savant/daily/run_date=2026-08-09/
+│   └── run_id=<uuid>/manifest.json
+└── runs/baseball_savant/backfill/run_date=2026-08-09/
     └── run_id=<uuid>/manifest.json
 ```
 
@@ -161,13 +179,57 @@ correction evidence under `raw/mlb_stats_api/backfill_game_changes/`.
 
 ## MLB API client
 
-[`MlbStatsApiClient`](src/zavant/clients/mlb_stats_api.py) provides typed methods for the three public resources currently in scope:
+[`MlbStatsApiClient`](src/zavant/ingestion/mlb_stats_api/client.py) provides typed methods for the three public resources currently in scope:
 
 - `get_schedule(start_date, end_date, sport_id=1)`
 - `get_game_changes(updated_since, sport_id=1, limit=1000, offset=0)`
 - `get_live_game(game_pk)`
 
 The client returns exact response bytes and HTTP provenance; the contract classes validate the resource-specific JSON afterward. Its standard-library transport is replaceable in tests, each request has an explicit timeout, and retry behavior is bounded and configurable.
+
+[`BaseballSavantClient`](src/zavant/ingestion/baseball_savant/client.py) is a separate
+source client that can request only one regular-season game date at a time. The
+daily Savant process requests all players, validates the current CSV schema and
+observed 25,000-row limit, lands exact response bytes, and reacquires a rolling
+seven-date window. The Glue projection publishes terminal batting outcomes to
+revision-aware Iceberg history and exposes current date revisions through
+`current_statcast_batting_events`.
+
+## Local Baseball Savant backfills
+
+Backfill an inclusive historical date range into the local lake with the same
+one-date, all-player request and immutable raw store used by daily Savant
+acquisition:
+
+```shell
+PYTHONPATH=src .venv/bin/python -m zavant backfill-savant \
+  --start-date 2025-03-27 \
+  --end-date 2025-09-28
+```
+
+The default `missing` mode skips dates that already have a current raw
+revision. Use `--mode verify` to reacquire every date and let content addressing
+identify unchanged responses or create new revisions. Requests are sequential
+and have a configurable 0.5-second delay; use `--request-delay-seconds` to
+change it. `--dry-run` writes the plan without making source requests.
+
+Backfill manifests are separate from daily manifests under
+`runs/baseball_savant/backfill/`. The command never reads or advances the daily
+Savant watermark. To resume only the failed dates from an interrupted or
+partially failed run, supply the `run_id` and `started_at` printed by the first
+invocation with the same range, mode, and request delay:
+
+```shell
+PYTHONPATH=src .venv/bin/python -m zavant backfill-savant \
+  --start-date 2025-03-27 \
+  --end-date 2025-09-28 \
+  --run-id <previous-run-id> \
+  --started-at <previous-started-at>
+```
+
+This command is deliberately local-only and defaults to `.local/lake`; select
+another local root with `--data-dir`. Its end date must be before the current
+UTC date so it cannot accidentally capture an incomplete current-day export.
 
 ## Bounded game acquisition
 
@@ -317,13 +379,18 @@ run, closing the crash window between checkpoint and parent-manifest publication
 
 ## S3 and Lambda application boundary
 
-The production handler is `zavant.lambda_handler.lambda_handler`. It composes the same API client, persistence state machines, and daily coordinator used locally, replacing only the object-storage machinery. Required Lambda configuration starts with:
+The production Stats API handler is
+`zavant.ingestion.mlb_stats_api.lambda_handler.lambda_handler`. It composes the
+same API client, persistence state machines, and daily coordinator used locally,
+replacing only the object-storage machinery. Required Lambda configuration
+starts with:
 
 ```text
 ZAVANT_S3_BUCKET=<bucket-name>
 ZAVANT_S3_PREFIX=lake
 ZAVANT_INITIAL_SCHEDULE_DATE=<first-schedule-date>
 ZAVANT_INITIAL_CORRECTION_WATERMARK=<first-known-safe-UTC-timestamp>
+ZAVANT_SAVANT_INITIAL_DATE=<first-daily-savant-date>
 ```
 
 The bucket is deliberately not created by the application. Its private,
@@ -342,10 +409,13 @@ failure. The schedule defaults to 6:00 AM
 `America/Los_Angeles` and follows daylight-saving time. Credentials are supplied
 by execution roles, never environment variables.
 
-The optional `through_date` event field supports deterministic smoke tests:
+The optional source-specific event boundaries support deterministic smoke tests:
 
 ```json
-{"through_date": "2026-08-09"}
+{
+  "through_date": "2026-08-09",
+  "savant_through_date": "2026-08-08"
+}
 ```
 
 Bootstrap configuration is consulted only while its corresponding watermark is absent. Thereafter the persisted S3 state is authoritative. If any daily branch fails, its manifest remains in S3 and the handler raises so the Lambda invocation is visibly unsuccessful.
@@ -392,6 +462,20 @@ excluded in favor of the game boxscore statistics. Local output is an
 inspection and contract-testing boundary. Production uses the same projection
 contracts in a Glue job that reconciles raw revisions into Iceberg tables;
 the scheduled Step Functions workflow runs that job after daily acquisition.
+
+Project local Savant backfill revisions independently with:
+
+```shell
+PYTHONPATH=src .venv/bin/python -m zavant project-savant-local \
+  --start-date 2025-03-27 \
+  --end-date 2025-09-28
+```
+
+This source-specific command writes `statcast_batting_events` and the
+`statcast_dates` completion-marker table below a unique local run directory.
+Only terminal CSV rows are projected because those rows carry the batting
+outcome and expected-stat values; the Stats API local projection contract is
+left unchanged.
 
 See the [target architecture](docs/architecture/target-architecture.md),
 [decision register](docs/architecture/README.md), and

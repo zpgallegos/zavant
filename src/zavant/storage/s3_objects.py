@@ -38,6 +38,11 @@ class S3ObjectSummary:
 class S3ObjectBackend:
     """Read, list, and conditionally write objects under one S3 prefix.
 
+    This is the production concurrency boundary for path-backed ingestion
+    state. Reads remember an ETag and later writes act as compare-and-swap, so
+    two Lambda invocations cannot silently overwrite each other's pointers or
+    watermarks.
+
     Args:
         client: Boto3-compatible S3 client.
         bucket: S3 bucket name.
@@ -149,7 +154,7 @@ class S3ObjectBackend:
         request: Dict[str, Any] = {
             "Body": content,
             "Bucket": self.bucket,
-            "ContentType": "application/json",
+            "ContentType": self._content_type(key),
             "Key": self._full_key(key),
         }
         if expected_version is None:
@@ -164,6 +169,8 @@ class S3ObjectBackend:
                     competing_content = self.read(key)
                 except OSError:
                     competing_content = None
+                # A racing writer that published the same deterministic bytes
+                # has already completed this idempotent transition for us.
                 if competing_content == content:
                     return
                 raise S3ObjectWriteConflictError(
@@ -183,7 +190,7 @@ class S3ObjectBackend:
         request: Dict[str, Any] = {
             "Body": content,
             "Bucket": self.bucket,
-            "ContentType": "application/json",
+            "ContentType": self._content_type(key),
             "Key": self._full_key(key),
         }
         try:
@@ -280,6 +287,10 @@ class S3ObjectBackend:
             raise OSError("S3 response has no ETag")
         return etag
 
+    @staticmethod
+    def _content_type(key: str) -> str:
+        return "text/csv" if key.lower().endswith(".csv") else "application/json"
+
     @classmethod
     def _is_missing(cls, exc: Exception) -> bool:
         return cls._error_code(exc) in {"404", "NoSuchKey", "NotFound"}
@@ -306,7 +317,11 @@ class S3ObjectBackend:
 
 
 class S3Path:
-    """Small path-like facade used by the shared persistence state machines."""
+    """Small path-like facade used by shared persistence state machines.
+
+    It intentionally implements only the ``Path`` operations those state
+    machines need; it is not intended to be a general S3 filesystem.
+    """
 
     def __init__(self, backend: S3ObjectBackend, key: str) -> None:
         self.backend = backend

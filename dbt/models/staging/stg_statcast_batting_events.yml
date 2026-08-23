@@ -1,0 +1,91 @@
+version: 2
+
+models:
+  - name: stg_statcast_batting_events
+    description: >-
+      Current Baseball Savant terminal batting outcomes, one row per game and
+      one-based at-bat number. This staging boundary exposes expected-outcome
+      values without joining them to Stats API plate appearances yet.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - game_date
+              - game_pk
+              - at_bat_number
+    columns:
+      - name: game_date
+        description: Official calendar date requested from Baseball Savant.
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: season
+        description: Calendar year used for physical partitioning.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: game_pk
+        description: MLB's stable game identifier.
+        data_type: bigint
+        data_tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Baseball Savant's one-based plate-appearance sequence in the game.
+        data_type: integer
+        data_tests:
+          - not_null
+
+      - name: pitch_number
+        description: One-based pitch number carrying the terminal event.
+        data_type: integer
+
+      - name: batter_id
+        description: MLB identifier of the batter credited on the Savant row.
+        data_type: bigint
+
+      - name: pitcher_id
+        description: MLB identifier of the pitcher credited on the Savant row.
+        data_type: bigint
+
+      - name: event
+        description: Baseball Savant terminal event classification.
+        data_type: varchar
+
+      - name: launch_speed
+        description: Exit velocity in miles per hour when tracked.
+        data_type: double
+
+      - name: launch_angle
+        description: Vertical launch angle in degrees when tracked.
+        data_type: double
+
+      - name: estimated_ba_using_speedangle
+        description: Statcast expected batting-average value for tracked contact.
+        data_type: double
+
+      - name: estimated_slg_using_speedangle
+        description: Statcast expected slugging value for tracked contact.
+        data_type: double
+
+      - name: estimated_woba_using_speedangle
+        description: Statcast expected wOBA value for tracked contact.
+        data_type: double
+
+      - name: woba_value
+        description: Actual event wOBA value supplied by Baseball Savant.
+        data_type: double
+
+      - name: woba_denom
+        description: Event contribution to the wOBA denominator.
+        data_type: double
+
+      - name: reconciled_at
+        description: UTC time when Glue last reconciled this date's current revision.
+        data_type: timestamp
+
+      - name: source_revision_id
+        description: Content hash of the current exact-date Savant CSV revision.
+        data_type: varchar

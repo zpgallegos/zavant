@@ -6,16 +6,16 @@ from typing import Dict, List
 import unittest
 from uuid import UUID
 
-from zavant.acquisition.corrected_games import CorrectedGameProcessor
-from zavant.clients.mlb_stats_api import (
+from zavant.ingestion.mlb_stats_api.acquisition.corrected_games import CorrectedGameProcessor
+from zavant.ingestion.mlb_stats_api.client import (
     MlbStatsApiError,
     MlbStatsApiResponseError,
     RetrievedResource,
 )
-from zavant.contracts.game_changes import GameChangesRequest, GameChangesResponse
-from zavant.contracts.raw_game import RawGameResponse
-from zavant.storage.path_game_changes import PathGameChangesStore
-from zavant.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.contracts.game_changes import GameChangesRequest, GameChangesResponse
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameResponse
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes import PathGameChangesStore
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
 from zavant.storage.artifacts import ArtifactReference
 
 

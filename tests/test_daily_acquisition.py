@@ -5,21 +5,21 @@ import tempfile
 import unittest
 from uuid import UUID
 
-from zavant.acquisition.bounded_games import BoundedGameAcquirer
-from zavant.acquisition.corrected_games import CorrectedGameProcessor
-from zavant.acquisition.daily import DailyAcquisitionCoordinator
-from zavant.acquisition.deferred_games import DeferredGameProcessor
-from zavant.acquisition.game_changes import GameChangesPoller
-from zavant.acquisition.schedule_discovery import ScheduleDiscoverer
-from zavant.storage.path_daily_runs import PathDailyRunStore
-from zavant.storage.path_deferred_games import PathDeferredGameStore
-from zavant.storage.path_game_changes import PathGameChangesStore
-from zavant.storage.path_game_changes_watermark import (
+from zavant.ingestion.mlb_stats_api.acquisition.bounded_games import BoundedGameAcquirer
+from zavant.ingestion.mlb_stats_api.acquisition.corrected_games import CorrectedGameProcessor
+from zavant.ingestion.mlb_stats_api.acquisition.daily import DailyAcquisitionCoordinator
+from zavant.ingestion.mlb_stats_api.acquisition.deferred_games import DeferredGameProcessor
+from zavant.ingestion.mlb_stats_api.acquisition.game_changes import GameChangesPoller
+from zavant.ingestion.mlb_stats_api.acquisition.schedule_discovery import ScheduleDiscoverer
+from zavant.ingestion.mlb_stats_api.storage.path_daily_runs import PathDailyRunStore
+from zavant.ingestion.mlb_stats_api.storage.path_deferred_games import PathDeferredGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes import PathGameChangesStore
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes_watermark import (
     PathGameChangesWatermarkStore,
 )
-from zavant.storage.path_raw import PathRawGameStore
-from zavant.storage.path_schedule import PathScheduleStore
-from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule import PathScheduleStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule_watermark import PathScheduleWatermarkStore
 from tests.test_bounded_game_acquisition import (
     FakeMlbGameAcquisitionApi,
     raw_game,

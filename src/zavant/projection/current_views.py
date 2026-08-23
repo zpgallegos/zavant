@@ -1,4 +1,9 @@
-"""Athena views exposing only the current revision of each analytical dataset."""
+"""Public Athena layer resolving revision history to current game state.
+
+The Iceberg tables retain every source revision. These views are the intended
+consumer surface when callers want current games and current Savant date
+snapshots without implementing revision resolution themselves.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,15 @@ import json
 from time import sleep
 from typing import Any, Callable, Dict, Mapping, Protocol
 
-from zavant.projection.contracts import TABLE_CONTRACTS, TableContract
+from zavant.projection.baseball_savant.contracts import (
+    CURRENT_STATCAST_DATE_REVISIONS_CONTRACT,
+    STATCAST_BATTING_EVENTS_CONTRACT,
+)
+from zavant.projection.contracts import TableContract
+from zavant.projection.mlb_stats_api.contracts import (
+    CURRENT_REVISION_CONTRACT,
+    TABLE_CONTRACTS,
+)
 from zavant.storage.s3_objects import S3ObjectBackend
 
 
@@ -54,14 +67,20 @@ def current_view_name(table_name: str) -> str:
 
 
 def all_current_views(database: str) -> tuple[CurrentView, ...]:
-    """Build deterministic current-state views for every analytical contract."""
+    """Build deterministic current-state views for both source projections."""
 
-    return tuple(
+    return (
+        *tuple(
+            CurrentView(
+                name=current_view_name(contract.name),
+                sql=create_current_view_sql(database, contract),
+            )
+            for contract in TABLE_CONTRACTS.values()
+        ),
         CurrentView(
-            name=current_view_name(contract.name),
-            sql=create_current_view_sql(database, contract),
-        )
-        for contract in TABLE_CONTRACTS.values()
+            name=current_view_name(STATCAST_BATTING_EVENTS_CONTRACT.name),
+            sql=create_current_statcast_view_sql(database),
+        ),
     )
 
 
@@ -81,8 +100,33 @@ def create_current_view_sql(database: str, contract: TableContract) -> str:
         f'CREATE OR REPLACE VIEW "{current_view_name(contract.name)}" AS\n'
         f"SELECT\n{selection}\n"
         f'FROM "{database}"."{contract.name}" AS history\n'
-        f'INNER JOIN "{database}"."current_game_revisions" AS current_revision\n'
+        f'INNER JOIN "{database}".'
+        f'"{CURRENT_REVISION_CONTRACT.name}" AS current_revision\n'
         '    ON history."game_pk" = current_revision."game_pk"\n'
+        '    AND history."source_revision_id" = '
+        'current_revision."source_revision_id"'
+    )
+
+
+def create_current_statcast_view_sql(database: str) -> str:
+    """Create the public Savant view resolved through current date pointers."""
+
+    contract = STATCAST_BATTING_EVENTS_CONTRACT
+    columns = [
+        f'    history."{column.name}"'
+        for column in contract.columns
+        if column.name not in PRIVATE_COLUMNS
+    ]
+    columns.append('    current_revision."reconciled_at"')
+    columns.append('    current_revision."source_revision_id"')
+    selection = ",\n".join(columns)
+    return (
+        f'CREATE OR REPLACE VIEW "{current_view_name(contract.name)}" AS\n'
+        f"SELECT\n{selection}\n"
+        f'FROM "{database}"."{contract.name}" AS history\n'
+        f'INNER JOIN "{database}".'
+        f'"{CURRENT_STATCAST_DATE_REVISIONS_CONTRACT.name}" AS current_revision\n'
+        '    ON history."game_date" = current_revision."game_date"\n'
         '    AND history."source_revision_id" = '
         'current_revision."source_revision_id"'
     )

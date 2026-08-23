@@ -4,15 +4,15 @@ import tempfile
 import unittest
 from uuid import UUID
 
-from zavant.acquisition.bounded_games import BoundedGameAcquirer
-from zavant.acquisition.schedule_discovery import (
+from zavant.ingestion.mlb_stats_api.acquisition.bounded_games import BoundedGameAcquirer
+from zavant.ingestion.mlb_stats_api.acquisition.schedule_discovery import (
     ScheduleDiscoverer,
     ScheduleWatermarkNotInitializedError,
 )
-from zavant.clients.mlb_stats_api import MlbStatsApiResponseError
-from zavant.storage.path_raw import PathRawGameStore
-from zavant.storage.path_schedule import PathScheduleStore
-from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
+from zavant.ingestion.mlb_stats_api.client import MlbStatsApiResponseError
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule import PathScheduleStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule_watermark import PathScheduleWatermarkStore
 from tests.test_bounded_game_acquisition import (
     FakeMlbGameAcquisitionApi,
     raw_game,

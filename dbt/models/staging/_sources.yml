@@ -59,6 +59,8 @@ sources:
         identifier: current_runner_movements
       - name: substitutions
         identifier: current_substitutions
+      - name: statcast_batting_events
+        identifier: current_statcast_batting_events
       - name: team_batting
         identifier: current_team_batting
       - name: team_fielding

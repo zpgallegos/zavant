@@ -21,7 +21,6 @@ class BackfillCliSafetyTests(unittest.TestCase):
     def settings(self, expected_account_id: str = "123456789012") -> Settings:
         return Settings(
             data_dir=Path(".local/lake"),
-            mlb_api_base_url="https://statsapi.example.test",
             s3_bucket="example-bucket",
             s3_prefix="lake",
             expected_aws_account_id=expected_account_id,
@@ -31,6 +30,22 @@ class BackfillCliSafetyTests(unittest.TestCase):
         args = build_parser().parse_args(["backfill-seasons", "2025"])
 
         self.assertEqual(args.storage, "local")
+
+    def test_savant_backfill_is_an_explicit_local_date_range(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "backfill-savant",
+                "--start-date",
+                "2025-03-27",
+                "--end-date",
+                "2025-09-28",
+            ]
+        )
+
+        self.assertEqual(args.start_date.isoformat(), "2025-03-27")
+        self.assertEqual(args.end_date.isoformat(), "2025-09-28")
+        self.assertEqual(args.mode, "missing")
+        self.assertFalse(hasattr(args, "storage"))
 
     def test_settings_read_aws_account_from_consistent_environment_name(
         self,
@@ -50,6 +65,20 @@ class BackfillCliSafetyTests(unittest.TestCase):
         )
 
         self.assertEqual(args.seasons, [2025, 2026])
+
+    def test_local_statcast_projection_accepts_date_bounds(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "project-savant-local",
+                "--start-date",
+                "2025-03-27",
+                "--end-date",
+                "2025-09-28",
+            ]
+        )
+
+        self.assertEqual(args.start_date.isoformat(), "2025-03-27")
+        self.assertEqual(args.end_date.isoformat(), "2025-09-28")
 
     def test_s3_backfill_verifies_expected_account(self) -> None:
         args = SimpleNamespace(bucket=None, storage="s3", prefix=None)

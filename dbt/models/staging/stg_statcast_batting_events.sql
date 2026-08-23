@@ -1,0 +1,19 @@
+select
+    game_date,
+    season,
+    game_pk,
+    at_bat_number,
+    pitch_number,
+    batter_id,
+    pitcher_id,
+    event,
+    launch_speed,
+    launch_angle,
+    estimated_ba_using_speedangle,
+    estimated_slg_using_speedangle,
+    estimated_woba_using_speedangle,
+    woba_value,
+    woba_denom,
+    reconciled_at,
+    source_revision_id
+from {{ source("zavant_analytical_prod", "statcast_batting_events") }}

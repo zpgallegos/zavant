@@ -15,7 +15,7 @@ One small S3 object backend supplies exact reads, paginated prefix listing, port
 
 Object writes remember the last observed ETag. Creating an absent object uses `If-None-Match: *`; updating an observed object uses `If-Match`. A failed precondition is accepted only when the competing object's exact bytes equal the intended bytes. Otherwise it becomes an explicit write conflict. This makes immutable duplicate publication idempotent while preventing stale mutable state from silently winning.
 
-`zavant.lambda_handler.lambda_handler` is the production composition boundary. It builds the MLB client, S3 storage bundle, and daily coordinator from environment variables and caches the composed application at module scope for warm-runtime reuse. The event may supply only a deterministic `through_date` override; ordinary EventBridge fields are ignored.
+`zavant.ingestion.mlb_stats_api.lambda_handler.lambda_handler` is the production composition boundary. It builds the MLB client, S3 storage bundle, and daily coordinator from environment variables and caches the composed application at module scope for warm-runtime reuse. The event may supply only a deterministic `through_date` override; ordinary EventBridge fields are ignored.
 
 Bootstrap values are passed only when the corresponding S3 watermark does not exist. A daily result containing any failed branch raises after its diagnostic run manifest is durable, causing Lambda to report a failed invocation and making platform retries and alarms meaningful.
 

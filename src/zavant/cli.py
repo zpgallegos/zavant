@@ -10,38 +10,58 @@ from typing import Any, Dict, Optional, Protocol, Sequence, cast
 from uuid import UUID, uuid4
 
 from zavant._time import as_utc
-from zavant.acquisition.bounded_games import BoundedGameAcquirer
-from zavant.acquisition.game_changes import (
+from zavant.ingestion.mlb_stats_api.acquisition.bounded_games import BoundedGameAcquirer
+from zavant.ingestion.baseball_savant.backfill import (
+    BaseballSavantBackfillMode,
+)
+from zavant.ingestion.mlb_stats_api.acquisition.game_changes import (
     GameChangesPoller,
     GameChangesPollingError,
 )
-from zavant.acquisition.season_backfill import SeasonBackfillMode
-from zavant.application import (
+from zavant.ingestion.mlb_stats_api.acquisition.season_backfill import SeasonBackfillMode
+from zavant.ingestion.baseball_savant.application import (
+    build_backfill_coordinator as build_baseball_savant_backfill_coordinator,
+)
+from zavant.ingestion.mlb_stats_api.application import (
     build_daily_coordinator,
     build_season_backfill_coordinator,
 )
-from zavant.clients.mlb_stats_api import (
+from zavant.ingestion.baseball_savant.client import (
+    DEFAULT_TIMEOUT_SECONDS as SAVANT_DEFAULT_TIMEOUT_SECONDS,
+    BaseballSavantClient,
+    BaseballSavantError,
+)
+from zavant.ingestion.baseball_savant.settings import BaseballSavantSettings
+from zavant.ingestion.mlb_stats_api.client import (
     DEFAULT_TIMEOUT_SECONDS,
     MlbStatsApiClient,
     MlbStatsApiError,
-    RetryPolicy,
 )
-from zavant.contracts.game_changes import GameChangesContractError
-from zavant.contracts.schedule import ScheduleContractError
+from zavant.ingestion.mlb_stats_api.settings import MlbStatsApiSettings
+from zavant.ingestion.http import RetryPolicy
+from zavant.ingestion.mlb_stats_api.contracts.game_changes import GameChangesContractError
+from zavant.ingestion.mlb_stats_api.contracts.schedule import ScheduleContractError
 from zavant.settings import Settings
-from zavant.storage.errors import (
+from zavant.ingestion.mlb_stats_api.storage.errors import (
     DailyRunConflictError,
     GameChangesConflictError,
     GameChangesWatermarkConflictError,
     ScheduleConflictError,
     SeasonBackfillConflictError,
 )
-from zavant.storage.bundles import (
+from zavant.ingestion.mlb_stats_api.storage.bundles import (
     AcquisitionStorage,
     local_acquisition_storage,
     s3_acquisition_storage,
 )
 from zavant.storage.s3_objects import S3Client
+from zavant.ingestion.baseball_savant.storage import (
+    BaseballSavantStorageError,
+    PathBaseballSavantStore,
+)
+from zavant.ingestion.baseball_savant.backfill_storage import (
+    PathBaseballSavantBackfillStore,
+)
 
 
 class StsClient(Protocol):
@@ -110,9 +130,17 @@ def _add_data_dir_option(
     parser.add_argument("--data-dir", type=Path, help=help_text)
 
 
-def _build_api_client(settings: Settings, args: Any) -> MlbStatsApiClient:
+def _build_api_client(args: Any) -> MlbStatsApiClient:
     return MlbStatsApiClient(
-        base_url=settings.mlb_api_base_url,
+        base_url=MlbStatsApiSettings.from_environment().base_url,
+        timeout_seconds=args.timeout_seconds,
+        retry_policy=RetryPolicy(max_attempts=args.max_attempts),
+    )
+
+
+def _build_savant_client(args: Any) -> BaseballSavantClient:
+    return BaseballSavantClient(
+        base_url=BaseballSavantSettings.from_environment().base_url,
         timeout_seconds=args.timeout_seconds,
         retry_policy=RetryPolicy(max_attempts=args.max_attempts),
     )
@@ -198,6 +226,38 @@ def build_parser() -> argparse.ArgumentParser:
     _add_http_options(backfill)
     _add_data_dir_option(backfill, "override ZAVANT_DATA_DIR for local storage")
 
+    savant_backfill = subparsers.add_parser(
+        "backfill-savant",
+        help="locally backfill Baseball Savant CSV exports by exact date",
+    )
+    savant_backfill.add_argument("--start-date", required=True, type=parse_iso_date)
+    savant_backfill.add_argument("--end-date", required=True, type=parse_iso_date)
+    savant_backfill.add_argument(
+        "--mode",
+        choices=tuple(mode.value for mode in BaseballSavantBackfillMode),
+        default=BaseballSavantBackfillMode.MISSING.value,
+    )
+    savant_backfill.add_argument("--dry-run", action="store_true")
+    savant_backfill.add_argument(
+        "--request-delay-seconds",
+        type=float,
+        default=0.5,
+        help="delay between source requests; defaults to 0.5 seconds",
+    )
+    savant_backfill.add_argument("--run-id", type=UUID, default=None)
+    savant_backfill.add_argument(
+        "--started-at", type=parse_utc_datetime, default=None
+    )
+    savant_backfill.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=SAVANT_DEFAULT_TIMEOUT_SECONDS,
+    )
+    savant_backfill.add_argument("--max-attempts", type=int, default=3)
+    _add_data_dir_option(
+        savant_backfill, "override ZAVANT_DATA_DIR for local storage"
+    )
+
     project_local = subparsers.add_parser(
         "project-local",
         help="project all local game revisions into inspectable Parquet tables",
@@ -218,6 +278,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_data_dir_option(project_local)
 
+    project_savant_local = subparsers.add_parser(
+        "project-savant-local",
+        help="project local Savant revisions into inspectable Parquet tables",
+    )
+    project_savant_local.add_argument("--start-date", type=parse_iso_date)
+    project_savant_local.add_argument("--end-date", type=parse_iso_date)
+    project_savant_local.add_argument("--run-id", type=UUID)
+    project_savant_local.add_argument("--projected-at", type=parse_utc_datetime)
+    project_savant_local.add_argument(
+        "--output-dir",
+        type=Path,
+        help="new output directory; defaults to a run below the local lake",
+    )
+    _add_data_dir_option(project_savant_local)
+
     return parser
 
 
@@ -228,7 +303,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     data_dir = args.data_dir or settings.data_dir
 
     if args.command == "project-local":
-        from zavant.projection.local import run_local_projection
+        from zavant.projection.mlb_stats_api.local import run_local_projection
 
         run_id = args.run_id or uuid4()
         output_dir = args.output_dir or (
@@ -247,13 +322,36 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(json.dumps(result.as_dict(), indent=2, sort_keys=True))
         return 0
 
+    if args.command == "project-savant-local":
+        from zavant.projection.baseball_savant.local import (
+            run_local_statcast_projection,
+        )
+
+        run_id = args.run_id or uuid4()
+        output_dir = args.output_dir or (
+            data_dir / "analytical" / "statcast_projection_runs" / f"run_id={run_id}"
+        )
+        try:
+            result = run_local_statcast_projection(
+                data_dir=data_dir,
+                output_dir=output_dir,
+                run_id=run_id,
+                projected_at=args.projected_at,
+                start_date=args.start_date,
+                end_date=args.end_date,
+            )
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(json.dumps(result.as_dict(), indent=2, sort_keys=True))
+        return 0
+
     if args.command == "acquire-games":
         if (args.run_id is None) != (args.requested_at is None):
             parser.error(
                 "--run-id and --requested-at must be supplied together for resumption"
             )
         try:
-            client = _build_api_client(settings, args)
+            client = _build_api_client(args)
             storage = local_acquisition_storage(data_dir)
             acquisition = BoundedGameAcquirer(
                 api=client,
@@ -280,7 +378,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "run-daily":
         try:
-            client = _build_api_client(settings, args)
+            client = _build_api_client(args)
             storage = local_acquisition_storage(data_dir)
             daily_result = build_daily_coordinator(client, storage).run(
                 initial_schedule_date=args.initial_schedule_date,
@@ -300,7 +398,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "poll-game-changes":
         try:
-            client = _build_api_client(settings, args)
+            client = _build_api_client(args)
             storage = local_acquisition_storage(data_dir)
             poll = GameChangesPoller(
                 api=client,
@@ -336,7 +434,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             parser.error("--run-id and --started-at must be supplied together")
         try:
             backfill_storage = _backfill_storage(args, settings, data_dir)
-            client = _build_api_client(settings, args)
+            client = _build_api_client(args)
             result = build_season_backfill_coordinator(
                 client, backfill_storage
             ).run(
@@ -356,6 +454,41 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             MlbStatsApiError,
             OSError,
             SeasonBackfillConflictError,
+            ValueError,
+        ) as exc:
+            parser.error(str(exc))
+
+        print(json.dumps(result.as_dict(), indent=2, sort_keys=True))
+        return 0 if result.successful else 1
+
+    if args.command == "backfill-savant":
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+        )
+        if (args.run_id is None) != (args.started_at is None):
+            parser.error("--run-id and --started-at must be supplied together")
+        try:
+            client = _build_savant_client(args)
+            raw_store = PathBaseballSavantStore(data_dir)
+            backfill_store = PathBaseballSavantBackfillStore(data_dir)
+            result = build_baseball_savant_backfill_coordinator(
+                client,
+                raw_store,
+                backfill_store,
+            ).run(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                mode=BaseballSavantBackfillMode(args.mode),
+                dry_run=args.dry_run,
+                request_delay_seconds=args.request_delay_seconds,
+                run_id=args.run_id,
+                started_at=args.started_at,
+            )
+        except (
+            BaseballSavantError,
+            BaseballSavantStorageError,
+            OSError,
             ValueError,
         ) as exc:
             parser.error(str(exc))

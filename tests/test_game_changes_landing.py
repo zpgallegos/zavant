@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from uuid import UUID
 
-from zavant.contracts.game_changes import (
+from zavant.ingestion.mlb_stats_api.contracts.game_changes import (
     GameChangesContractError,
     GameChangesRequest,
     GameChangesResponse,
 )
-from zavant.storage.path_game_changes import (
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes import (
     GameChangesConflictError,
     PathGameChangesStore,
 )

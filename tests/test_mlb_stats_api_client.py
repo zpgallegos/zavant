@@ -5,7 +5,7 @@ from typing import List, Mapping, Optional
 import unittest
 from urllib.parse import parse_qs, urlsplit
 
-from zavant.clients.mlb_stats_api import (
+from zavant.ingestion.mlb_stats_api.client import (
     HttpResponse,
     MlbStatsApiClient,
     MlbStatsApiResponseError,
@@ -13,7 +13,7 @@ from zavant.clients.mlb_stats_api import (
     MlbStatsApiUnavailableError,
     RetryPolicy,
 )
-from zavant.contracts.schedule import ScheduleResponse
+from zavant.ingestion.mlb_stats_api.contracts.schedule import ScheduleResponse
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

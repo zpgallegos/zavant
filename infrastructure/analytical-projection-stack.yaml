@@ -44,7 +44,7 @@ Resources:
   AnalyticalProjectionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: Reconciles MLB raw revisions and publishes current Athena views.
+      Description: Reconciles Stats API and Savant revisions into current views.
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -156,7 +156,7 @@ Resources:
     Type: AWS::Glue::Job
     Properties:
       Name: !Sub "zavant-analytical-projection-${EnvironmentName}"
-      Description: Reconciles raw game revisions and publishes current Athena views.
+      Description: Reconciles Stats API and Savant revisions into current views.
       Role: !GetAtt AnalyticalProjectionExecutionRole.Arn
       GlueVersion: "5.0"
       Command:

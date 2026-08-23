@@ -20,6 +20,10 @@ export ZAVANT_HEX_BYTES_SCANNED_CUTOFF
 export ZAVANT_HEX_DATABASE
 export ZAVANT_HEX_QUERY_RESULT_RETENTION_DAYS
 export ZAVANT_MLB_API_BASE_URL
+export ZAVANT_SAVANT_INITIAL_DATE
+export ZAVANT_SAVANT_BASE_URL
+export ZAVANT_SAVANT_LOOKBACK_DAYS
+export ZAVANT_SAVANT_MAX_DATES_PER_RUN
 export ZAVANT_S3_BUCKET
 export ZAVANT_S3_PREFIX
 
@@ -60,12 +64,18 @@ ACQUISITION_S3_PREFIX ?= $(call configuration_or_default, \
 ACQUISITION_INITIAL_SCHEDULE_DATE ?= $(ZAVANT_INITIAL_SCHEDULE_DATE)
 ACQUISITION_INITIAL_CORRECTION_WATERMARK ?= \
 	$(ZAVANT_INITIAL_CORRECTION_WATERMARK)
+ACQUISITION_SAVANT_INITIAL_DATE ?= $(ZAVANT_SAVANT_INITIAL_DATE)
+ACQUISITION_SAVANT_LOOKBACK_DAYS ?= $(call configuration_or_default, \
+	$(ZAVANT_SAVANT_LOOKBACK_DAYS),7)
+ACQUISITION_SAVANT_MAX_DATES_PER_RUN ?= $(call configuration_or_default, \
+	$(ZAVANT_SAVANT_MAX_DATES_PER_RUN),31)
 
 ACQUISITION_LAMBDA_BUILD_DIR := $(BUILD_DIR)/lambda
 ACQUISITION_LAMBDA_ARCHIVE := $(BUILD_DIR)/zavant-lambda.zip
 ACQUISITION_LAMBDA_CODE_PREFIX := deployments/lambda
 ACQUISITION_LAMBDA_EVENT_FILE ?= infrastructure/manual-event.json
 ACQUISITION_LAMBDA_RESPONSE_FILE ?= $(BUILD_DIR)/lambda-response.json
+SAVANT_LAMBDA_RESPONSE_FILE ?= $(BUILD_DIR)/savant-lambda-response.json
 
 # Analytical workload
 
@@ -130,6 +140,7 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	hex-infra-validate \
 	lambda-invoke \
 	lambda-package \
+	savant-lambda-invoke \
 	test \
 	workflow-check-schedule \
 	workflow-infra-deploy \
@@ -162,6 +173,7 @@ help:
 	@echo "hex-infra-outputs           show Hex connection settings"
 	@echo "workflow-infra-deploy       deploy the daily workflow and schedule"
 	@echo "lambda-invoke               manually invoke acquisition"
+	@echo "savant-lambda-invoke        manually invoke Baseball Savant acquisition"
 	@echo "glue-start                  manually start analytical projection"
 	@echo "workflow-start              manually start the complete workflow"
 
@@ -183,7 +195,7 @@ check: dbt-parse dbt-lint dbt-semantic-validate
 	@PYTHONPATH=src $(VENV_PYTHON) -m coverage erase
 	@PYTHONPATH=src $(VENV_PYTHON) -m coverage run -m unittest discover -s tests
 	@$(VENV_PYTHON) -m coverage report
-	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(VENV_PYTHON) -c 'import zavant; from zavant.lambda_handler import lambda_handler; assert callable(lambda_handler)'
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src $(VENV_PYTHON) -c 'import zavant; from zavant.ingestion.mlb_stats_api.lambda_handler import lambda_handler; from zavant.ingestion.baseball_savant.lambda_handler import lambda_handler as savant_handler; assert callable(lambda_handler) and callable(savant_handler)'
 
 dbt-deps:
 	@cd $(DBT_PROJECT_DIR) && $(VENV_DBT) deps
@@ -262,6 +274,10 @@ acquisition-check-bootstrap:
 		echo "ZAVANT_INITIAL_CORRECTION_WATERMARK is required" >&2; \
 		exit 1; \
 	fi
+	@if [ -z "$(ACQUISITION_SAVANT_INITIAL_DATE)" ]; then \
+		echo "ZAVANT_SAVANT_INITIAL_DATE is required" >&2; \
+		exit 1; \
+	fi
 
 workflow-check-schedule:
 	@if [ -z "$(DAILY_WORKFLOW_SCHEDULE_EXPRESSION)" ]; then \
@@ -289,14 +305,15 @@ acquisition-infra-bootstrap: aws-check-account
 		--tags Project=$(PROJECT_NAME) Component=acquisition Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
 
 lambda-package:
-	@rm -rf $(ACQUISITION_LAMBDA_BUILD_DIR) $(ACQUISITION_LAMBDA_ARCHIVE)
+	@rm -rf $(ACQUISITION_LAMBDA_BUILD_DIR) $(ACQUISITION_LAMBDA_ARCHIVE) $(BUILD_DIR)/lib
 	@mkdir -p $(ACQUISITION_LAMBDA_BUILD_DIR)
 	@$(VENV_PYTHON) -m pip install --quiet --no-compile \
 		--constraint $(PYTHON_CONSTRAINTS_FILE) \
 		--target $(ACQUISITION_LAMBDA_BUILD_DIR) \
 		.
 	@(cd $(ACQUISITION_LAMBDA_BUILD_DIR) && zip -q -r -X $(abspath $(ACQUISITION_LAMBDA_ARCHIVE)) .)
-	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=$(ACQUISITION_LAMBDA_BUILD_DIR) $(VENV_PYTHON) -S -c 'from zavant.lambda_handler import lambda_handler; assert callable(lambda_handler)'
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=$(ACQUISITION_LAMBDA_BUILD_DIR) $(VENV_PYTHON) -S -c 'from zavant.ingestion.mlb_stats_api.lambda_handler import lambda_handler; assert callable(lambda_handler)'
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=$(ACQUISITION_LAMBDA_BUILD_DIR) $(VENV_PYTHON) -S -c 'from zavant.ingestion.baseball_savant.lambda_handler import lambda_handler; assert callable(lambda_handler)'
 
 glue-package:
 	@rm -f $(ANALYTICAL_GLUE_LIBRARY_ARCHIVE)
@@ -328,6 +345,9 @@ acquisition-infra-deploy: \
 			AcquisitionPrefix=$(ACQUISITION_S3_PREFIX) \
 			InitialScheduleDate=$(ACQUISITION_INITIAL_SCHEDULE_DATE) \
 			InitialCorrectionWatermark=$(ACQUISITION_INITIAL_CORRECTION_WATERMARK) \
+			InitialSavantDate=$(ACQUISITION_SAVANT_INITIAL_DATE) \
+			SavantLookbackDays=$(ACQUISITION_SAVANT_LOOKBACK_DAYS) \
+			SavantMaximumDatesPerRun=$(ACQUISITION_SAVANT_MAX_DATES_PER_RUN) \
 			LambdaCodeS3Key="$$code_key" \
 		--tags Project=$(PROJECT_NAME) Component=acquisition Environment=$(DEPLOYMENT_ENVIRONMENT) ManagedBy=cloudformation
 
@@ -407,6 +427,11 @@ workflow-infra-deploy: aws-check-account workflow-check-schedule
 		--stack-name $(ACQUISITION_STACK_NAME) \
 		--query 'Stacks[0].Outputs[?OutputKey==`AcquisitionLambdaFunctionArn`].OutputValue | [0]' \
 		--output text)"; \
+	savant_lambda_arn="$$($(AWS_CLI) cloudformation describe-stacks \
+		--region $(AWS_REGION) \
+		--stack-name $(ACQUISITION_STACK_NAME) \
+		--query 'Stacks[0].Outputs[?OutputKey==`BaseballSavantLambdaFunctionArn`].OutputValue | [0]' \
+		--output text)"; \
 	job_name="$$($(AWS_CLI) cloudformation describe-stacks \
 		--region $(AWS_REGION) \
 		--stack-name $(ANALYTICAL_STACK_NAME) \
@@ -414,6 +439,10 @@ workflow-infra-deploy: aws-check-account workflow-check-schedule
 		--output text)"; \
 	if [ -z "$$lambda_arn" ] || [ "$$lambda_arn" = "None" ]; then \
 		echo "The acquisition Lambda stack output is required" >&2; \
+		exit 1; \
+	fi; \
+	if [ -z "$$savant_lambda_arn" ] || [ "$$savant_lambda_arn" = "None" ]; then \
+		echo "The Baseball Savant Lambda stack output is required" >&2; \
 		exit 1; \
 	fi; \
 	if [ -z "$$job_name" ] || [ "$$job_name" = "None" ]; then \
@@ -428,6 +457,7 @@ workflow-infra-deploy: aws-check-account workflow-check-schedule
 		--parameter-overrides \
 			EnvironmentName=$(DEPLOYMENT_ENVIRONMENT) \
 			AcquisitionLambdaArn="$$lambda_arn" \
+			BaseballSavantLambdaArn="$$savant_lambda_arn" \
 			AnalyticalProjectionJobName="$$job_name" \
 			DailyScheduleExpression="$(DAILY_WORKFLOW_SCHEDULE_EXPRESSION)" \
 			DailyScheduleTimezone=$(DAILY_WORKFLOW_SCHEDULE_TIMEZONE) \
@@ -442,6 +472,15 @@ lambda-invoke: aws-check-account
 		--cli-binary-format raw-in-base64-out \
 		--payload fileb://$(ACQUISITION_LAMBDA_EVENT_FILE) \
 		$(ACQUISITION_LAMBDA_RESPONSE_FILE)
+
+savant-lambda-invoke: aws-check-account
+	@mkdir -p $(dir $(SAVANT_LAMBDA_RESPONSE_FILE))
+	@$(AWS_CLI) lambda invoke \
+		--region $(AWS_REGION) \
+		--function-name $(PROJECT_NAME)-baseball-savant-daily-$(DEPLOYMENT_ENVIRONMENT) \
+		--cli-binary-format raw-in-base64-out \
+		--payload fileb://$(ACQUISITION_LAMBDA_EVENT_FILE) \
+		$(SAVANT_LAMBDA_RESPONSE_FILE)
 
 glue-start: aws-check-account
 	@job_name="$$($(AWS_CLI) cloudformation describe-stacks \

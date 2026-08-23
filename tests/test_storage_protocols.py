@@ -5,17 +5,17 @@ import tempfile
 import unittest
 
 from zavant.storage.artifacts import ArtifactReference
-from zavant.storage.path_daily_runs import PathDailyRunStore
-from zavant.storage.path_deferred_games import PathDeferredGameStore
-from zavant.storage.path_game_changes import PathGameChangesStore
-from zavant.storage.path_game_changes_watermark import (
+from zavant.ingestion.mlb_stats_api.storage.path_daily_runs import PathDailyRunStore
+from zavant.ingestion.mlb_stats_api.storage.path_deferred_games import PathDeferredGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes import PathGameChangesStore
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes_watermark import (
     PathGameChangesWatermarkStore,
 )
-from zavant.storage.path_raw import PathRawGameStore
-from zavant.storage.path_schedule import PathScheduleStore
-from zavant.storage.path_schedule_watermark import PathScheduleWatermarkStore
-from zavant.storage.path_season_backfills import PathSeasonBackfillStore
-from zavant.storage.protocols import (
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule import PathScheduleStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule_watermark import PathScheduleWatermarkStore
+from zavant.ingestion.mlb_stats_api.storage.path_season_backfills import PathSeasonBackfillStore
+from zavant.ingestion.mlb_stats_api.storage.protocols import (
     DailyRunStore,
     DeferredGameStore,
     GameChangesStore,

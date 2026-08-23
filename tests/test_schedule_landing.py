@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from uuid import UUID
 
-from zavant.contracts.schedule import (
+from zavant.ingestion.mlb_stats_api.contracts.schedule import (
     ScheduleContractError,
     ScheduleRequest,
     ScheduleResponse,
 )
-from zavant.storage.path_schedule import (
+from zavant.ingestion.mlb_stats_api.storage.path_schedule import (
     PathScheduleStore,
     ScheduleConflictError,
 )

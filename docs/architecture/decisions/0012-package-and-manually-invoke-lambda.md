@@ -13,7 +13,7 @@ Enabling a schedule at the same time would allow an unverified package, IAM poli
 
 Build a zip containing Zavant and a locked, application-owned Boto3 dependency tree. Import-check the packaged handler, hash the zip with SHA-256, and upload it beneath `deployments/lambda/<sha256>.zip` in the acquisition bucket. Pass that key to CloudFormation so a byte change produces an explicit function code update.
 
-Run `zavant.lambda_handler.lambda_handler` on Python 3.12 and ARM64 with 512 MB of memory and a 900-second timeout. Do not reserve concurrency: reduced-quota AWS accounts must retain their small concurrency allocation in the unreserved pool, while a daily schedule cannot naturally overlap a 15-minute invocation. Conditional S3 publication detects accidental competing writers rather than silently losing manifest or watermark state.
+Run `zavant.ingestion.mlb_stats_api.lambda_handler.lambda_handler` on Python 3.12 and ARM64 with 512 MB of memory and a 900-second timeout. Do not reserve concurrency: reduced-quota AWS accounts must retain their small concurrency allocation in the unreserved pool, while a daily schedule cannot naturally overlap a 15-minute invocation. Conditional S3 publication detects accidental competing writers rather than silently losing manifest or watermark state.
 
 Supply the generated bucket name, shared acquisition prefix, and bootstrap boundaries as environment variables from the stack. Create the function's log group explicitly with JSON logs and 30-day retention. Restrict the execution role to publishing in that log group rather than using account-wide log resources.
 

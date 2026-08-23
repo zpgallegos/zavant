@@ -3,24 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, Tuple
-
 from zavant.projection.contracts import Column, TableContract
-
-
-CURRENT_REVISION_CONTRACT = TableContract(
-    name="current_game_revisions",
-    columns=(
-        Column("game_pk", "int64", False),
-        Column("season", "int32", False),
-        Column("source_revision_id", "string", False),
-        Column("projection_contract_version", "string", False),
-        Column("projection_run_id", "string", False),
-        Column("reconciled_at", "timestamp", False),
-        Column("raw_object_uri", "string", False),
-    ),
-    primary_key=("game_pk",),
-)
 
 
 def qualified_table(catalog: str, database: str, table: str) -> str:
@@ -94,15 +77,6 @@ def merge_table_sql(
         f"  {assignments}\n"
         f"WHEN NOT MATCHED THEN INSERT ({column_names})\n"
         f"VALUES ({source_columns})"
-    )
-
-
-def all_iceberg_contracts(
-    analytical_contracts: Iterable[TableContract],
-) -> Tuple[TableContract, ...]:
-    return (
-        *tuple(analytical_contracts),
-        CURRENT_REVISION_CONTRACT,
     )
 
 

@@ -6,11 +6,22 @@ import unittest
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
-from zavant.contracts.raw_game import RawGameResponse
-from zavant.projection.contracts import TABLE_CONTRACTS
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameResponse
+from zavant.projection.baseball_savant.contracts import (
+    STATCAST_BATTING_EVENTS_CONTRACT,
+    STATCAST_DATES_CONTRACT,
+)
+from zavant.projection.baseball_savant.models import StatcastDateProjection
+from zavant.projection.baseball_savant.s3_sources import (
+    CurrentStatcastRevisionDiscovery,
+    StatcastProjectionInventory,
+    StatcastProjectionRevision,
+)
+from zavant.projection.mlb_stats_api.contracts import TABLE_CONTRACTS
 from zavant.projection.current_views import (
     PRIVATE_COLUMNS,
     all_current_views,
+    create_current_statcast_view_sql,
     create_current_view_sql,
     current_views_need_publication,
     publish_current_views,
@@ -18,6 +29,7 @@ from zavant.projection.current_views import (
 )
 from zavant.projection.glue_job import (
     GlueProjectionConfiguration,
+    _all_projection_contracts,
     _analytical_merge_contracts,
     _completed_projections,
     _ensure_tables,
@@ -25,7 +37,7 @@ from zavant.projection.glue_job import (
     run_glue_projection,
 )
 from zavant.projection.iceberg import create_table_sql, merge_table_sql
-from zavant.projection.s3_sources import (
+from zavant.projection.mlb_stats_api.s3_sources import (
     CurrentRevisionCacheEntry,
     CurrentRevisionDiscovery,
     ProjectionInventory,
@@ -37,8 +49,8 @@ from zavant.projection.s3_sources import (
     pending_revisions,
     resolve_current_revisions,
 )
-from zavant.projection.models import GameProjection
-from zavant.storage.bundles import s3_acquisition_storage
+from zavant.projection.mlb_stats_api.models import GameProjection
+from zavant.ingestion.mlb_stats_api.storage.bundles import s3_acquisition_storage
 from zavant.storage.s3_objects import S3ObjectBackend
 from tests.fake_s3 import FakeS3Client
 
@@ -250,8 +262,8 @@ class IcebergDefinitionTests(unittest.TestCase):
         )
         existing = {
             contract.name
-            for contract in (*TABLE_CONTRACTS.values(),)
-        } | {"current_game_revisions"}
+            for contract in _all_projection_contracts()
+        }
 
         with patch("zavant.projection.glue_job._validate_table_schema"):
             _ensure_tables(spark, configuration, existing)
@@ -265,7 +277,10 @@ class CurrentViewTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(view.name for view in views),
-            tuple(f"current_{name}" for name in TABLE_CONTRACTS),
+            (
+                *(f"current_{name}" for name in TABLE_CONTRACTS),
+                f"current_{STATCAST_BATTING_EVENTS_CONTRACT.name}",
+            ),
         )
 
     def test_current_view_resolves_revision_without_exposing_revision_keys(self) -> None:
@@ -293,6 +308,20 @@ class CurrentViewTests(unittest.TestCase):
         self.assertIn('current_revision."reconciled_at"', sql)
         self.assertIn('current_revision."source_revision_id"', sql)
 
+    def test_statcast_view_resolves_current_date_revision(self) -> None:
+        sql = create_current_statcast_view_sql("zavant_analytical_prod")
+
+        self.assertIn(
+            'CREATE OR REPLACE VIEW "current_statcast_batting_events"', sql
+        )
+        self.assertIn(
+            'history."game_date" = current_revision."game_date"', sql
+        )
+        self.assertIn(
+            '"current_statcast_date_revisions" AS current_revision', sql
+        )
+        self.assertIn('current_revision."source_revision_id"', sql)
+
     def test_publisher_waits_for_each_athena_ddl(self) -> None:
         client = _FakeAthenaClient()
 
@@ -305,8 +334,12 @@ class CurrentViewTests(unittest.TestCase):
             wait=lambda _seconds: None,
         )
 
-        self.assertEqual(len(client.started), len(TABLE_CONTRACTS))
-        self.assertEqual(len(client.inspected), len(TABLE_CONTRACTS))
+        self.assertEqual(
+            len(client.started), len(TABLE_CONTRACTS) + 1
+        )
+        self.assertEqual(
+            len(client.inspected), len(TABLE_CONTRACTS) + 1
+        )
         first = client.started[0]
         self.assertEqual(first["WorkGroup"], "primary")
         self.assertEqual(
@@ -343,6 +376,24 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             table_rows={name: () for name in TABLE_CONTRACTS},
             event_kind_counts={},
         )
+        self.statcast_revision = StatcastProjectionRevision(
+            game_date=OBSERVED_AT.date(),
+            revision_id="statcast-revision-one",
+            raw_key=(
+                "raw/baseball_savant/statcast_search/game_date=2026-08-09/"
+                "revision=statcast-revision-one/response.csv"
+            ),
+            metadata_key=(
+                "raw/baseball_savant/statcast_search/game_date=2026-08-09/"
+                "revision=statcast-revision-one/metadata.json"
+            ),
+        )
+        self.statcast_projection = StatcastDateProjection(
+            table_rows={
+                STATCAST_BATTING_EVENTS_CONTRACT.name: (),
+                STATCAST_DATES_CONTRACT.name: (),
+            }
+        )
 
     def test_merges_completion_marker_after_every_analytical_table(self) -> None:
         spark = _FakeSpark()
@@ -352,9 +403,17 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             patch("zavant.projection.glue_job._ensure_tables"),
             patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
             patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
+            patch(
+                "zavant.projection.glue_job._current_statcast_revision_cache",
+                return_value={},
+            ),
             patch("zavant.projection.glue_job.publish_current_views"),
             patch(
                 "zavant.projection.glue_job._completed_projections",
+                return_value=set(),
+            ),
+            patch(
+                "zavant.projection.glue_job._completed_statcast_projections",
                 return_value=set(),
             ),
             patch(
@@ -417,9 +476,17 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             patch("zavant.projection.glue_job._ensure_tables"),
             patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
             patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
+            patch(
+                "zavant.projection.glue_job._current_statcast_revision_cache",
+                return_value={},
+            ),
             patch("zavant.projection.glue_job.publish_current_views"),
             patch(
                 "zavant.projection.glue_job._completed_projections",
+                return_value=set(),
+            ),
+            patch(
+                "zavant.projection.glue_job._completed_statcast_projections",
                 return_value=set(),
             ),
             patch(
@@ -464,6 +531,98 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
         merge_rows.assert_not_called()
         self.assertTrue(spark.last_rdd.unpersisted)
 
+    def test_merges_statcast_date_marker_before_current_mapping(self) -> None:
+        spark = _FakeSpark()
+        events = []
+
+        with (
+            patch("zavant.projection.glue_job._ensure_tables"),
+            patch(
+                "zavant.projection.glue_job._existing_catalog_tables",
+                return_value=set(),
+            ),
+            patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
+            patch(
+                "zavant.projection.glue_job._current_statcast_revision_cache",
+                return_value={},
+            ),
+            patch("zavant.projection.glue_job.publish_current_views"),
+            patch(
+                "zavant.projection.glue_job._completed_projections",
+                return_value=set(),
+            ),
+            patch(
+                "zavant.projection.glue_job._completed_statcast_projections",
+                return_value=set(),
+            ),
+            patch(
+                "zavant.projection.glue_job.discover_projection_inventory",
+                return_value=ProjectionInventory((), ()),
+            ),
+            patch(
+                "zavant.projection.glue_job.resolve_current_revisions",
+                return_value=CurrentRevisionDiscovery((), ()),
+            ),
+            patch(
+                "zavant.projection.glue_job.discover_statcast_projection_inventory",
+                return_value=StatcastProjectionInventory(
+                    (self.statcast_revision,), ()
+                ),
+            ),
+            patch(
+                "zavant.projection.glue_job.resolve_current_statcast_revisions",
+                return_value=CurrentStatcastRevisionDiscovery(
+                    (self.statcast_revision,),
+                    (self.statcast_revision,),
+                ),
+            ),
+            patch(
+                "zavant.projection.glue_job._project_statcast_partition",
+                return_value=iter((self.statcast_projection,)),
+            ),
+            patch("zavant.projection.glue_job._spark_schema", return_value=object()),
+            patch(
+                "zavant.projection.glue_job._merge_dataframe",
+                side_effect=lambda _spark, _configuration, contract, _frame: events.append(
+                    contract.name
+                ),
+            ),
+            patch(
+                "zavant.projection.glue_job._merge_rows",
+                side_effect=lambda _spark, _configuration, contract, _rows: events.append(
+                    contract.name
+                ),
+            ),
+            patch(
+                "zavant.projection.glue_job.import_module",
+                return_value=SimpleNamespace(
+                    StorageLevel=SimpleNamespace(MEMORY_AND_DISK="memory-and-disk")
+                ),
+            ),
+        ):
+            result = run_glue_projection(
+                spark,
+                FakeS3Client(),
+                _FakeAthenaClient(),
+                _FakeGlueClient(),
+                self.configuration,
+                self.run_id,
+                OBSERVED_AT,
+            )
+
+        self.assertEqual(
+            events,
+            [
+                "statcast_batting_events",
+                "statcast_dates",
+                "current_statcast_date_revisions",
+            ],
+        )
+        self.assertEqual(result.projected_revision_count, 0)
+        self.assertEqual(result.projected_statcast_date_revision_count, 1)
+        self.assertEqual(result.current_statcast_date_revision_count, 1)
+        self.assertTrue(spark.last_rdd.unpersisted)
+
     def test_failed_view_publication_does_not_advance_current_mapping(self) -> None:
         spark = _FakeSpark()
 
@@ -472,8 +631,16 @@ class GlueProjectionCoordinatorTests(unittest.TestCase):
             patch("zavant.projection.glue_job._existing_catalog_tables", return_value=set()),
             patch("zavant.projection.glue_job._current_revision_cache", return_value={}),
             patch(
+                "zavant.projection.glue_job._current_statcast_revision_cache",
+                return_value={},
+            ),
+            patch(
                 "zavant.projection.glue_job._completed_projections",
                 return_value={self.revision.completed_identity()},
+            ),
+            patch(
+                "zavant.projection.glue_job._completed_statcast_projections",
+                return_value=set(),
             ),
             patch(
                 "zavant.projection.glue_job.discover_projection_inventory",

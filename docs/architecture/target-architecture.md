@@ -82,22 +82,27 @@ the workflow reports the retained acquisition error.
 - Object paths are deterministic and include named partitions.
 - Every landed object has provenance metadata and a checksum.
 - Filesystem-backed execution is first-class, not a mock of the cloud implementation.
+- Local Baseball Savant backfills reuse the exact-date raw revision store but
+  keep resumable run manifests separate from the production daily watermark.
 - Production acquisition runs as one Lambda over a conditionally written S3
   prefix and is invoked by the daily state machine rather than directly by its
   schedule.
-- Analytical datasets use explicit grain-specific contracts; pitches and
-  batted-ball metrics are extensions of a skinny play-event spine.
+- Analytical datasets use explicit source- and grain-specific contracts;
+  Stats API pitches and batted-ball metrics extend a skinny play-event spine,
+  while Savant terminal batting outcomes retain their independent date
+  revision identity.
 - Every analytical row retains its source revision; the projection contract is
   lineage for the single active analytical generation.
 - Local analytical runs publish atomic Parquet snapshots; production tables use
   Iceberg format version 2 in S3 and the Glue Data Catalog for Athena access.
 - Production projection scans every immutable raw revision rather than relying
-  on the preceding acquisition manifest. The terminal `games` merge makes
-  retries repair partial multi-table publication. Glue-owned `current_*`
-  Athena views resolve `current_game_revisions` and give dbt business-grained
-  current state without revision keys.
+  on the preceding acquisition manifest. The terminal `games` and
+  `statcast_dates` merges make retries repair partial multi-table publication.
+  Glue-owned `current_*` Athena views resolve the source-specific game and date
+  revision mappings and give dbt business-grained current state.
 - The daily workflow stack owns EventBridge Scheduler and the Step Functions
-  Standard workflow that sequences acquisition and one batch Glue projection;
+  Standard workflow that runs isolated Stats API and Baseball Savant
+  acquisitions in parallel before one batch Glue projection;
   later dbt execution can become a subsequent state.
 - Hex synchronizes the source-controlled MetricFlow definitions through a
   GitHub Actions context workflow and queries Athena through a dedicated

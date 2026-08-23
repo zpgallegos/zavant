@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from importlib import import_module
 import logging
 import sys
@@ -13,11 +13,28 @@ from time import monotonic
 from typing import Any, Dict, Iterable, Iterator, Mapping, Protocol, Sequence, Set, cast
 from uuid import UUID, uuid4
 
+from zavant.projection.baseball_savant.contracts import (
+    CURRENT_STATCAST_DATE_REVISIONS_CONTRACT,
+    STATCAST_DATES_CONTRACT,
+    STATCAST_HISTORY_CONTRACTS,
+    STATCAST_ICEBERG_CONTRACTS,
+    STATCAST_PROJECTION_CONTRACT_VERSION,
+)
+from zavant.projection.baseball_savant.models import StatcastDateProjection
+from zavant.projection.baseball_savant.projector import project_statcast_date
+from zavant.projection.baseball_savant.s3_sources import (
+    CompletedStatcastProjection,
+    CurrentStatcastRevisionCacheEntry,
+    StatcastProjectionRevision,
+    discover_statcast_projection_inventory,
+    load_statcast_projection_source,
+    pending_statcast_revisions,
+    resolve_current_statcast_revisions,
+    validate_current_statcast_revisions,
+)
 from zavant.projection.contracts import (
-    PROJECTION_CONTRACT_VERSION,
     Column,
     TableContract,
-    TABLE_CONTRACTS,
 )
 from zavant.projection.current_views import (
     AthenaClient,
@@ -26,15 +43,18 @@ from zavant.projection.current_views import (
     record_current_view_publication,
 )
 from zavant.projection.iceberg import (
-    CURRENT_REVISION_CONTRACT,
-    all_iceberg_contracts,
     create_table_sql,
     merge_table_sql,
     qualified_table,
 )
-from zavant.projection.models import GameProjection
-from zavant.projection.projector import project_game
-from zavant.projection.s3_sources import (
+from zavant.projection.mlb_stats_api.contracts import (
+    CURRENT_REVISION_CONTRACT,
+    PROJECTION_CONTRACT_VERSION,
+    TABLE_CONTRACTS,
+)
+from zavant.projection.mlb_stats_api.models import GameProjection
+from zavant.projection.mlb_stats_api.projector import project_game
+from zavant.projection.mlb_stats_api.s3_sources import (
     CompletedProjection,
     CurrentRevisionCacheEntry,
     ProjectionRevision,
@@ -107,14 +127,24 @@ class GlueProjectionResult:
     run_id: UUID
     current_revision_count: int
     projected_revision_count: int
+    current_statcast_date_revision_count: int
+    projected_statcast_date_revision_count: int
     contract_version: str = PROJECTION_CONTRACT_VERSION
+    statcast_contract_version: str = STATCAST_PROJECTION_CONTRACT_VERSION
 
     def as_dict(self) -> Dict[str, Any]:
         return {
             "contract_version": self.contract_version,
             "current_revision_count": self.current_revision_count,
+            "current_statcast_date_revision_count": (
+                self.current_statcast_date_revision_count
+            ),
             "projected_revision_count": self.projected_revision_count,
+            "projected_statcast_date_revision_count": (
+                self.projected_statcast_date_revision_count
+            ),
             "run_id": str(self.run_id),
+            "statcast_contract_version": self.statcast_contract_version,
         }
 
 
@@ -127,11 +157,12 @@ def run_glue_projection(
     run_id: UUID,
     projected_at: datetime,
 ) -> GlueProjectionResult:
-    """Reconcile all immutable S3 revisions and publish missing ones to Iceberg.
+    """Reconcile Stats API and Savant raw revisions into Iceberg history.
 
-    The one-row-per-revision ``games`` table is merged last and acts as the
-    completion marker. A retry therefore reprocesses partially committed
-    revisions and repairs them through deterministic natural-key merges.
+    ``games`` and ``statcast_dates`` are the source-specific completion marker
+    tables. A retry therefore reprocesses partially committed revisions and
+    repairs them through deterministic natural-key merges before either source's
+    current mapping is advanced.
     """
 
     if projected_at.utcoffset() is None:
@@ -153,20 +184,36 @@ def run_glue_projection(
     )
     with _timed_phase("current_revision_cache"):
         current_cache = _current_revision_cache(spark, configuration)
+        current_statcast_cache = _current_statcast_revision_cache(
+            spark, configuration
+        )
     with _timed_phase("s3_projection_inventory"):
         inventory = discover_projection_inventory(backend)
+        statcast_inventory = discover_statcast_projection_inventory(backend)
     with _timed_phase("current_pointer_resolution"):
         current_discovery = resolve_current_revisions(
             backend,
             inventory.current_pointers,
             current_cache,
         )
+        current_statcast_discovery = resolve_current_statcast_revisions(
+            backend,
+            statcast_inventory.current_pointers,
+            current_statcast_cache,
+        )
     with _timed_phase("completed_revision_scan"):
         completed = _completed_projections(spark, configuration)
+        completed_statcast = _completed_statcast_projections(spark, configuration)
     revisions = inventory.revisions
     current = current_discovery.revisions
     validate_current_revisions(revisions, current)
     pending = pending_revisions(revisions, completed)
+    statcast_revisions = statcast_inventory.revisions
+    current_statcast = current_statcast_discovery.revisions
+    validate_current_statcast_revisions(statcast_revisions, current_statcast)
+    pending_statcast = pending_statcast_revisions(
+        statcast_revisions, completed_statcast
+    )
     LOGGER.info(
         "projection reconciliation discovered revisions=%d current=%d "
         "pointers_read=%d pending=%d",
@@ -174,6 +221,14 @@ def run_glue_projection(
         len(current),
         len(current_discovery.refreshed),
         len(pending),
+    )
+    LOGGER.info(
+        "Statcast projection reconciliation discovered revisions=%d current=%d "
+        "pointers_read=%d pending=%d",
+        len(statcast_revisions),
+        len(current_statcast),
+        len(current_statcast_discovery.refreshed),
+        len(pending_statcast),
     )
 
     projection_rdd: Any = None
@@ -197,6 +252,8 @@ def run_glue_projection(
                 raise RuntimeError(
                     "projected game count does not match pending revision count"
                 )
+            # games is intentionally last: its row declares that every table
+            # for a revision has been merged successfully.
             for contract in _analytical_merge_contracts():
                 rows = projection_rdd.flatMap(
                     lambda projection, name=contract.name: projection.table_rows[name]
@@ -207,10 +264,47 @@ def run_glue_projection(
         finally:
             projection_rdd.unpersist()
 
+    statcast_projection_rdd: Any = None
+    if pending_statcast:
+        partitions = min(
+            len(pending_statcast), configuration.max_projection_partitions
+        )
+        candidates = spark.sparkContext.parallelize(
+            list(pending_statcast), partitions
+        )
+        statcast_projection_rdd = candidates.mapPartitions(
+            lambda values: _project_statcast_partition(
+                values,
+                configuration.bucket,
+                configuration.prefix,
+                run_id,
+                projected_at_utc,
+            )
+        )
+        storage_level = import_module("pyspark").StorageLevel.MEMORY_AND_DISK
+        statcast_projection_rdd.persist(storage_level)
+        try:
+            projected_count = statcast_projection_rdd.count()
+            if projected_count != len(pending_statcast):
+                raise RuntimeError(
+                    "projected Statcast date count does not match pending revision count"
+                )
+            for contract in STATCAST_HISTORY_CONTRACTS:
+                rows = statcast_projection_rdd.flatMap(
+                    lambda projection, name=contract.name: projection.table_rows[name]
+                )
+                dataframe = spark.createDataFrame(
+                    rows, _spark_schema(contract.columns)
+                )
+                with _timed_phase(f"merge_{contract.name}"):
+                    _merge_dataframe(spark, configuration, contract, dataframe)
+        finally:
+            statcast_projection_rdd.unpersist()
+
     with _timed_phase("current_view_publication"):
         expected_history_tables = {
             contract.name
-            for contract in all_iceberg_contracts(TABLE_CONTRACTS.values())
+            for contract in _all_projection_contracts()
         }
         view_catalog = (
             existing_tables
@@ -232,6 +326,9 @@ def run_glue_projection(
         else:
             LOGGER.info("current analytical view definitions are unchanged")
 
+    # History publication and current-state selection are separate concerns.
+    # Updating these rows is what makes a newly projected revision visible via
+    # the public current_* views.
     current_rows = [
         {
             "game_pk": revision.game_pk,
@@ -252,10 +349,32 @@ def run_glue_projection(
                 CURRENT_REVISION_CONTRACT,
                 current_rows,
             )
+    current_statcast_rows = [
+        {
+            "game_date": revision.game_date,
+            "season": revision.season,
+            "source_revision_id": revision.revision_id,
+            "projection_contract_version": STATCAST_PROJECTION_CONTRACT_VERSION,
+            "projection_run_id": str(run_id),
+            "reconciled_at": projected_at_utc,
+            "raw_object_uri": backend.uri(revision.raw_key),
+        }
+        for revision in current_statcast
+    ]
+    if current_statcast_rows:
+        with _timed_phase("current_statcast_revision_merge"):
+            _merge_rows(
+                spark,
+                configuration,
+                CURRENT_STATCAST_DATE_REVISIONS_CONTRACT,
+                current_statcast_rows,
+            )
     return GlueProjectionResult(
         run_id=run_id,
         current_revision_count=len(current),
         projected_revision_count=len(pending),
+        current_statcast_date_revision_count=len(current_statcast),
+        projected_statcast_date_revision_count=len(pending_statcast),
     )
 
 
@@ -312,13 +431,41 @@ def _project_partition(
         )
 
 
+def _project_statcast_partition(
+    revisions: Iterable[StatcastProjectionRevision],
+    bucket: str,
+    prefix: str,
+    run_id: UUID,
+    projected_at: datetime,
+) -> Iterator[StatcastDateProjection]:
+    """Project Savant date revisions inside one Spark worker partition."""
+
+    boto3 = import_module("boto3")
+    backend = S3ObjectBackend(cast(S3Client, boto3.client("s3")), bucket, prefix)
+    for revision in revisions:
+        yield project_statcast_date(
+            load_statcast_projection_source(backend, revision),
+            run_id=run_id,
+            projected_at=projected_at,
+        )
+
+
+def _all_projection_contracts() -> tuple[TableContract, ...]:
+    """Return every Iceberg history and control contract owned by this job."""
+
+    return (
+        *TABLE_CONTRACTS.values(),
+        CURRENT_REVISION_CONTRACT,
+        *STATCAST_ICEBERG_CONTRACTS,
+    )
+
+
 def _ensure_tables(
     spark: Any,
     configuration: GlueProjectionConfiguration,
     existing_tables: Set[str],
 ) -> None:
-    contracts = all_iceberg_contracts(TABLE_CONTRACTS.values())
-    for contract in contracts:
+    for contract in _all_projection_contracts():
         if contract.name not in existing_tables:
             spark.sql(
                 create_table_sql(
@@ -467,6 +614,63 @@ def _current_revision_cache(
     return cache
 
 
+def _completed_statcast_projections(
+    spark: Any,
+    configuration: GlueProjectionConfiguration,
+) -> Set[CompletedStatcastProjection]:
+    """Read terminal Savant date revisions and reject incompatible releases."""
+
+    table = spark.table(
+        qualified_table(
+            configuration.catalog,
+            configuration.database,
+            STATCAST_DATES_CONTRACT.name,
+        )
+    )
+    completed = set()
+    versions = set()
+    for row in table.select(
+        "game_date",
+        "source_revision_id",
+        "projection_contract_version",
+    ).collect():
+        completed.add((cast(date, row["game_date"]), str(row["source_revision_id"])))
+        versions.add(str(row["projection_contract_version"]))
+    _validate_statcast_projection_versions(versions)
+    return completed
+
+
+def _current_statcast_revision_cache(
+    spark: Any,
+    configuration: GlueProjectionConfiguration,
+) -> Dict[date, CurrentStatcastRevisionCacheEntry]:
+    """Load the current Savant mapping used to skip old pointer reads."""
+
+    table = spark.table(
+        qualified_table(
+            configuration.catalog,
+            configuration.database,
+            CURRENT_STATCAST_DATE_REVISIONS_CONTRACT.name,
+        )
+    )
+    cache = {}
+    for row in table.select(
+        "game_date",
+        "source_revision_id",
+        "reconciled_at",
+    ).collect():
+        game_date = cast(date, row["game_date"])
+        reconciled_at = cast(datetime, row["reconciled_at"])
+        if reconciled_at.utcoffset() is None:
+            reconciled_at = reconciled_at.replace(tzinfo=timezone.utc)
+        cache[game_date] = CurrentStatcastRevisionCacheEntry(
+            game_date=game_date,
+            revision_id=str(row["source_revision_id"]),
+            reconciled_at=reconciled_at.astimezone(timezone.utc),
+        )
+    return cache
+
+
 def _validate_projection_versions(observed: Set[str]) -> None:
     incompatible = observed - {PROJECTION_CONTRACT_VERSION}
     if incompatible:
@@ -475,6 +679,17 @@ def _validate_projection_versions(observed: Set[str]) -> None:
             f"{sorted(incompatible)} but this job publishes "
             f"{PROJECTION_CONTRACT_VERSION}; rebuild every analytical table "
             "before deploying a new projection release"
+        )
+
+
+def _validate_statcast_projection_versions(observed: Set[str]) -> None:
+    incompatible = observed - {STATCAST_PROJECTION_CONTRACT_VERSION}
+    if incompatible:
+        raise RuntimeError(
+            "Statcast analytical tables contain projection contract version(s) "
+            f"{sorted(incompatible)} but this job publishes "
+            f"{STATCAST_PROJECTION_CONTRACT_VERSION}; rebuild the Statcast "
+            "analytical tables before deploying this projection release"
         )
 
 

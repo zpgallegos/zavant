@@ -7,20 +7,20 @@ from typing import Dict, List, Tuple
 import unittest
 from uuid import UUID
 
-from zavant.acquisition.bounded_games import BoundedGameAcquirer
-from zavant.acquisition.game_eligibility import (
+from zavant.ingestion.mlb_stats_api.acquisition.bounded_games import BoundedGameAcquirer
+from zavant.ingestion.mlb_stats_api.acquisition.game_eligibility import (
     EligibilityDisposition,
     FinalRegularSeasonGamePolicy,
 )
-from zavant.clients.mlb_stats_api import (
+from zavant.ingestion.mlb_stats_api.client import (
     MlbStatsApiError,
     MlbStatsApiResponseError,
     RetrievedResource,
 )
-from zavant.contracts.schedule import ScheduleResponse
-from zavant.storage.path_raw import PathRawGameStore
-from zavant.storage.path_deferred_games import PathDeferredGameStore
-from zavant.storage.path_schedule import PathScheduleStore, ScheduleConflictError
+from zavant.ingestion.mlb_stats_api.contracts.schedule import ScheduleResponse
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_deferred_games import PathDeferredGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule import PathScheduleStore, ScheduleConflictError
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

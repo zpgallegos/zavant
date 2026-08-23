@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import Any, Dict, Sequence
 from uuid import UUID
 
-from zavant.contracts.raw_game import RawGameResponse
-from zavant.projection.contracts import PROJECTION_CONTRACT_VERSION, ProjectionRow
-from zavant.projection.models import ProjectionSource
-from zavant.projection.projector import project_game
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameResponse
+from zavant.projection.contracts import ProjectionRow
+from zavant.projection.mlb_stats_api.contracts import PROJECTION_CONTRACT_VERSION
+from zavant.projection.mlb_stats_api.models import ProjectionSource
+from zavant.projection.mlb_stats_api.projector import project_game
 from zavant.storage._path_io import canonical_json_sha256, sha256_bytes
 
 

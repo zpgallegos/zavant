@@ -1,4 +1,9 @@
-"""Shared primitives for path-backed, content-addressed storage."""
+"""Storage primitives shared by local paths and the S3 path facade.
+
+The persistence state machines in ingestion deliberately depend on this small
+path surface so their validation and transition logic is identical locally and
+in production.
+"""
 
 import hashlib
 import json
@@ -111,6 +116,8 @@ def atomic_write(destination: Path, content: bytes) -> None:
 
     backend_write = getattr(destination, "atomic_write", None)
     if callable(backend_write):
+        # S3Path supplies conditional publication; ordinary Paths use the
+        # temporary-file rename below.
         backend_write(content)
         return
 

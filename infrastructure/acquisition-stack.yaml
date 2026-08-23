@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Durable storage and Lambda execution for Zavant acquisition.
+Description: Durable storage and isolated Lambda execution for Zavant sources.
 
 Parameters:
   EnvironmentName:
@@ -28,6 +28,21 @@ Parameters:
     Type: String
     Default: ""
     Description: First correction boundary used while no correction watermark exists.
+  InitialSavantDate:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    Description: First Savant game date used while no Savant watermark exists.
+  SavantLookbackDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    Description: Recent Savant game dates reacquired by every daily run.
+  SavantMaximumDatesPerRun:
+    Type: Number
+    Default: 31
+    MinValue: 1
+    Description: Safety bound on one Savant Lambda invocation.
 
 Conditions:
   HasLambdaCode: !Not [!Equals [!Ref LambdaCodeS3Key, ""]]
@@ -173,7 +188,7 @@ Resources:
           ZAVANT_INITIAL_SCHEDULE_DATE: !Ref InitialScheduleDate
           ZAVANT_S3_BUCKET: !Ref AcquisitionBucket
           ZAVANT_S3_PREFIX: !Ref AcquisitionPrefix
-      Handler: zavant.lambda_handler.lambda_handler
+      Handler: zavant.ingestion.mlb_stats_api.lambda_handler.lambda_handler
       LoggingConfig:
         ApplicationLogLevel: INFO
         LogFormat: JSON
@@ -187,6 +202,115 @@ Resources:
           Value: zavant
         - Key: Component
           Value: acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  BaseballSavantLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Executes isolated Baseball Savant daily acquisition.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BaseballSavantPrefixAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListBaseballSavantObjects
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt AcquisitionBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - !Sub "${AcquisitionPrefix}/raw/baseball_savant/*"
+                      - !Sub "${AcquisitionPrefix}/state/baseball_savant/*"
+                      - !Sub "${AcquisitionPrefix}/runs/baseball_savant/*"
+              - Sid: ReadWriteBaseballSavantObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub "${AcquisitionBucket.Arn}/${AcquisitionPrefix}/raw/baseball_savant/*"
+                  - !Sub "${AcquisitionBucket.Arn}/${AcquisitionPrefix}/state/baseball_savant/*"
+                  - !Sub "${AcquisitionBucket.Arn}/${AcquisitionPrefix}/runs/baseball_savant/*"
+        - PolicyName: BaseballSavantLogDelivery
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: WriteFunctionLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/zavant-baseball-savant-daily-${EnvironmentName}:*"
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: baseball-savant-acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  BaseballSavantLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: HasLambdaCode
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/zavant-baseball-savant-daily-${EnvironmentName}"
+      RetentionInDays: 30
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: baseball-savant-acquisition
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: cloudformation
+
+  BaseballSavantLambdaFunction:
+    Type: AWS::Lambda::Function
+    Condition: HasLambdaCode
+    DependsOn: BaseballSavantLambdaLogGroup
+    Properties:
+      FunctionName: !Sub "zavant-baseball-savant-daily-${EnvironmentName}"
+      Description: Acquires bounded all-player Baseball Savant CSV snapshots.
+      Architectures:
+        - arm64
+      Code:
+        S3Bucket: !Ref AcquisitionBucket
+        S3Key: !Ref LambdaCodeS3Key
+      Environment:
+        Variables:
+          ZAVANT_S3_BUCKET: !Ref AcquisitionBucket
+          ZAVANT_S3_PREFIX: !Ref AcquisitionPrefix
+          ZAVANT_SAVANT_INITIAL_DATE: !Ref InitialSavantDate
+          ZAVANT_SAVANT_LOOKBACK_DAYS: !Ref SavantLookbackDays
+          ZAVANT_SAVANT_MAX_DATES_PER_RUN: !Ref SavantMaximumDatesPerRun
+      Handler: zavant.ingestion.baseball_savant.lambda_handler.lambda_handler
+      LoggingConfig:
+        ApplicationLogLevel: INFO
+        LogFormat: JSON
+        SystemLogLevel: WARN
+      MemorySize: 512
+      Role: !GetAtt BaseballSavantLambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 900
+      Tags:
+        - Key: Project
+          Value: zavant
+        - Key: Component
+          Value: baseball-savant-acquisition
         - Key: Environment
           Value: !Ref EnvironmentName
         - Key: ManagedBy
@@ -224,3 +348,11 @@ Outputs:
     Condition: HasLambdaCode
     Description: Name invoked by the Step Functions daily workflow.
     Value: !Ref AcquisitionLambdaFunction
+  BaseballSavantLambdaFunctionArn:
+    Condition: HasLambdaCode
+    Description: ARN invoked by the Savant branch of the daily workflow.
+    Value: !GetAtt BaseballSavantLambdaFunction.Arn
+  BaseballSavantLambdaFunctionName:
+    Condition: HasLambdaCode
+    Description: Name of the isolated Baseball Savant daily function.
+    Value: !Ref BaseballSavantLambdaFunction

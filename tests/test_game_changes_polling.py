@@ -6,16 +6,16 @@ from typing import Dict, List, Tuple
 import unittest
 from uuid import UUID
 
-from zavant.acquisition.game_changes import (
+from zavant.ingestion.mlb_stats_api.acquisition.game_changes import (
     GameChangesPoller,
     GameChangesPollingError,
     GameChangesWatermarkNotInitializedError,
 )
-from zavant.clients.mlb_stats_api import RetrievedResource
-from zavant.storage.path_game_changes import PathGameChangesStore
+from zavant.ingestion.mlb_stats_api.client import RetrievedResource
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes import PathGameChangesStore
 from zavant.storage._path_io import artifact_reference_for_path
 from zavant.storage.artifacts import ArtifactReference
-from zavant.storage.path_game_changes_watermark import (
+from zavant.ingestion.mlb_stats_api.storage.path_game_changes_watermark import (
     GameChangesWatermarkConflictError,
     PathGameChangesWatermarkStore,
 )

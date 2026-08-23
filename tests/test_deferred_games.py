@@ -5,10 +5,10 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-from zavant.acquisition.deferred_games import DeferredGameProcessor
-from zavant.contracts.schedule import ScheduleResponse
-from zavant.storage.path_deferred_games import PathDeferredGameStore
-from zavant.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.acquisition.deferred_games import DeferredGameProcessor
+from zavant.ingestion.mlb_stats_api.contracts.schedule import ScheduleResponse
+from zavant.ingestion.mlb_stats_api.storage.path_deferred_games import PathDeferredGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
 from tests.test_bounded_game_acquisition import (
     FakeMlbGameAcquisitionApi,
     raw_game,

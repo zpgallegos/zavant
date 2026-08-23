@@ -6,17 +6,17 @@ from typing import Dict, List, Optional, Tuple
 import unittest
 from uuid import UUID
 
-from zavant.acquisition.season_backfill import (
+from zavant.ingestion.mlb_stats_api.acquisition.season_backfill import (
     SeasonBackfillCoordinator,
     SeasonBackfillMode,
 )
-from zavant.clients.mlb_stats_api import RetrievedResource
-from zavant.contracts.raw_game import RawGameResponse
+from zavant.ingestion.mlb_stats_api.client import RetrievedResource
+from zavant.ingestion.mlb_stats_api.contracts.raw_game import RawGameResponse
 from zavant.storage.artifacts import ArtifactReference
-from zavant.storage.models import SeasonBackfillCheckpoint
-from zavant.storage.path_raw import PathRawGameStore
-from zavant.storage.path_schedule import PathScheduleStore
-from zavant.storage.path_season_backfills import PathSeasonBackfillStore
+from zavant.ingestion.mlb_stats_api.storage.models import SeasonBackfillCheckpoint
+from zavant.ingestion.mlb_stats_api.storage.path_raw import PathRawGameStore
+from zavant.ingestion.mlb_stats_api.storage.path_schedule import PathScheduleStore
+from zavant.ingestion.mlb_stats_api.storage.path_season_backfills import PathSeasonBackfillStore
 
 
 SEASON = 2024

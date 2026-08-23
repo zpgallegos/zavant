@@ -12,6 +12,9 @@ Parameters:
   AcquisitionLambdaArn:
     Type: String
     Description: ARN of the deployed daily acquisition Lambda function.
+  BaseballSavantLambdaArn:
+    Type: String
+    Description: ARN of the deployed Baseball Savant daily Lambda function.
   AnalyticalProjectionJobName:
     Type: String
     Description: Name of the deployed Glue analytical projection job.
@@ -71,6 +74,8 @@ Resources:
                 Resource:
                   - !Ref AcquisitionLambdaArn
                   - !Sub "${AcquisitionLambdaArn}:*"
+                  - !Ref BaseballSavantLambdaArn
+                  - !Sub "${BaseballSavantLambdaArn}:*"
         - PolicyName: RunAnalyticalProjection
           PolicyDocument:
             Version: "2012-10-17"
@@ -118,7 +123,7 @@ Resources:
       RoleArn: !GetAtt DailyWorkflowExecutionRole.Arn
       DefinitionString: !Sub |
         {
-          "Comment": "Acquire MLB data, then reconcile raw revisions into Iceberg.",
+          "Comment": "Acquire Stats API and Baseball Savant data, then reconcile raw revisions into Iceberg.",
           "StartAt": "Prepare workflow input",
           "States": {
             "Prepare workflow input": {
@@ -126,37 +131,93 @@ Resources:
               "Parameters": {
                 "request.$": "$"
               },
-              "Next": "Run daily acquisition"
+              "Next": "Run source acquisitions"
             },
-            "Run daily acquisition": {
-              "Type": "Task",
-              "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
-              "Parameters": {
-                "FunctionName": "${AcquisitionLambdaArn}",
-                "Payload.$": "$.request"
-              },
-              "ResultPath": "$.acquisition_result",
-              "TimeoutSeconds": 960,
-              "Retry": [
+            "Run source acquisitions": {
+              "Type": "Parallel",
+              "Branches": [
                 {
-                  "ErrorEquals": [
-                    "Lambda.ServiceException",
-                    "Lambda.AWSLambdaException",
-                    "Lambda.SdkClientException",
-                    "Lambda.TooManyRequestsException"
-                  ],
-                  "IntervalSeconds": 2,
-                  "MaxAttempts": 3,
-                  "BackoffRate": 2
+                  "StartAt": "Run Stats API acquisition",
+                  "States": {
+                    "Run Stats API acquisition": {
+                      "Type": "Task",
+                      "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+                      "Parameters": {
+                        "FunctionName": "${AcquisitionLambdaArn}",
+                        "Payload.$": "$.request"
+                      },
+                      "ResultPath": "$.result",
+                      "TimeoutSeconds": 960,
+                      "Retry": [
+                        {
+                          "ErrorEquals": [
+                            "Lambda.ServiceException",
+                            "Lambda.AWSLambdaException",
+                            "Lambda.SdkClientException",
+                            "Lambda.TooManyRequestsException"
+                          ],
+                          "IntervalSeconds": 2,
+                          "MaxAttempts": 3,
+                          "BackoffRate": 2
+                        }
+                      ],
+                      "Catch": [
+                        {
+                          "ErrorEquals": ["States.ALL"],
+                          "ResultPath": "$.error",
+                          "Next": "Retain Stats API failure"
+                        }
+                      ],
+                      "End": true
+                    },
+                    "Retain Stats API failure": {
+                      "Type": "Pass",
+                      "End": true
+                    }
+                  }
+                },
+                {
+                  "StartAt": "Run Baseball Savant acquisition",
+                  "States": {
+                    "Run Baseball Savant acquisition": {
+                      "Type": "Task",
+                      "Resource": "arn:${AWS::Partition}:states:::lambda:invoke",
+                      "Parameters": {
+                        "FunctionName": "${BaseballSavantLambdaArn}",
+                        "Payload.$": "$.request"
+                      },
+                      "ResultPath": "$.result",
+                      "TimeoutSeconds": 960,
+                      "Retry": [
+                        {
+                          "ErrorEquals": [
+                            "Lambda.ServiceException",
+                            "Lambda.AWSLambdaException",
+                            "Lambda.SdkClientException",
+                            "Lambda.TooManyRequestsException"
+                          ],
+                          "IntervalSeconds": 2,
+                          "MaxAttempts": 3,
+                          "BackoffRate": 2
+                        }
+                      ],
+                      "Catch": [
+                        {
+                          "ErrorEquals": ["States.ALL"],
+                          "ResultPath": "$.error",
+                          "Next": "Retain Baseball Savant failure"
+                        }
+                      ],
+                      "End": true
+                    },
+                    "Retain Baseball Savant failure": {
+                      "Type": "Pass",
+                      "End": true
+                    }
+                  }
                 }
               ],
-              "Catch": [
-                {
-                  "ErrorEquals": ["States.ALL"],
-                  "ResultPath": "$.acquisition_error",
-                  "Next": "Run analytical projection"
-                }
-              ],
+              "ResultPath": "$.acquisition_results",
               "Next": "Run analytical projection"
             },
             "Run analytical projection": {
@@ -167,13 +228,18 @@ Resources:
               },
               "ResultPath": "$.projection_result",
               "TimeoutSeconds": 11400,
-              "Next": "Did acquisition fail"
+              "Next": "Did a source acquisition fail"
             },
-            "Did acquisition fail": {
+            "Did a source acquisition fail": {
               "Type": "Choice",
               "Choices": [
                 {
-                  "Variable": "$.acquisition_error",
+                  "Variable": "$.acquisition_results[0].error",
+                  "IsPresent": true,
+                  "Next": "Report acquisition failure"
+                },
+                {
+                  "Variable": "$.acquisition_results[1].error",
                   "IsPresent": true,
                   "Next": "Report acquisition failure"
                 }

@@ -62,7 +62,9 @@ class StatcastCsvResponse:
                 raise BaseballSavantContractError(
                     "Statcast CSV contains duplicate columns"
                 )
-            missing = tuple(column for column in REQUIRED_COLUMNS if column not in columns)
+            missing = tuple(
+                column for column in REQUIRED_COLUMNS if column not in columns
+            )
             if missing:
                 raise BaseballSavantContractError(
                     f"Statcast CSV is missing required columns: {', '.join(missing)}"
@@ -97,6 +99,15 @@ class StatcastCsvResponse:
         if None in row:
             raise BaseballSavantContractError(
                 f"Statcast CSV row {row_number} has more values than columns"
+            )
+        structurally_missing = tuple(
+            column for column in REQUIRED_COLUMNS if row[column] is None
+        )
+        if structurally_missing:
+            raise BaseballSavantContractError(
+                f"Statcast CSV row {row_number} has fewer values than columns; "
+                "missing required fields: "
+                f"{', '.join(structurally_missing)}"
             )
         if row.get("game_date") != expected_date.isoformat():
             raise BaseballSavantContractError(

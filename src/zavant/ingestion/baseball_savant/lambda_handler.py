@@ -61,18 +61,16 @@ class BaseballSavantLambdaConfiguration:
             )
             max_attempts = int(values.get("ZAVANT_SAVANT_HTTP_MAX_ATTEMPTS", "3"))
             lookback_days = int(values.get("ZAVANT_SAVANT_LOOKBACK_DAYS", "7"))
-            max_dates_per_run = int(
-                values.get("ZAVANT_SAVANT_MAX_DATES_PER_RUN", "31")
-            )
+            max_dates_per_run = int(values.get("ZAVANT_SAVANT_MAX_DATES_PER_RUN", "31"))
         except ValueError as exc:
-            raise ValueError("Savant Lambda configuration has an invalid value") from exc
+            raise ValueError(
+                "Savant Lambda configuration has an invalid value"
+            ) from exc
         return cls(
             bucket=bucket,
             initial_date=initial_date,
             prefix=values.get("ZAVANT_S3_PREFIX", "lake").strip("/"),
-            base_url=values.get("ZAVANT_SAVANT_BASE_URL", DEFAULT_BASE_URL).rstrip(
-                "/"
-            ),
+            base_url=values.get("ZAVANT_SAVANT_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
             timeout_seconds=timeout_seconds,
             max_attempts=max_attempts,
             lookback_days=lookback_days,

@@ -195,9 +195,9 @@ seven-date window. The Glue projection publishes terminal batting outcomes to
 revision-aware Iceberg history and exposes current date revisions through
 `current_statcast_batting_events`.
 
-## Local Baseball Savant backfills
+## Baseball Savant backfills
 
-Backfill an inclusive historical date range into the local lake with the same
+Backfill an inclusive historical date range with the same
 one-date, all-player request and immutable raw store used by daily Savant
 acquisition:
 
@@ -227,9 +227,21 @@ PYTHONPATH=src .venv/bin/python -m zavant backfill-savant \
   --started-at <previous-started-at>
 ```
 
-This command is deliberately local-only and defaults to `.local/lake`; select
-another local root with `--data-dir`. Its end date must be before the current
-UTC date so it cannot accidentally capture an incomplete current-day export.
+Storage defaults to `.local/lake`; select another local root with `--data-dir`.
+Production S3 writes must be requested explicitly and are guarded by the same
+STS account check as Stats API backfills:
+
+```shell
+export ZAVANT_S3_BUCKET=<AcquisitionBucketName-output>
+export ZAVANT_AWS_ACCOUNT_ID=<12-digit-account-id>
+PYTHONPATH=src .venv/bin/python -m zavant backfill-savant \
+  --start-date 2018-03-29 \
+  --end-date <last-complete-date> \
+  --storage s3
+```
+
+In either backend, the end date must be before the current UTC date so the
+backfill cannot capture an incomplete current-day export.
 
 ## Bounded game acquisition
 
@@ -329,15 +341,14 @@ The recommended mode is `reconcile`:
 ```shell
 export ZAVANT_S3_BUCKET=<AcquisitionBucketName-output>
 export ZAVANT_AWS_ACCOUNT_ID=<12-digit-account-id>
-PYTHONPATH=src .venv/bin/python -m zavant backfill-seasons \
+PYTHONPATH=src .venv/bin/python -m zavant backfill-statsapi \
   2019 2020 2021 --mode reconcile --storage s3
 ```
 
 Storage defaults to `.local/lake` even when an S3 bucket is present in the
 environment. Cloud backfills require explicit `--storage s3`, a bucket, and an
-expected AWS account ID. The `scripts/adhoc/backfill-seasons.sh` wrapper loads
-those values from `.env`; direct CLI calls receive them from the shell.
-Credentials remain owned by the normal AWS SDK credential chain.
+expected AWS account ID supplied to the process environment. Credentials remain
+owned by the normal AWS SDK credential chain.
 
 The three modes have intentionally different costs and guarantees:
 
@@ -360,7 +371,7 @@ schedules or completed correction discovery by supplying the `run_id` and
 `started_at` printed by the first invocation:
 
 ```shell
-PYTHONPATH=src .venv/bin/python -m zavant backfill-seasons 2021 \
+PYTHONPATH=src .venv/bin/python -m zavant backfill-statsapi 2021 \
   --mode reconcile \
   --run-id <previous-run-id> \
   --started-at <previous-started-at>
@@ -417,6 +428,9 @@ The optional source-specific event boundaries support deterministic smoke tests:
   "savant_through_date": "2026-08-08"
 }
 ```
+
+The Savant boundary must be earlier than the current UTC date so an explicit
+override cannot publish an incomplete current-day export.
 
 Bootstrap configuration is consulted only while its corresponding watermark is absent. Thereafter the persisted S3 state is authoritative. If any daily branch fails, its manifest remains in S3 and the handler raises so the Lambda invocation is visibly unsuccessful.
 

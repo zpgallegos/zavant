@@ -5,6 +5,7 @@ from typing import List
 import unittest
 from uuid import UUID
 
+from zavant.ingestion.baseball_savant.client import BaseballSavantUnavailableError
 from zavant.ingestion.baseball_savant.daily import BaseballSavantDailyAcquirer
 from zavant.ingestion.http import RetrievedResource
 from zavant.ingestion.baseball_savant.contract import (
@@ -16,7 +17,7 @@ from zavant.ingestion.baseball_savant.storage import PathBaseballSavantStore
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = REPOSITORY_ROOT / "tests" / "fixtures" / "example-baseball-savant.csv"
-STARTED_AT = datetime(2026, 8, 10, 13, tzinfo=timezone.utc)
+STARTED_AT = datetime(2026, 8, 11, 13, tzinfo=timezone.utc)
 RUN_ID = UUID("00000000-0000-0000-0000-000000000041")
 
 
@@ -56,6 +57,12 @@ class InvalidDateSavantApi(FakeSavantApi):
         return retrieved
 
 
+class UnavailableSavantApi(FakeSavantApi):
+    def get_statcast_date(self, game_date: date) -> RetrievedResource:
+        self.calls.append(game_date)
+        raise BaseballSavantUnavailableError("Baseball Savant is unavailable")
+
+
 class StatcastCsvContractTests(unittest.TestCase):
     def test_validates_expected_columns_and_counts_terminal_rows(self) -> None:
         response = StatcastCsvResponse.from_bytes(
@@ -81,18 +88,28 @@ class StatcastCsvContractTests(unittest.TestCase):
         with self.assertRaisesRegex(BaseballSavantContractError, "estimated_slg"):
             StatcastCsvResponse.from_bytes(raw, date(2026, 8, 8))
 
+    def test_rejects_a_short_row_with_missing_trailing_fields(self) -> None:
+        lines = FIXTURE.read_text().splitlines()
+        shortened_row = ",".join(lines[1].split(",")[:-1])
+        raw = ("\n".join((lines[0], shortened_row)) + "\n").encode()
+
+        with self.assertRaisesRegex(BaseballSavantContractError, "fewer values"):
+            StatcastCsvResponse.from_bytes(raw, date(2026, 8, 8))
+
 
 class BaseballSavantDailyAcquirerTests(unittest.TestCase):
     def test_lands_each_date_and_advances_watermark_after_complete_run(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             api = FakeSavantApi()
+            delays: List[float] = []
             store = PathBaseballSavantStore(root, clock=lambda: STARTED_AT)
             acquirer = BaseballSavantDailyAcquirer(
                 api,
                 store,
                 clock=lambda: STARTED_AT,
                 run_id_factory=lambda: RUN_ID,
+                sleeper=delays.append,
             )
 
             result = acquirer.run(
@@ -105,6 +122,7 @@ class BaseballSavantDailyAcquirerTests(unittest.TestCase):
                 api.calls,
                 [date(2026, 8, 7), date(2026, 8, 8), date(2026, 8, 9)],
             )
+            self.assertEqual(delays, [0.5, 0.5])
             watermark = store.read_watermark()
             self.assertIsNotNone(watermark)
             assert watermark is not None
@@ -130,6 +148,7 @@ class BaseballSavantDailyAcquirerTests(unittest.TestCase):
                 store,
                 clock=lambda: STARTED_AT,
                 run_id_factory=lambda: RUN_ID,
+                sleeper=lambda _: None,
             ).run(
                 initial_date=date(2026, 8, 7),
                 through_date=date(2026, 8, 9),
@@ -143,6 +162,7 @@ class BaseballSavantDailyAcquirerTests(unittest.TestCase):
                 run_id_factory=lambda: UUID(
                     "00000000-0000-0000-0000-000000000042"
                 ),
+                sleeper=lambda _: None,
             )
 
             second.run(
@@ -167,6 +187,7 @@ class BaseballSavantDailyAcquirerTests(unittest.TestCase):
                     store,
                     clock=lambda: STARTED_AT,
                     run_id_factory=lambda: RUN_ID,
+                    sleeper=lambda _: None,
                 ).run(
                     initial_date=date(2026, 8, 7),
                     through_date=date(2026, 8, 9),
@@ -175,6 +196,91 @@ class BaseballSavantDailyAcquirerTests(unittest.TestCase):
             self.assertFalse(result.successful)
             self.assertEqual(result.failed, 1)
             self.assertIsNone(store.read_watermark())
+
+    def test_rejects_today_and_future_boundaries_before_starting_a_run(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = PathBaseballSavantStore(
+                Path(directory), clock=lambda: STARTED_AT
+            )
+            acquirer = BaseballSavantDailyAcquirer(
+                FakeSavantApi(),
+                store,
+                clock=lambda: STARTED_AT,
+                sleeper=lambda _: None,
+            )
+
+            for through_date in (date(2026, 8, 11), date(2026, 8, 12)):
+                with self.subTest(through_date=through_date):
+                    with self.assertRaisesRegex(ValueError, "before today"):
+                        acquirer.run(
+                            initial_date=date(2026, 8, 8),
+                            through_date=through_date,
+                        )
+
+    def test_ignores_changed_initial_date_after_watermark_exists(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = PathBaseballSavantStore(
+                Path(directory), clock=lambda: STARTED_AT
+            )
+            BaseballSavantDailyAcquirer(
+                FakeSavantApi(),
+                store,
+                clock=lambda: STARTED_AT,
+                run_id_factory=lambda: RUN_ID,
+                sleeper=lambda _: None,
+            ).run(
+                initial_date=date(2026, 8, 1),
+                through_date=date(2026, 8, 3),
+                lookback_days=2,
+            )
+            api = FakeSavantApi()
+
+            BaseballSavantDailyAcquirer(
+                api,
+                store,
+                clock=lambda: STARTED_AT,
+                run_id_factory=lambda: UUID(
+                    "00000000-0000-0000-0000-000000000044"
+                ),
+                sleeper=lambda _: None,
+            ).run(
+                initial_date=date(2026, 8, 5),
+                through_date=date(2026, 8, 6),
+                lookback_days=2,
+            )
+
+            self.assertEqual(
+                api.calls,
+                [date(2026, 8, 4), date(2026, 8, 5), date(2026, 8, 6)],
+            )
+
+    def test_paces_requests_and_stops_after_a_source_failure(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = PathBaseballSavantStore(
+                Path(directory), clock=lambda: STARTED_AT
+            )
+            delays: List[float] = []
+            api = UnavailableSavantApi()
+
+            with self.assertLogs(
+                "zavant.ingestion.baseball_savant.daily", level="ERROR"
+            ):
+                result = BaseballSavantDailyAcquirer(
+                    api,
+                    store,
+                    clock=lambda: STARTED_AT,
+                    run_id_factory=lambda: RUN_ID,
+                    sleeper=delays.append,
+                ).run(
+                    initial_date=date(2026, 8, 7),
+                    through_date=date(2026, 8, 9),
+                    request_delay_seconds=0.5,
+                )
+
+            self.assertEqual(api.calls, [date(2026, 8, 7)])
+            self.assertEqual(delays, [])
+            self.assertFalse(result.successful)
+            self.assertEqual(result.failed, 3)
 
 
 if __name__ == "__main__":

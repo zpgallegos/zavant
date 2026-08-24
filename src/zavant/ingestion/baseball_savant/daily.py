@@ -3,51 +3,27 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import logging
-from typing import Any, Callable, Dict, Optional, Protocol, Tuple
+import time
+from typing import Any, Callable, Dict, Optional, Tuple
 from uuid import UUID, uuid4
 
 from zavant._time import Clock, as_utc, utc_now
-from zavant.ingestion.baseball_savant.client import BaseballSavantError
-from zavant.ingestion.http import RetrievedResource
-from zavant.ingestion.baseball_savant.contract import (
-    BaseballSavantContractError,
-    StatcastCsvResponse,
+from zavant.ingestion.baseball_savant.acquisition import (
+    BaseballSavantApi,
+    acquire_statcast_date,
 )
-from zavant.storage.artifacts import ArtifactReference
+from zavant.ingestion.baseball_savant.client import BaseballSavantError
+from zavant.ingestion.baseball_savant.contract import BaseballSavantContractError
 from zavant.ingestion.baseball_savant.storage import (
     BaseballSavantStorageError,
-    BaseballSavantRawStore,
     BaseballSavantStore,
-    LandedStatcastDate,
 )
+from zavant.ingestion.http import Sleeper
+from zavant.storage.artifacts import ArtifactReference
 
 
 LOGGER = logging.getLogger(__name__)
 RunIdFactory = Callable[[], UUID]
-
-
-class BaseballSavantApi(Protocol):
-    """Source surface required by the Savant daily acquisition process."""
-
-    def get_statcast_date(self, game_date: date) -> RetrievedResource: ...
-
-
-def acquire_statcast_date(
-    api: BaseballSavantApi,
-    store: BaseballSavantRawStore,
-    game_date: date,
-    run_id: UUID,
-) -> LandedStatcastDate:
-    """Retrieve, validate, and immutably land one exact-date CSV export."""
-
-    retrieved = api.get_statcast_date(game_date)
-    response = StatcastCsvResponse.from_bytes(retrieved.body, game_date)
-    return store.land_date(
-        response=response,
-        raw=retrieved.body,
-        source_uri=retrieved.source_uri,
-        run_id=run_id,
-    )
 
 
 @dataclass(frozen=True)
@@ -94,11 +70,13 @@ class BaseballSavantDailyAcquirer:
         store: BaseballSavantStore,
         clock: Clock = utc_now,
         run_id_factory: RunIdFactory = uuid4,
+        sleeper: Sleeper = time.sleep,
     ) -> None:
         self.api = api
         self.store = store
         self.clock = clock
         self.run_id_factory = run_id_factory
+        self.sleeper = sleeper
 
     def run(
         self,
@@ -106,28 +84,38 @@ class BaseballSavantDailyAcquirer:
         through_date: Optional[date] = None,
         lookback_days: int = 7,
         max_dates_per_run: int = 31,
+        request_delay_seconds: float = 0.5,
     ) -> BaseballSavantDailyResult:
         """Acquire a contiguous catch-up or rolling reconciliation window.
 
         The ordinary scheduled boundary is yesterday in UTC, avoiding an
-        incomplete current-day export. Every source request is still bounded
-        to exactly one date and issued sequentially.
+        incomplete current-day export. Exact-date source requests are issued
+        sequentially with a small delay; a source failure stops further calls
+        so one outage cannot consume the entire Lambda runtime.
         """
 
         if lookback_days <= 0:
             raise ValueError("lookback_days must be positive")
         if max_dates_per_run <= 0:
             raise ValueError("max_dates_per_run must be positive")
+        if request_delay_seconds < 0:
+            raise ValueError("request_delay_seconds must not be negative")
         if initial_date is not None and type(initial_date) is not date:
             raise ValueError("initial_date must be a date")
         if through_date is not None and type(through_date) is not date:
             raise ValueError("through_date must be a date")
         started_at = as_utc(self.clock(), "daily Savant clock result")
         resolved_through_date = through_date or (started_at.date() - timedelta(days=1))
-        if initial_date is not None and resolved_through_date < initial_date:
-            raise ValueError("through_date must not be before initial_date")
+        if resolved_through_date >= started_at.date():
+            raise ValueError("Savant daily through_date must be before today in UTC")
         watermark = self.store.read_watermark()
         current_through_date = watermark.through_date if watermark is not None else None
+        if (
+            current_through_date is None
+            and initial_date is not None
+            and resolved_through_date < initial_date
+        ):
+            raise ValueError("through_date must not be before initial_date")
         planned_dates = self._planned_dates(
             initial_date=initial_date,
             current_through_date=current_through_date,
@@ -150,6 +138,7 @@ class BaseballSavantDailyAcquirer:
                 "initial_date": initial_date.isoformat() if initial_date else None,
                 "lookback_days": lookback_days,
                 "max_dates_per_run": max_dates_per_run,
+                "request_delay_seconds": request_delay_seconds,
                 "request_shape": "all-players-one-date",
             },
         )
@@ -159,14 +148,18 @@ class BaseballSavantDailyAcquirer:
             planned_dates[0],
             planned_dates[-1],
         )
-        for game_date in planned_dates:
-            self._acquire_date(game_date, run_id, manifest_path)
+        for index, game_date in enumerate(planned_dates):
+            should_continue = self._acquire_date(game_date, run_id, manifest_path)
+            if not should_continue:
+                self._abort_remaining_dates(planned_dates[index + 1 :], manifest_path)
+                break
+            if request_delay_seconds > 0 and index < len(planned_dates) - 1:
+                self.sleeper(request_delay_seconds)
 
         counts = self.store.finalize_run(manifest_path)
         status = "failed" if counts["failed"] else "complete"
         if status == "complete" and (
-            current_through_date is None
-            or resolved_through_date > current_through_date
+            current_through_date is None or resolved_through_date > current_through_date
         ):
             # Only a manifest with every planned date recorded successfully may
             # authorize the durable through-date to move forward.
@@ -200,7 +193,9 @@ class BaseballSavantDailyAcquirer:
         game_date: date,
         run_id: UUID,
         manifest_path: ArtifactReference,
-    ) -> None:
+    ) -> bool:
+        """Acquire one date and report whether another source call is safe."""
+
         try:
             landed = acquire_statcast_date(
                 self.api,
@@ -208,9 +203,20 @@ class BaseballSavantDailyAcquirer:
                 game_date,
                 run_id,
             )
+        except BaseballSavantError as exc:
+            LOGGER.exception(
+                "Baseball Savant source failed; aborting remaining dates game_date=%s",
+                game_date,
+            )
+            self.store.record_date(
+                manifest_path,
+                game_date,
+                "failed",
+                {"error": str(exc), "error_type": type(exc).__name__},
+            )
+            return False
         except (
             BaseballSavantContractError,
-            BaseballSavantError,
             BaseballSavantStorageError,
             OSError,
         ) as exc:
@@ -223,13 +229,32 @@ class BaseballSavantDailyAcquirer:
                 "failed",
                 {"error": str(exc), "error_type": type(exc).__name__},
             )
-            return
+            return True
         self.store.record_date(
             manifest_path,
             game_date,
             "succeeded",
             landed.as_dict(),
         )
+        return True
+
+    def _abort_remaining_dates(
+        self,
+        game_dates: Tuple[date, ...],
+        manifest_path: ArtifactReference,
+    ) -> None:
+        """Make a fail-fast run terminal without issuing more source requests."""
+
+        for game_date in game_dates:
+            self.store.record_date(
+                manifest_path,
+                game_date,
+                "failed",
+                {
+                    "error": "not attempted after a Baseball Savant source failure",
+                    "error_type": "BaseballSavantSourceAbort",
+                },
+            )
 
     @staticmethod
     def _planned_dates(
@@ -250,8 +275,6 @@ class BaseballSavantDailyAcquirer:
             # Always replay the rolling window, even when there are no unseen
             # dates, because Savant can revise a prior date's CSV in place.
             start_date = min(new_start, lookback_start)
-            if initial_date is not None:
-                start_date = max(start_date, initial_date)
         if start_date > through_date:
             start_date = through_date
         return tuple(

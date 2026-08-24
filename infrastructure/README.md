@@ -137,7 +137,8 @@ invocation writes its daily manifest and any discovered source artifacts beneath
 and CloudWatch log group `/aws/lambda/zavant-acquisition-daily-prod`.
 
 For Savant, use `{"savant_through_date":"YYYY-MM-DD"}`. With no override it
-acquires through yesterday in UTC.
+acquires through yesterday in UTC. An explicit override must also be earlier
+than the current UTC date.
 
 Scheduled workflow verification is documented with the workflow stack. Alarms
 and a failed-event destination remain follow-up operational work.

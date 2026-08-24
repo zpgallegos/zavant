@@ -10,11 +10,13 @@ from zavant.ingestion.baseball_savant.backfill import (
     BaseballSavantBackfillCoordinator,
     BaseballSavantBackfillMode,
 )
+from zavant.ingestion.baseball_savant.application import s3_backfill_storage
 from zavant.ingestion.http import RetrievedResource
 from zavant.ingestion.baseball_savant.storage import PathBaseballSavantStore
 from zavant.ingestion.baseball_savant.backfill_storage import (
     PathBaseballSavantBackfillStore,
 )
+from tests.fake_s3 import FakeS3Client
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -208,6 +210,55 @@ class BaseballSavantBackfillCoordinatorTests(unittest.TestCase):
 
             self.assertEqual(api.calls, [])
             self.assertEqual(list(root.rglob("manifest.json")), [])
+
+    def test_s3_storage_persists_raw_dates_and_resumable_run_state(self) -> None:
+        client = FakeS3Client()
+        storage = s3_backfill_storage(
+            client,
+            "example-bucket",
+            "portfolio/lake",
+            clock=lambda: STARTED_AT,
+        )
+        api = FakeSavantApi()
+
+        result = BaseballSavantBackfillCoordinator(
+            api=api,
+            raw_store=storage.raw,
+            backfill_store=storage.runs,
+            clock=lambda: STARTED_AT,
+            run_id_factory=lambda: RUN_ID,
+            sleeper=lambda _: None,
+        ).run(
+            start_date=date(2026, 8, 8),
+            end_date=date(2026, 8, 9),
+            request_delay_seconds=0,
+        )
+
+        keys = {
+            key
+            for bucket, key in client.objects
+            if bucket == "example-bucket"
+        }
+        self.assertTrue(result.successful)
+        self.assertEqual(result.succeeded, 2)
+        self.assertTrue(result.manifest_path.uri.startswith("s3://example-bucket/"))
+        self.assertTrue(
+            any(
+                key.startswith(
+                    "portfolio/lake/raw/baseball_savant/statcast_search/"
+                )
+                for key in keys
+            )
+        )
+        self.assertIn(
+            "portfolio/lake/runs/baseball_savant/backfill/"
+            "run_date=2026-08-10/"
+            f"run_id={RUN_ID}/manifest.json",
+            keys,
+        )
+        self.assertFalse(
+            any("state/baseball_savant" in key for key in keys)
+        )
 
 
 if __name__ == "__main__":

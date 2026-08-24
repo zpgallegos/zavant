@@ -125,21 +125,24 @@ Representative source:
 - [`storage.py`](../src/zavant/ingestion/baseball_savant/storage.py) owns raw date
   revisions, daily manifests, and the watermark.
 
-Historical Savant acquisition is a separate local CLI workflow. It accepts an
-explicit inclusive date range, preserves the daily process's one-date request
-boundary, and writes resumable manifests under
+Historical Savant acquisition is a separate operator-driven CLI workflow. It
+accepts an explicit inclusive date range, preserves the daily process's
+one-date request boundary, and writes resumable manifests under
 `runs/baseball_savant/backfill/`. `missing` mode skips dates with an existing
 current revision, while `verify` reacquires every date so content addressing
 can detect source changes. Dry runs and resumed runs use the same stored plan;
 completed dates are not repeated and failed dates remain retriable. The
-backfill does not read or mutate `state/baseball_savant/statcast_search/watermark.json`.
+backfill defaults to local storage; explicit S3 execution verifies the active
+AWS account before composing the same raw and manifest state machines over a
+conditional S3 backend. It does not read or mutate
+`state/baseball_savant/statcast_search/watermark.json`.
 
 Representative source:
 
 - [`backfill.py`](../src/zavant/ingestion/baseball_savant/backfill.py)
   owns historical date selection, pacing, and acquisition outcomes.
 - [`backfill_storage.py`](../src/zavant/ingestion/baseball_savant/backfill_storage.py)
-  owns the resumable local manifest.
+  owns the storage-neutral resumable manifest.
 
 ## Immutable revisions and mutable state
 

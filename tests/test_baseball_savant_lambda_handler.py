@@ -65,6 +65,7 @@ class BaseballSavantLambdaApplicationTests(unittest.TestCase):
                 run_id_factory=lambda: UUID(
                     "00000000-0000-0000-0000-000000000043"
                 ),
+                sleeper=lambda _: None,
             ),
             store=store,
             configuration=configuration,

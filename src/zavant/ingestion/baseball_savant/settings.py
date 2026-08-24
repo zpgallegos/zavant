@@ -1,4 +1,4 @@
-"""Local runtime configuration for the Baseball Savant source."""
+"""Operator runtime configuration for the Baseball Savant source."""
 
 from dataclasses import dataclass
 import os
@@ -20,7 +20,5 @@ class BaseballSavantSettings:
     ) -> "BaseballSavantSettings":
         values = os.environ if environ is None else environ
         return cls(
-            base_url=values.get("ZAVANT_SAVANT_BASE_URL", DEFAULT_BASE_URL).rstrip(
-                "/"
-            )
+            base_url=values.get("ZAVANT_SAVANT_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
         )

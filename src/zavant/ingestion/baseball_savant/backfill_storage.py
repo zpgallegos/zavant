@@ -58,7 +58,11 @@ class BaseballSavantBackfillStore(Protocol):
 
 
 class PathBaseballSavantBackfillStore:
-    """Persist local Savant backfill progress independently of daily state."""
+    """Persist Savant backfill progress independently of daily state.
+
+    The path surface may be a local directory or the conditional S3 facade;
+    both backends therefore share the same manifest contract and transitions.
+    """
 
     def __init__(self, storage_root: Path, clock: Clock = utc_now) -> None:
         self.storage_root = storage_root
@@ -115,9 +119,7 @@ class PathBaseballSavantBackfillStore:
         }
         atomic_write(manifest_path, encode_json(manifest))
         return StartedBaseballSavantBackfill(
-            manifest_path=artifact_reference_for_path(
-                self.storage_root, manifest_path
-            ),
+            manifest_path=artifact_reference_for_path(self.storage_root, manifest_path),
             date_statuses={game_date: "pending" for game_date in planned_dates},
             resumed=False,
         )

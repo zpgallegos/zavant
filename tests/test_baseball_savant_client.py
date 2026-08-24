@@ -60,7 +60,7 @@ class BaseballSavantClientTests(unittest.TestCase):
                 "game_date_lt": ["2026-08-08"],
                 "hfGT": ["R|"],
                 "player_type": ["batter"],
-                "type": ["batter"],
+                "type": ["details"],
             },
         )
         self.assertEqual(call.headers["Accept"], "text/csv")

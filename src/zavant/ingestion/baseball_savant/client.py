@@ -93,7 +93,7 @@ class BaseballSavantClient:
             path="/statcast_search/csv",
             query=(
                 ("all", "true"),
-                ("type", "batter"),
+                ("type", "details"),
                 ("player_type", "batter"),
                 ("game_date_gt", value),
                 ("game_date_lt", value),

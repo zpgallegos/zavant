@@ -4,7 +4,11 @@ from typing import Any, Dict
 import unittest
 from unittest.mock import patch
 
-from zavant.cli import _backfill_storage, build_parser
+from zavant.cli import (
+    _savant_backfill_storage,
+    _stats_api_backfill_storage,
+    build_parser,
+)
 from zavant.settings import Settings
 from tests.fake_s3 import FakeS3Client
 
@@ -27,11 +31,11 @@ class BackfillCliSafetyTests(unittest.TestCase):
         )
 
     def test_backfill_defaults_to_local_storage(self) -> None:
-        args = build_parser().parse_args(["backfill-seasons", "2025"])
+        args = build_parser().parse_args(["backfill-statsapi", "2025"])
 
         self.assertEqual(args.storage, "local")
 
-    def test_savant_backfill_is_an_explicit_local_date_range(self) -> None:
+    def test_savant_backfill_is_an_explicit_date_range(self) -> None:
         args = build_parser().parse_args(
             [
                 "backfill-savant",
@@ -45,7 +49,7 @@ class BackfillCliSafetyTests(unittest.TestCase):
         self.assertEqual(args.start_date.isoformat(), "2025-03-27")
         self.assertEqual(args.end_date.isoformat(), "2025-09-28")
         self.assertEqual(args.mode, "missing")
-        self.assertFalse(hasattr(args, "storage"))
+        self.assertEqual(args.storage, "local")
 
     def test_settings_read_aws_account_from_consistent_environment_name(
         self,
@@ -95,7 +99,7 @@ class BackfillCliSafetyTests(unittest.TestCase):
             "zavant.cli.import_module",
             return_value=SimpleNamespace(client=client),
         ):
-            storage = _backfill_storage(
+            storage = _stats_api_backfill_storage(
                 args,
                 self.settings(),
                 Path(".local/lake"),
@@ -113,11 +117,35 @@ class BackfillCliSafetyTests(unittest.TestCase):
             ),
         ):
             with self.assertRaisesRegex(ValueError, "refusing S3 backfill"):
-                _backfill_storage(
+                _stats_api_backfill_storage(
                     args,
                     self.settings(),
                     Path(".local/lake"),
                 )
+
+    def test_savant_s3_backfill_uses_the_guarded_target(self) -> None:
+        args = SimpleNamespace(bucket=None, storage="s3", prefix=None)
+        s3_client = FakeS3Client()
+
+        def client(service: str) -> object:
+            if service == "sts":
+                return FakeStsClient("123456789012")
+            if service == "s3":
+                return s3_client
+            raise AssertionError(f"unexpected service: {service}")
+
+        with patch(
+            "zavant.cli.import_module",
+            return_value=SimpleNamespace(client=client),
+        ):
+            storage = _savant_backfill_storage(
+                args,
+                self.settings(),
+                Path(".local/lake"),
+            )
+
+        self.assertIsNotNone(storage.raw)
+        self.assertIsNotNone(storage.runs)
 
 
 if __name__ == "__main__":

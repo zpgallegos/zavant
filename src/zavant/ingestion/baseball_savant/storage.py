@@ -1,4 +1,4 @@
-"""Revision-aware storage for Baseball Savant daily CSV acquisition."""
+"""Revision-aware storage for Baseball Savant CSV acquisition."""
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -197,7 +197,10 @@ class PathBaseballSavantStore:
         )
         revision_exists = response_path.exists() and metadata_path.exists()
 
-        if response_path.exists() and sha256_bytes(response_path.read_bytes()) != revision_id:
+        if (
+            response_path.exists()
+            and sha256_bytes(response_path.read_bytes()) != revision_id
+        ):
             raise BaseballSavantStorageError(
                 f"Savant revision {revision_id} contains different response bytes"
             )
@@ -257,12 +260,8 @@ class PathBaseballSavantStore:
             game_date=response.game_date,
             revision_id=revision_id,
             previous_revision_id=previous_revision_id,
-            response_path=artifact_reference_for_path(
-                self.storage_root, response_path
-            ),
-            metadata_path=artifact_reference_for_path(
-                self.storage_root, metadata_path
-            ),
+            response_path=artifact_reference_for_path(self.storage_root, response_path),
+            metadata_path=artifact_reference_for_path(self.storage_root, metadata_path),
             current_pointer_path=artifact_reference_for_path(
                 self.storage_root, current_pointer_path
             ),
@@ -395,9 +394,7 @@ class PathBaseballSavantStore:
         return BaseballSavantWatermark(
             through_date=through_date,
             run_id=run_id,
-            manifest_path=artifact_reference_for_path(
-                self.storage_root, manifest_path
-            ),
+            manifest_path=artifact_reference_for_path(self.storage_root, manifest_path),
             updated_at=updated_at,
         )
 

@@ -1,4 +1,4 @@
-"""Resumable local backfill for Baseball Savant exact-date CSV exports."""
+"""Resumable operator-driven backfill for Savant exact-date CSV exports."""
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -9,23 +9,25 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from uuid import UUID, uuid4
 
 from zavant._time import Clock, as_utc, utc_now
-from zavant.ingestion.baseball_savant.daily import (
+from zavant.ingestion.baseball_savant.acquisition import (
     BaseballSavantApi,
     acquire_statcast_date,
 )
+from zavant.ingestion.baseball_savant.backfill_storage import (
+    BaseballSavantBackfillStore,
+)
 from zavant.ingestion.baseball_savant.client import BaseballSavantError
 from zavant.ingestion.baseball_savant.contract import BaseballSavantContractError
-from zavant.storage.artifacts import ArtifactReference
 from zavant.ingestion.baseball_savant.storage import (
     BaseballSavantRawStore,
     BaseballSavantStorageError,
 )
-from zavant.ingestion.baseball_savant.backfill_storage import BaseballSavantBackfillStore
+from zavant.ingestion.http import Sleeper
+from zavant.storage.artifacts import ArtifactReference
 
 
 LOGGER = logging.getLogger(__name__)
 RunIdFactory = Callable[[], UUID]
-Sleeper = Callable[[float], None]
 
 
 class BaseballSavantBackfillMode(str, Enum):
@@ -75,9 +77,9 @@ class BaseballSavantBackfillResult:
 class BaseballSavantBackfillCoordinator:
     """Backfill an inclusive date range without touching daily state.
 
-    This is intentionally a local/operator-driven workflow. It shares Savant's
-    raw landing contract, but owns a separate resumable manifest and never
-    advances the scheduled acquisition watermark.
+    This is intentionally operator-driven rather than scheduled. Local and S3
+    runs share Savant's raw landing contract, but own a separate resumable
+    manifest and never advance the scheduled acquisition watermark.
     """
 
     def __init__(

@@ -13,7 +13,7 @@ useful but does not provide an absolute signal for every metric-level revision.
 
 ## Decision
 
-Provide a storage-neutral `backfill-seasons` CLI workflow rather than extending
+Provide a storage-neutral `backfill-statsapi` CLI workflow rather than extending
 the scheduled Lambda. It accepts multiple seasons and supports three modes:
 
 - `missing` acquires only absent eligible games.

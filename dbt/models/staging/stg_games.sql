@@ -62,7 +62,7 @@ select
     games.wind,
 
     -- metadata
-    games.source_revision_id,
+    games.source_revision_id as statsapi_source_revision_id,
     games.official_date,
     games.season
 from games

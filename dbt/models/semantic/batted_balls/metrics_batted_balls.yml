@@ -245,6 +245,47 @@ metrics:
     type_params:
       measure: barrels
 
+  - name: expected_hits
+    label: Expected Hits (xH)
+    description: Sum of Savant hit probabilities across batted balls.
+    type: simple
+    type_params:
+      measure: expected_hits
+
+  - name: expected_total_bases
+    label: Expected Total Bases (xTB)
+    description: Sum of Savant expected total-base values across batted balls.
+    type: simple
+    type_params:
+      measure: expected_total_bases
+
+  - name: expected_woba_contact_value
+    label: Expected wOBA Contact Value
+    description: >-
+      Sum of Savant expected wOBA contributions from batted balls. This is the
+      contact component, not the complete xwOBA numerator.
+    type: simple
+    type_params:
+      measure: expected_woba_contact_value
+
+  - name: expected_batting_average
+    label: Expected Batting Average (xBA)
+    description: >-
+      Expected hits divided by official at-bats. Strikeout at-bats contribute
+      to the denominator without contributing expected hits.
+    type: ratio
+    type_params:
+      numerator: expected_hits
+      denominator: at_bats
+
+  - name: expected_slugging_percentage
+    label: Expected Slugging Percentage (xSLG)
+    description: Savant expected total bases divided by official at-bats.
+    type: ratio
+    type_params:
+      numerator: expected_total_bases
+      denominator: at_bats
+
   - name: barrel_rate
     label: Barrel Rate
     description: Barrels divided by all batted-ball events.

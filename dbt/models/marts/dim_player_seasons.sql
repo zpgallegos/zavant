@@ -40,9 +40,7 @@ transformed_player_seasons as (
                 - if(month(b.birth_date) > 6, 1, 0)
             ) as integer
         ) as season_age,
-        cast(
-            concat(cast(a.season as varchar), '-06-30') as date
-        ) as season_age_cutoff_date
+        cast(concat(cast(a.season as varchar), '-06-30') as date) as season_age_cutoff_date
     from player_seasons as a
     inner join players as b on a.player_id = b.player_id
 ),

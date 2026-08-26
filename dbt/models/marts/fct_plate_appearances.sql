@@ -15,11 +15,13 @@
 }}
 
 with changed_games as (
-    {{ changed_game_revisions() }}
+    {{ changed_statsapi_and_savant_game_revisions() }}
 ),
 
 plate_appearances as (
-    select a.*
+    select
+        a.*,
+        b.savant_source_revision_id
     from {{ ref("int_plate_appearances") }} as a
     inner join changed_games as b on a.game_pk = b.game_pk
 ),
@@ -58,16 +60,21 @@ pitch_counts as (
     group by 1, 2
 ),
 
+statcast_batting_events as (
+    select a.*
+    from {{ ref("stg_statcast_batting_events") }} as a
+    inner join changed_games as b on a.game_pk = b.game_pk
+),
+
 classified_plate_appearances as (
     select
         a.*,
         coalesce(c.has_interference, false) as has_interference,
-        coalesce(
-            c.has_defensive_shift_violation,
-            false
-        ) as is_defensive_shift_violation,
+        coalesce(c.has_defensive_shift_violation, false) as is_defensive_shift_violation,
         b.game_pk is not null as is_at_bat,
-        coalesce(d.pitch_count, 0) as pitch_count
+        coalesce(d.pitch_count, 0) as pitch_count,
+        e.estimated_woba_using_speedangle as expected_woba_value,
+        e.woba_denom as woba_denominator
     from plate_appearances as a
     left join at_bats as b
         on
@@ -81,6 +88,12 @@ classified_plate_appearances as (
         on
             a.game_pk = d.game_pk
             and a.at_bat_index = d.at_bat_index
+    left join statcast_batting_events as e
+        on
+            a.game_pk = e.game_pk
+            -- Stats API play indexes are zero-based; Savant at-bat numbers
+            -- are one-based. Pitch numbers are not stable across the sources.
+            and a.at_bat_index + 1 = e.at_bat_number
 ),
 
 event_flags as (
@@ -126,8 +139,7 @@ event_flags as (
             'fielders_choice_out',
             'force_out'
         ) as is_fielders_choice,
-        a.event_type = 'catcher_interf' or a.has_interference
-            as is_interference
+        a.event_type = 'catcher_interf' or a.has_interference as is_interference
     from classified_plate_appearances as a
 ),
 
@@ -207,14 +219,10 @@ final as (
         away_score as away_score_after,
         home_score_before,
         home_score as home_score_after,
-        case when is_top_inning then away_score_before else home_score_before end
-            as offense_score_before,
-        case when is_top_inning then away_score else home_score end
-            as offense_score_after,
-        case when is_top_inning then home_score_before else away_score_before end
-            as defense_score_before,
-        case when is_top_inning then home_score else away_score end
-            as defense_score_after,
+        case when is_top_inning then away_score_before else home_score_before end as offense_score_before,
+        case when is_top_inning then away_score else home_score end as offense_score_after,
+        case when is_top_inning then home_score_before else away_score_before end as defense_score_before,
+        case when is_top_inning then home_score else away_score end as defense_score_after,
         case
             when is_top_inning then away_score_before - home_score_before
             else home_score_before - away_score_before
@@ -290,6 +298,8 @@ final as (
             else home_score - home_score_before
         end as runs_scored_during_plate_appearance,
         pitch_count,
+        expected_woba_value,
+        woba_denominator,
 
         -- matchup and source attributes
         balls,
@@ -306,7 +316,8 @@ final as (
         captivating_index,
 
         -- metadata
-        source_revision_id,
+        statsapi_source_revision_id,
+        savant_source_revision_id,
         official_date,
         season
     from sequenced_plate_appearances

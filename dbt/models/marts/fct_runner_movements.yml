@@ -289,7 +289,7 @@ models:
         data_type: integer
 
       # metadata
-      - name: source_revision_id
+      - name: statsapi_source_revision_id
         description: >-
           Identifier of the current raw game revision used to replace all of
           the game's runner-movement rows when MLB revises the game.

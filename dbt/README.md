@@ -143,8 +143,10 @@ in the corresponding `sem_*.yml` files.
 ## Correction-safe incremental facts
 
 Glue owns source-revision resolution and presents one current revision of each
-game to dbt. The incremental facts compare those current revision IDs with the
-revision already materialized in the target table. For each changed game they:
+game and Savant date to dbt. Single-source incremental facts compare the current
+Stats API game revision with the revision already materialized in the target.
+Combined facts compare the complete Stats API and Savant revision tuple. For
+each changed game they:
 
 1. Recompute the complete desired set of fact rows.
 2. Merge new and updated keys into the Iceberg table.
@@ -152,9 +154,10 @@ revision already materialized in the target table. For each changed game they:
    no longer exist in its new source revision.
 4. Leave every unchanged game untouched.
 
-This game-replacement boundary handles corrections that add, change, or remove
-events without requiring a full-table rebuild and without leaving obsolete
-rows behind.
+This game-replacement boundary handles corrections from either source that add,
+change, or remove events or enrichments without requiring a full-table rebuild
+and without leaving obsolete rows behind. A changed date-scoped Savant revision
+recalculates every game represented by that revision.
 
 The documented
 [`correction_safe_incremental.sql`](macros/correction_safe_incremental.sql)
@@ -169,9 +172,19 @@ The project combines generic grain tests with domain-specific singular tests:
   compares event-derived player-game totals with MLB's separately projected
   boxscore section.
 - [`plate_appearance_fact_uses_current_revision.sql`](tests/plate_appearance_fact_uses_current_revision.sql)
-  verifies that the incremental fact contains the revision selected by Glue.
+  verifies the Stats API side of the plate-appearance revision tuple, while
+  [`plate_appearance_fact_uses_current_savant_revision.sql`](tests/plate_appearance_fact_uses_current_savant_revision.sql)
+  verifies the Savant side.
+- [`plate_appearance_fact_matches_statcast_expected_woba.sql`](tests/plate_appearance_fact_matches_statcast_expected_woba.sql)
+  verifies that plate-appearance xwOBA inputs retain Savant's expected value
+  and denominator.
 - [`batted_ball_fact_uses_current_revision.sql`](tests/batted_ball_fact_uses_current_revision.sql)
-  applies the same correction invariant to contact events.
+  verifies the Stats API side of the contact-event revision tuple, while
+  [`batted_ball_fact_uses_current_savant_revision.sql`](tests/batted_ball_fact_uses_current_savant_revision.sql)
+  verifies the Savant side.
+- [`statcast_batting_events_use_current_date_revision.sql`](tests/statcast_batting_events_use_current_date_revision.sql)
+  verifies projected outcomes agree with the authoritative date-revision
+  mapping used by the combined incremental selector.
 - [`pitch_fact_reconciles_to_staging.sql`](tests/pitch_fact_reconciles_to_staging.sql)
   verifies that the pitch fact preserves the complete actual-pitch event stream.
 - [`pitch_fact_uses_current_revision.sql`](tests/pitch_fact_uses_current_revision.sql)

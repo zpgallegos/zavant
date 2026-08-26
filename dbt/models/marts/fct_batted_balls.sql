@@ -15,11 +15,14 @@
 }}
 
 with changed_games as (
-    {{ changed_game_revisions() }}
+    {{ changed_statsapi_and_savant_game_revisions() }}
 ),
 
 batted_balls as (
-    select a.*
+    select
+        a.*,
+        b.statsapi_source_revision_id,
+        b.savant_source_revision_id
     from {{ ref("stg_batted_balls") }} as a
     inner join changed_games as b on a.game_pk = b.game_pk
 ),
@@ -36,10 +39,15 @@ pitches as (
     inner join changed_games as b on a.game_pk = b.game_pk
 ),
 
+statcast_batting_events as (
+    select a.*
+    from {{ ref("stg_statcast_batting_events") }} as a
+    inner join changed_games as b on a.game_pk = b.game_pk
+),
+
 classified_batted_balls as (
     select
         a.*,
-        b.source_revision_id,
         b.batter_id,
         b.pitcher_id,
         b.offense_team_id,
@@ -65,6 +73,9 @@ classified_batted_balls as (
         c.coordinate_p_x as pitch_plate_x,
         c.coordinate_p_z as pitch_plate_z,
         c.zone as pitch_zone,
+        d.estimated_ba_using_speedangle as expected_batting_average,
+        d.estimated_slg_using_speedangle as expected_slugging_percentage,
+        d.estimated_woba_using_speedangle as expected_weighted_on_base_average,
         b.event_type in (
             'single',
             'double',
@@ -88,8 +99,7 @@ classified_batted_balls as (
         ) as is_bunt,
         a.launch_speed is not null as has_exit_velocity,
         a.launch_angle is not null as has_launch_angle,
-        a.launch_speed is not null and a.launch_angle is not null
-            as has_statcast_tracking
+        a.launch_speed is not null and a.launch_angle is not null as has_statcast_tracking
     from batted_balls as a
     inner join plate_appearances as b
         on
@@ -100,6 +110,12 @@ classified_batted_balls as (
             a.game_pk = c.game_pk
             and a.at_bat_index = c.at_bat_index
             and a.event_index = c.event_index
+    left join statcast_batting_events as d
+        on
+            a.game_pk = d.game_pk
+            -- Stats API play indexes are zero-based; Savant at-bat numbers
+            -- are one-based. Pitch numbers are not stable across the sources.
+            and a.at_bat_index + 1 = d.at_bat_number
 ),
 
 final as (
@@ -160,6 +176,9 @@ final as (
         is_hard_hit,
         is_sweet_spot,
         is_bunt,
+        expected_batting_average,
+        expected_slugging_percentage,
+        expected_weighted_on_base_average,
 
         -- additive indicators and measures
         1 as batted_ball_ind,
@@ -194,7 +213,8 @@ final as (
         pitch_zone,
 
         -- metadata
-        source_revision_id,
+        statsapi_source_revision_id,
+        savant_source_revision_id,
         official_date,
         season
     from classified_batted_balls

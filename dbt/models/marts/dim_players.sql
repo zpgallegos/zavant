@@ -42,11 +42,7 @@ ranked_player_game_records as (
 most_recent_game_teams as (
     select
         a.player_id,
-        if(
-            count(distinct a.team_id) = 1,
-            max(a.team_id),
-            cast(null as bigint)
-        ) as most_recent_game_team_id
+        if(count(distinct a.team_id) = 1, max(a.team_id), cast(null as bigint)) as most_recent_game_team_id
     from ranked_player_game_records as a
     where a.game_recency_rank = 1
     group by 1

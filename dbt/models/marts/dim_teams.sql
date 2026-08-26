@@ -56,8 +56,7 @@ final as (
         a.game_pk as most_recent_game_pk,
         a.official_date as most_recent_game_official_date,
         a.season as most_recent_game_season,
-        coalesce(a.first_pitch_at, a.scheduled_start_at)
-            as most_recent_game_started_at,
+        coalesce(a.first_pitch_at, a.scheduled_start_at) as most_recent_game_started_at,
         a.team_side as most_recent_game_team_side
     from ranked_team_game_records as a
     where a.game_recency_rank = 1

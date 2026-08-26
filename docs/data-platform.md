@@ -110,9 +110,10 @@ The shared Glue run projects every immutable CSV revision into
 `statcast_batting_events` and uses `statcast_dates` as a one-row-per-revision
 completion marker. A separate `current_statcast_date_revisions` mapping drives
 the `current_statcast_batting_events` Athena view, so a corrected date becomes
-visible only after all of its terminal batting outcomes are durable. The dbt
-staging boundary exposes expected batting values without yet coupling Savant's
-date revision lifecycle to Stats API game revisions.
+visible only after all of its terminal batting outcomes are durable. dbt uses
+that authoritative date mapping to enrich Stats API batted-ball and
+plate-appearance facts and to recalculate affected games when either source
+revision changes.
 
 Representative source:
 

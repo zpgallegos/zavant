@@ -15,13 +15,13 @@
 }}
 
 with changed_games as (
-    {{ changed_game_revisions() }}
+    {{ changed_statsapi_game_revisions() }}
 ),
 
 pitches as (
     select
         a.*,
-        b.source_revision_id
+        b.statsapi_source_revision_id
     from {{ ref("stg_pitches") }} as a
     inner join changed_games as b on a.game_pk = b.game_pk
 ),
@@ -164,12 +164,10 @@ classified_pitches as (
             when 'W' then 'postseason'
             else 'other'
         end as season_phase,
-        enriched_pitches.balls_before = 0
-        and enriched_pitches.strikes_before = 0 as is_first_pitch_count,
+        enriched_pitches.balls_before = 0 and enriched_pitches.strikes_before = 0 as is_first_pitch_count,
         enriched_pitches.strikes_before = 2 as is_two_strike_count,
         enriched_pitches.balls_before = 3 as is_three_ball_count,
-        enriched_pitches.balls_before = 3
-        and enriched_pitches.strikes_before = 2 as is_full_count
+        enriched_pitches.balls_before = 3 and enriched_pitches.strikes_before = 2 as is_full_count
     from enriched_pitches
 ),
 
@@ -280,11 +278,7 @@ final as (
         if(is_in_play, 1, 0) as ball_in_play_ind,
         if(is_out, 1, 0) as out_ind,
         if(start_speed is not null, 1, 0) as velocity_tracked_ind,
-        if(
-            coordinate_p_x is not null and coordinate_p_z is not null,
-            1,
-            0
-        ) as location_tracked_ind,
+        if(coordinate_p_x is not null and coordinate_p_z is not null, 1, 0) as location_tracked_ind,
         if(spin_rate is not null, 1, 0) as spin_rate_tracked_ind,
         if(is_first_pitch_count, 1, 0) as first_pitch_count_ind,
         if(is_two_strike_count, 1, 0) as two_strike_count_ind,
@@ -292,7 +286,7 @@ final as (
         if(is_full_count, 1, 0) as full_count_ind,
 
         -- metadata
-        source_revision_id,
+        statsapi_source_revision_id,
         game_type,
         season_phase,
         official_date,

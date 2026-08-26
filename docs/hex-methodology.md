@@ -166,8 +166,8 @@ and traceable to retained source evidence.
 
 ## Current limitations
 
-- The profile does not yet calculate barrels, expected statistics, percentile
-  rankings, swing decisions, or fielding value.
+- The profile does not yet calculate percentile rankings, swing decisions, or
+  fielding value.
 - Governed pitch and baserunning models exist, but the published profile's
   current primary view emphasizes batting and contact-quality metrics.
 - Rare mid-plate-appearance batter or pitcher substitutions may require more

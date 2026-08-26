@@ -3,11 +3,11 @@ version: 2
 models:
   - name: fct_plate_appearances
     description: >-
-      Current official plate appearances derived from Glue-published game
-      state. The physical grain is game_pk and at_bat_index. The table is
-      maintained by replacing every row belonging to a newly revised game;
-      obsolete plate appearances are transactionally deleted during the same
-      Iceberg merge.
+      Current official plate appearances derived from Glue-published Stats API
+      game state and enriched with Baseball Savant expected wOBA values. The
+      physical grain is game_pk and at_bat_index. The table replaces every row
+      belonging to a game when either source revision changes; obsolete plate
+      appearances are transactionally deleted during the same Iceberg merge.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -365,6 +365,19 @@ models:
         description: Number of pitch records attached to the plate appearance.
         data_type: bigint
 
+      - name: expected_woba_value
+        description: >-
+          Savant expected wOBA contribution for the terminal outcome. Contact
+          outcomes use the modeled result; walks, hit-by-pitches, and other
+          non-contact outcomes retain their outcome-specific value.
+        data_type: double
+
+      - name: woba_denominator
+        description: >-
+          Savant contribution of the terminal outcome to the wOBA denominator.
+          This is normally one for included outcomes and zero or null otherwise.
+        data_type: double
+
       # matchup and source attributes
       - name: balls
         description: Ball count at the end of the plate appearance.
@@ -415,13 +428,20 @@ models:
         data_type: integer
 
       # metadata
-      - name: source_revision_id
+      - name: statsapi_source_revision_id
         description: >-
           Identifier of the current raw game revision used to replace the
           complete game's fact rows when MLB revises the game.
         data_type: varchar
         data_tests:
           - not_null
+
+      - name: savant_source_revision_id
+        description: >-
+          Content hash of the current date-scoped Savant revision used for the
+          expected wOBA enrichment. Null when that game date has not been
+          acquired from Savant.
+        data_type: varchar
 
       - name: official_date
         description: Official MLB date of the game.

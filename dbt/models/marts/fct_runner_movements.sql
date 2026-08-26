@@ -15,7 +15,7 @@
 }}
 
 with changed_games as (
-    {{ changed_game_revisions() }}
+    {{ changed_statsapi_game_revisions() }}
 ),
 
 runner_movements as (
@@ -39,7 +39,7 @@ pitches as (
 classified_runner_movements as (
     select
         a.*,
-        c.source_revision_id,
+        c.statsapi_source_revision_id,
         b.batter_id as play_batter_id,
         b.pitcher_id as play_pitcher_id,
         b.offense_team_id,
@@ -67,17 +67,13 @@ classified_runner_movements as (
         coalesce(a.is_scoring_event, false) as runner_scored,
         coalesce(a.earned, false) as run_is_earned,
         coalesce(a.team_unearned, false) as run_is_team_unearned,
-        coalesce(a.movement_reason like 'r_stolen_base_%', false)
-            as is_stolen_base,
+        coalesce(a.movement_reason like 'r_stolen_base_%', false) as is_stolen_base,
         coalesce(
             a.movement_reason like 'r_caught_stealing_%'
             or a.movement_reason like 'r_pickoff_caught_stealing_%',
             false
         ) as is_caught_stealing,
-        coalesce(
-            a.movement_reason like 'r_pickoff_caught_stealing_%',
-            false
-        ) as is_pickoff_caught_stealing
+        coalesce(a.movement_reason like 'r_pickoff_caught_stealing_%', false) as is_pickoff_caught_stealing
     from runner_movements as a
     inner join plays as b
         on
@@ -170,17 +166,14 @@ final as (
         if(runner_scored, 1, 0) as run_scored_ind,
         if(runner_scored and run_is_earned, 1, 0) as earned_run_ind,
         if(runner_scored and not run_is_earned, 1, 0) as unearned_run_ind,
-        if(runner_scored and run_is_team_unearned, 1, 0)
-            as team_unearned_run_ind,
+        if(runner_scored and run_is_team_unearned, 1, 0) as team_unearned_run_ind,
         if(is_stolen_base, 1, 0) as stolen_base_ind,
         if(is_caught_stealing, 1, 0) as caught_stealing_ind,
-        if(is_stolen_base or is_caught_stealing, 1, 0)
-            as stolen_base_attempt_ind,
-        if(is_pickoff_caught_stealing, 1, 0)
-            as pickoff_caught_stealing_ind,
+        if(is_stolen_base or is_caught_stealing, 1, 0) as stolen_base_attempt_ind,
+        if(is_pickoff_caught_stealing, 1, 0) as pickoff_caught_stealing_ind,
 
         -- metadata
-        source_revision_id,
+        statsapi_source_revision_id,
         official_date,
         season
     from classified_runner_movements

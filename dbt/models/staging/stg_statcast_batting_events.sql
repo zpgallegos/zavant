@@ -15,5 +15,5 @@ select
     woba_value,
     woba_denom,
     reconciled_at,
-    source_revision_id
+    source_revision_id as savant_source_revision_id
 from {{ source("zavant_analytical_prod", "statcast_batting_events") }}

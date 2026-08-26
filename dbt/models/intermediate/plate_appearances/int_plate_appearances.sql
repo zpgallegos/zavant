@@ -28,14 +28,14 @@ with qualifying_event_types (event_type) as (
 games as (
     select
         game_pk,
-        source_revision_id
+        statsapi_source_revision_id
     from {{ ref("stg_games") }}
 ),
 
 plays as (
     select
         a.*,
-        b.source_revision_id
+        b.statsapi_source_revision_id
     from {{ ref("stg_plays") }} as a
     inner join games as b on a.game_pk = b.game_pk
 ),
@@ -108,7 +108,7 @@ select
     plays_with_prior_state.strikes,
 
     -- metadata
-    plays_with_prior_state.source_revision_id,
+    plays_with_prior_state.statsapi_source_revision_id,
     plays_with_prior_state.official_date,
     plays_with_prior_state.season
 from plays_with_prior_state

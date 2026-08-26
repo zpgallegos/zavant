@@ -15,13 +15,13 @@
 }}
 
 with changed_games as (
-    {{ changed_game_revisions() }}
+    {{ changed_statsapi_game_revisions() }}
 ),
 
 boxscore_players as (
     select
         a.*,
-        b.source_revision_id
+        b.statsapi_source_revision_id
     from {{ ref("stg_boxscore_players") }} as a
     inner join changed_games as b on a.game_pk = b.game_pk
     where not a.is_on_bench
@@ -54,10 +54,7 @@ classified_participations as (
     select
         a.*,
         coalesce(b.games_played, 0) > 0 as participated_as_batter,
-        (
-            coalesce(c.games_played, 0) > 0
-            or coalesce(c.games_pitched, 0) > 0
-        ) as participated_as_pitcher,
+        (coalesce(c.games_played, 0) > 0 or coalesce(c.games_pitched, 0) > 0) as participated_as_pitcher,
         coalesce(d.position_count, 0) as position_count
     from boxscore_players as a
     left join player_batting as b
@@ -114,7 +111,7 @@ final as (
         if(participated_as_pitcher, 1, 0) as pitcher_participation_ind,
 
         -- metadata
-        source_revision_id,
+        statsapi_source_revision_id,
         official_date,
         season
     from classified_participations

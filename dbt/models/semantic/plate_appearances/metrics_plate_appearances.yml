@@ -154,6 +154,20 @@ metrics:
     type_params:
       measure: on_base_opportunities
 
+  - name: expected_woba_numerator
+    label: Expected wOBA Numerator
+    description: Sum of Savant expected wOBA values for included outcomes.
+    type: simple
+    type_params:
+      measure: expected_woba_numerator
+
+  - name: woba_denominator
+    label: wOBA Denominator
+    description: Number of outcome opportunities included in wOBA.
+    type: simple
+    type_params:
+      measure: woba_denominator
+
   - name: batting_average
     label: Batting Average (AVG)
     description: Hits divided by official at-bats.
@@ -177,6 +191,16 @@ metrics:
     type_params:
       numerator: total_bases
       denominator: at_bats
+
+  - name: expected_weighted_on_base_average
+    label: Expected Weighted On-Base Average (xwOBA)
+    description: >-
+      Savant expected wOBA values divided by the corresponding wOBA outcome
+      opportunities.
+    type: ratio
+    type_params:
+      numerator: expected_woba_numerator
+      denominator: woba_denominator
 
   - name: on_base_plus_slugging
     label: On-Base Plus Slugging (OPS)

@@ -1,13 +1,25 @@
 version: 2
 
 macros:
-  - name: changed_game_revisions
+  - name: changed_statsapi_game_revisions
     description: >-
-      Returns the current game and source-revision pairs that a correction-safe
-      fact model must calculate. Full-refresh runs include every current game;
-      incremental runs include only games whose current source revision is not
-      already represented in the target table. The target model must expose
-      game_pk and source_revision_id.
+      Returns the current game and Stats API revision pairs that a
+      correction-safe single-source fact must calculate. Full-refresh runs
+      include every current game; incremental runs include only games whose
+      current Stats API revision is not already represented in the target
+      table. The target model must expose game_pk and
+      statsapi_source_revision_id.
+
+  - name: changed_statsapi_and_savant_game_revisions
+    description: >-
+      Returns current game and two-source revision tuples that a
+      correction-safe combined fact must calculate. An incremental run selects
+      a game when either its Stats API revision or its Savant date revision
+      differs from the tuple already materialized in the target table. The
+      Savant identity comes from the authoritative current date-revision
+      mapping rather than being inferred from available event rows. It is
+      compared null-safely so unavailable source data does not cause perpetual
+      recalculation.
 
   - name: correction_safe_merge_rows
     description: >-

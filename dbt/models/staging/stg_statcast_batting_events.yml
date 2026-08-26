@@ -10,7 +10,6 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns:
-              - game_date
               - game_pk
               - at_bat_number
     columns:
@@ -86,6 +85,11 @@ models:
         description: UTC time when Glue last reconciled this date's current revision.
         data_type: timestamp
 
-      - name: source_revision_id
-        description: Content hash of the current exact-date Savant CSV revision.
+      - name: savant_source_revision_id
+        description: >-
+          Content hash of the current exact-date Savant CSV revision. Advances on
+          an observed change in a day-scoped CSV file, either through the scheduled
+          lookback window or through a backfill reconciliation.
         data_type: varchar
+        data_tests:
+          - not_null

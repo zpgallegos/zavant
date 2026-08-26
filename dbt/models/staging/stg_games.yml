@@ -230,7 +230,7 @@ models:
         data_type: varchar
 
       # metadata
-      - name: source_revision_id
+      - name: statsapi_source_revision_id
         description: >-
           Identifier of the raw game revision selected as current by Glue. It
           changes when MLB publishes a revised representation of the game and

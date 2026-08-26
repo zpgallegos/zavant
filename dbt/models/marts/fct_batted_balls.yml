@@ -5,9 +5,11 @@ models:
     description: >-
       Current batted-ball events enriched with the responsible batter,
       pitcher, teams, plate-appearance outcome, game state, pitch context, and
-      governed contact-quality classifications. Its physical grain is
-      game_pk, at_bat_index, and event_index. Revised games are replaced as a
-      unit so removed events do not survive a source correction.
+      governed contact-quality classifications. Savant expected-contact values
+      are joined through the normalized plate-appearance identity. Its physical
+      grain is game_pk, at_bat_index, and event_index. A revision from either
+      source replaces the affected game's rows as a unit so removed events or
+      revised expected values do not survive a source correction.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -193,6 +195,24 @@ models:
         description: Whether MLB classifies the trajectory as a bunt.
         data_type: boolean
 
+      - name: expected_batting_average
+        description: >-
+          Savant probability that the batted ball becomes any type of hit,
+          based primarily on exit velocity and launch angle.
+        data_type: double
+
+      - name: expected_slugging_percentage
+        description: >-
+          Savant expected total bases for the batted ball, weighting its
+          single, double, triple, and home-run probabilities from one to four.
+        data_type: double
+
+      - name: expected_weighted_on_base_average
+        description: >-
+          Savant expected wOBA contribution for the batted ball using
+          season-adjusted outcome weights.
+        data_type: double
+
       # additive indicators and measures
       - name: batted_ball_ind
         description: Additive batted-ball-event indicator, always one per fact row.
@@ -284,13 +304,20 @@ models:
         data_type: integer
 
       # metadata
-      - name: source_revision_id
+      - name: statsapi_source_revision_id
         description: >-
           Identifier of the current raw game revision used to replace all of
           the game's batted-ball rows when MLB revises the game.
         data_type: varchar
         data_tests:
           - not_null
+
+      - name: savant_source_revision_id
+        description: >-
+          Identifier of the current date-scoped Savant CSV revision used to
+          enrich the game's batted-ball rows with expected-contact values. It
+          is null when the game has no current Savant outcome rows.
+        data_type: varchar
 
       - name: official_date
         description: Official MLB date of the game.

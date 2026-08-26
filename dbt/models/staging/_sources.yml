@@ -61,6 +61,8 @@ sources:
         identifier: current_substitutions
       - name: statcast_batting_events
         identifier: current_statcast_batting_events
+      - name: statcast_date_revisions
+        identifier: current_statcast_date_revisions
       - name: team_batting
         identifier: current_team_batting
       - name: team_fielding

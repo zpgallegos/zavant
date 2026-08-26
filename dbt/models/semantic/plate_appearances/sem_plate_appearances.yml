@@ -202,3 +202,15 @@ semantic_models:
           used for on-base percentage.
         agg: sum
         expr: at_bat_ind + walk_ind + hit_by_pitch_ind + sac_fly_ind
+
+      - name: expected_woba_numerator
+        description: >-
+          Sum of Savant expected wOBA values across outcomes included in the
+          wOBA denominator.
+        agg: sum
+        expr: expected_woba_value * woba_denominator
+
+      - name: woba_denominator
+        description: Sum of Savant outcome contributions to the wOBA denominator.
+        agg: sum
+        expr: woba_denominator

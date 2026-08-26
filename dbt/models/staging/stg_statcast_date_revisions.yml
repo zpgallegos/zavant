@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_statcast_date_revisions
+    description: >-
+      Authoritative current Baseball Savant revision for each acquired calendar
+      date. Combined facts use this control mapping to identify source changes
+      independently of whether that date produced terminal batting outcomes.
+    columns:
+      - name: game_date
+        description: Calendar date covered by the Savant acquisition.
+        data_tests:
+          - not_null
+          - unique
+      - name: season
+        description: MLB season containing the acquired date.
+        data_tests:
+          - not_null
+      - name: savant_source_revision_id
+        description: Canonical revision identifier for the current date payload.
+        data_tests:
+          - not_null
+      - name: projection_contract_version
+        description: Projection contract version that produced the mapping.
+        data_tests:
+          - not_null
+      - name: projection_run_id
+        description: Identifier for the projection run that selected the revision.
+        data_tests:
+          - not_null
+      - name: reconciled_at
+        description: Timestamp when the current revision was reconciled.
+        data_tests:
+          - not_null
+      - name: raw_object_uri
+        description: URI of the raw Savant object represented by this revision.
+        data_tests:
+          - not_null

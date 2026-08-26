@@ -174,7 +174,7 @@ models:
         data_type: integer
 
       # metadata
-      - name: source_revision_id
+      - name: statsapi_source_revision_id
         description: >-
           Identifier of the current raw game revision inherited from the
           containing plate appearance.

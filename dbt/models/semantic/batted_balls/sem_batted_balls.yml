@@ -18,10 +18,6 @@ semantic_models:
         type: primary
         expr: batted_ball_key
 
-      - name: plate_appearance
-        type: foreign
-        expr: plate_appearance_key
-
       - name: player
         type: foreign
         expr: result_batter_id
@@ -93,6 +89,9 @@ semantic_models:
         type: categorical
 
       - name: has_statcast_tracking
+        type: categorical
+
+      - name: is_barrel
         type: categorical
 
       - name: is_hard_hit
@@ -236,25 +235,3 @@ semantic_models:
           contact-quality code 6.
         agg: sum
         expr: barrel_ind
-
-      - name: expected_hits
-        description: >-
-          Sum of Savant hit probabilities across batted balls. This is the
-          additive expected-hit numerator used with at-bats to calculate xBA.
-        agg: sum
-        expr: expected_batting_average
-
-      - name: expected_total_bases
-        description: >-
-          Sum of Savant expected total-base values across batted balls. This is
-          the additive numerator used with at-bats to calculate xSLG.
-        agg: sum
-        expr: expected_slugging_percentage
-
-      - name: expected_woba_contact_value
-        description: >-
-          Sum of Savant expected wOBA contributions from batted balls. This is
-          only the contact component of an xwOBA numerator; the complete
-          numerator also incorporates non-contact plate-appearance outcomes.
-        agg: sum
-        expr: expected_weighted_on_base_average

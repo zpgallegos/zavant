@@ -4,7 +4,7 @@ semantic_models:
   - name: plate_appearances
     description: >-
       One current MLB plate appearance, with batting outcomes, participants,
-      game state, and additive measures suitable for aggregation.
+      game state, and Savant values used by expected-stat and barrel metrics.
     model: ref('fct_plate_appearances')
     config:
       meta:
@@ -89,6 +89,12 @@ semantic_models:
         type: categorical
 
       - name: base_state_after
+        type: categorical
+
+      - name: statcast_launch_speed_angle_code
+        type: categorical
+
+      - name: is_barrel
         type: categorical
 
     measures:
@@ -203,6 +209,20 @@ semantic_models:
         agg: sum
         expr: at_bat_ind + walk_ind + hit_by_pitch_ind + sac_fly_ind
 
+      - name: expected_hits
+        description: >-
+          Sum of Savant hit probabilities across terminal outcomes. At-bats
+          without tracked contact contribute zero.
+        agg: sum
+        expr: coalesce(expected_batting_average, 0)
+
+      - name: expected_total_bases
+        description: >-
+          Sum of Savant expected total-base values across terminal outcomes.
+          At-bats without tracked contact contribute zero.
+        agg: sum
+        expr: coalesce(expected_slugging_percentage, 0)
+
       - name: expected_woba_numerator
         description: >-
           Sum of Savant expected wOBA values across outcomes included in the
@@ -214,3 +234,10 @@ semantic_models:
         description: Sum of Savant outcome contributions to the wOBA denominator.
         agg: sum
         expr: woba_denominator
+
+      - name: barrels_per_plate_appearance
+        description: >-
+          Average of the plate-appearance barrel indicator, equivalent to
+          barrels divided by completed plate appearances.
+        agg: average
+        expr: barrel_ind

@@ -86,7 +86,7 @@ convention without copying the calculation into each fact.
 |---|---|---|
 | [`int_plate_appearances`](models/intermediate/plate_appearances/int_plate_appearances.sql) | One qualifying `game_pk`, `at_bat_index` | Isolates official batter turns from MLB's broader `allPlays` stream. |
 | [`int_at_bats`](models/intermediate/at_bats/int_at_bats.sql) | One official at-bat | Applies official outcome exclusions without duplicating plate-appearance logic. |
-| [`fct_plate_appearances`](models/marts/fct_plate_appearances.sql) | One `game_pk`, `at_bat_index` | Stores outcomes, participants, game state, additive indicators, and deterministic keys. |
+| [`fct_plate_appearances`](models/marts/fct_plate_appearances.sql) | One `game_pk`, `at_bat_index` | Stores outcomes, participants, game state, additive indicators, and Savant values used by plate-appearance metrics. |
 | [`fct_batted_balls`](models/marts/fct_batted_balls.sql) | One `game_pk`, `at_bat_index`, `event_index` | Stores contact measurements, pitch context, tracking eligibility, and governed contact classifications. |
 | [`fct_pitches`](models/marts/fct_pitches.sql) | One `game_pk`, `at_bat_index`, `event_index` | Stores every actual pitch, including pitches outside completed plate appearances, with pre-pitch count, pitch family, result, and tracking context. |
 | [`fct_runner_movements`](models/marts/fct_runner_movements.sql) | One `game_pk`, `at_bat_index`, `runner_index` | Stores runner-specific advances, runs, outs, basestealing outcomes, and optional pitch context. |
@@ -120,6 +120,9 @@ Representative metric contracts are:
 | Batting average | `hits / at_bats` | Calculates a ratio of aggregate components instead of averaging row-level rates. |
 | On-base percentage | `(hits + walks + hit_by_pitch) / (at_bats + walks + hit_by_pitch + sacrifice_flies)` | Preserves the official opportunity denominator at every query grain. |
 | Slugging percentage | `total_bases / at_bats` | Keeps total bases additive before division. |
+| Expected batting average | `expected_hits / at_bats` | Keeps Savant contact probabilities additive while strikeout at-bats remain in the denominator. |
+| Expected slugging percentage | `expected_total_bases / at_bats` | Calculates the player rate from additive Savant total-base expectations. |
+| Barrels per plate appearance | Average of the PA-grain `barrel_ind` | Keeps the numerator and denominator on the plate-appearance dataset accepted by Hex. |
 | On-base plus slugging | `on_base_percentage + slugging_percentage` | Reuses governed component metrics. |
 | BABIP | `(hits - home_runs) / (at_bats - strikeouts - home_runs + sacrifice_flies)` | Defines balls-in-play eligibility explicitly. |
 | Average exit velocity | `exit_velocity_sum / exit_velocity_tracked_batted_balls` | Weights regrouped averages by the number of tracked batted balls. |
@@ -175,9 +178,9 @@ The project combines generic grain tests with domain-specific singular tests:
   verifies the Stats API side of the plate-appearance revision tuple, while
   [`plate_appearance_fact_uses_current_savant_revision.sql`](tests/plate_appearance_fact_uses_current_savant_revision.sql)
   verifies the Savant side.
-- [`plate_appearance_fact_matches_statcast_expected_woba.sql`](tests/plate_appearance_fact_matches_statcast_expected_woba.sql)
-  verifies that plate-appearance xwOBA inputs retain Savant's expected value
-  and denominator.
+- [`plate_appearance_fact_matches_statcast_batting_values.sql`](tests/plate_appearance_fact_matches_statcast_batting_values.sql)
+  verifies that plate-appearance expected-stat inputs and barrel classification
+  retain Savant's terminal-outcome values.
 - [`batted_ball_fact_uses_current_revision.sql`](tests/batted_ball_fact_uses_current_revision.sql)
   verifies the Stats API side of the contact-event revision tuple, while
   [`batted_ball_fact_uses_current_savant_revision.sql`](tests/batted_ball_fact_uses_current_savant_revision.sql)

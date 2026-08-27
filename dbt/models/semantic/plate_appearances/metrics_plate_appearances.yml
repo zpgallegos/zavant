@@ -168,6 +168,20 @@ metrics:
     type_params:
       measure: woba_denominator
 
+  - name: expected_hits
+    label: Expected Hits (xH)
+    description: Sum of Savant hit probabilities across terminal outcomes.
+    type: simple
+    type_params:
+      measure: expected_hits
+
+  - name: expected_total_bases
+    label: Expected Total Bases (xTB)
+    description: Sum of Savant expected total-base values across terminal outcomes.
+    type: simple
+    type_params:
+      measure: expected_total_bases
+
   - name: batting_average
     label: Batting Average (AVG)
     description: Hits divided by official at-bats.
@@ -201,6 +215,31 @@ metrics:
     type_params:
       numerator: expected_woba_numerator
       denominator: woba_denominator
+
+  - name: expected_batting_average
+    label: Expected Batting Average (xBA)
+    description: >-
+      Expected hits divided by official at-bats. Strikeout at-bats contribute
+      to the denominator without contributing expected hits.
+    type: ratio
+    type_params:
+      numerator: expected_hits
+      denominator: at_bats
+
+  - name: expected_slugging_percentage
+    label: Expected Slugging Percentage (xSLG)
+    description: Savant expected total bases divided by official at-bats.
+    type: ratio
+    type_params:
+      numerator: expected_total_bases
+      denominator: at_bats
+
+  - name: barrels_per_plate_appearance
+    label: Barrels per Plate Appearance
+    description: Share of completed plate appearances ending in a Savant barrel.
+    type: simple
+    type_params:
+      measure: barrels_per_plate_appearance
 
   - name: on_base_plus_slugging
     label: On-Base Plus Slugging (OPS)

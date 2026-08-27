@@ -4,10 +4,11 @@ models:
   - name: fct_plate_appearances
     description: >-
       Current official plate appearances derived from Glue-published Stats API
-      game state and enriched with Baseball Savant expected wOBA values. The
-      physical grain is game_pk and at_bat_index. The table replaces every row
-      belonging to a game when either source revision changes; obsolete plate
-      appearances are transactionally deleted during the same Iceberg merge.
+      game state and enriched with Baseball Savant expected outcomes and
+      contact classifications. The physical grain is game_pk and at_bat_index.
+      The table replaces every row belonging to a game when either source
+      revision changes; obsolete plate appearances are transactionally deleted
+      during the same Iceberg merge.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -285,6 +286,45 @@ models:
         description: Whether the plate appearance includes at least one out.
         data_type: boolean
 
+      # Savant outcome values
+      - name: statcast_launch_speed_angle_code
+        description: >-
+          Baseball Savant's contact-quality classification code for the
+          terminal outcome. Code 6 identifies a barrel; non-contact outcomes
+          generally have no code.
+        data_type: integer
+
+      - name: is_barrel
+        description: >-
+          Whether Baseball Savant assigned contact-quality classification code
+          6 to the terminal outcome.
+        data_type: boolean
+
+      - name: expected_batting_average
+        description: >-
+          Savant hit probability for the terminal batted-ball outcome. It is
+          null for strikeouts and other outcomes without tracked contact.
+        data_type: double
+
+      - name: expected_slugging_percentage
+        description: >-
+          Savant expected total bases for the terminal batted-ball outcome. It
+          is null for strikeouts and other outcomes without tracked contact.
+        data_type: double
+
+      - name: expected_woba_value
+        description: >-
+          Savant expected wOBA contribution for the terminal outcome. Contact
+          outcomes use the modeled result; walks, hit-by-pitches, and other
+          non-contact outcomes retain their outcome-specific value.
+        data_type: double
+
+      - name: woba_denominator
+        description: >-
+          Savant contribution of the terminal outcome to the wOBA denominator.
+          This is normally one for included outcomes and zero or null otherwise.
+        data_type: double
+
       # additive indicators and measures
       - name: plate_appearance_ind
         description: Additive plate-appearance indicator, always one per fact row.
@@ -350,6 +390,10 @@ models:
         description: Additive ordinary reached-on-error indicator.
         data_type: integer
 
+      - name: barrel_ind
+        description: Additive indicator for a plate appearance ending in a barrel.
+        data_type: integer
+
       - name: rbi
         description: Runs batted in credited on the plate appearance.
         data_type: integer
@@ -364,19 +408,6 @@ models:
       - name: pitch_count
         description: Number of pitch records attached to the plate appearance.
         data_type: bigint
-
-      - name: expected_woba_value
-        description: >-
-          Savant expected wOBA contribution for the terminal outcome. Contact
-          outcomes use the modeled result; walks, hit-by-pitches, and other
-          non-contact outcomes retain their outcome-specific value.
-        data_type: double
-
-      - name: woba_denominator
-        description: >-
-          Savant contribution of the terminal outcome to the wOBA denominator.
-          This is normally one for included outcomes and zero or null otherwise.
-        data_type: double
 
       # matchup and source attributes
       - name: balls
@@ -439,8 +470,8 @@ models:
       - name: savant_source_revision_id
         description: >-
           Content hash of the current date-scoped Savant revision used for the
-          expected wOBA enrichment. Null when that game date has not been
-          acquired from Savant.
+          expected-stat and barrel-classification enrichment. Null when that
+          game date has not been acquired from Savant.
         data_type: varchar
 
       - name: official_date

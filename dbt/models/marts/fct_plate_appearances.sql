@@ -73,6 +73,10 @@ classified_plate_appearances as (
         coalesce(c.has_defensive_shift_violation, false) as is_defensive_shift_violation,
         b.game_pk is not null as is_at_bat,
         coalesce(d.pitch_count, 0) as pitch_count,
+        e.launch_speed_angle as statcast_launch_speed_angle_code,
+        coalesce(e.launch_speed_angle = 6, false) as is_barrel,
+        e.estimated_ba_using_speedangle as expected_batting_average,
+        e.estimated_slg_using_speedangle as expected_slugging_percentage,
         e.estimated_woba_using_speedangle as expected_woba_value,
         e.woba_denom as woba_denominator
     from plate_appearances as a
@@ -275,6 +279,14 @@ final as (
         has_review,
         has_out,
 
+        -- Savant outcome values
+        statcast_launch_speed_angle_code,
+        is_barrel,
+        expected_batting_average,
+        expected_slugging_percentage,
+        expected_woba_value,
+        woba_denominator,
+
         -- additive indicators and measures
         1 as plate_appearance_ind,
         if(is_at_bat, 1, 0) as at_bat_ind,
@@ -292,14 +304,13 @@ final as (
         if(is_sac_bunt, 1, 0) as sac_bunt_ind,
         if(is_sac_fly, 1, 0) as sac_fly_ind,
         if(is_reached_on_error, 1, 0) as reached_on_error_ind,
+        if(is_barrel, 1, 0) as barrel_ind,
         rbi,
         case
             when is_top_inning then away_score - away_score_before
             else home_score - home_score_before
         end as runs_scored_during_plate_appearance,
         pitch_count,
-        expected_woba_value,
-        woba_denominator,
 
         -- matchup and source attributes
         balls,

@@ -71,6 +71,7 @@ class StatcastCsvContractTests(unittest.TestCase):
 
         self.assertEqual(response.row_count, 3)
         self.assertEqual(response.terminal_row_count, 2)
+        self.assertIn("launch_speed_angle", response.columns)
         self.assertIn("estimated_slg_using_speedangle", response.columns)
 
     def test_rejects_rows_outside_the_exact_requested_date(self) -> None:
@@ -86,6 +87,15 @@ class StatcastCsvContractTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(BaseballSavantContractError, "estimated_slg"):
+            StatcastCsvResponse.from_bytes(raw, date(2026, 8, 8))
+
+    def test_rejects_a_missing_contact_classification_column(self) -> None:
+        raw = FIXTURE.read_bytes().replace(
+            b"launch_speed_angle",
+            b"unexpected_column",
+        )
+
+        with self.assertRaisesRegex(BaseballSavantContractError, "launch_speed_angle"):
             StatcastCsvResponse.from_bytes(raw, date(2026, 8, 8))
 
     def test_rejects_a_short_row_with_missing_trailing_fields(self) -> None:

@@ -61,6 +61,12 @@ models:
         description: Vertical launch angle in degrees when tracked.
         data_type: double
 
+      - name: launch_speed_angle
+        description: >-
+          Baseball Savant's contact-quality classification code derived from
+          launch speed and angle. Code 6 identifies a barrel.
+        data_type: integer
+
       - name: estimated_ba_using_speedangle
         description: Statcast expected batting-average value for tracked contact.
         data_type: double

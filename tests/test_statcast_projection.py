@@ -65,10 +65,12 @@ class StatcastProjectorTests(unittest.TestCase):
         self.assertEqual(batted_ball["at_bat_number"], 1)
         self.assertEqual(batted_ball["pitch_number"], 2)
         self.assertEqual(batted_ball["launch_speed"], 88.8)
+        self.assertEqual(batted_ball["launch_speed_angle"], 3)
         self.assertEqual(batted_ball["estimated_ba_using_speedangle"], 0.01)
         self.assertEqual(batted_ball["estimated_slg_using_speedangle"], 0.017)
         self.assertEqual(batted_ball["estimated_woba_using_speedangle"], 0.013)
         walk = projection.batting_events[1]
+        self.assertIsNone(walk["launch_speed_angle"])
         self.assertEqual(walk["estimated_woba_using_speedangle"], 0.689)
         self.assertEqual(walk["woba_value"], 0.689)
         self.assertEqual(
@@ -91,6 +93,22 @@ class StatcastProjectorTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ProjectionContractError, "invalid estimated_ba_using_speedangle"
+        ):
+            project_statcast_date(source, RUN_ID, PROJECTED_AT)
+
+    def test_rejects_invalid_launch_speed_angle_code(self) -> None:
+        raw = self.raw.replace(b'"52","3","0.010"', b'"52","invalid","0.010"')
+        source = StatcastProjectionSource(
+            game_date=GAME_DATE,
+            revision_id=sha256_bytes(raw),
+            observed_at=OBSERVED_AT,
+            source_uri=self.source.source_uri,
+            raw_object_uri=self.source.raw_object_uri,
+            raw=raw,
+        )
+
+        with self.assertRaisesRegex(
+            ProjectionContractError, "invalid launch_speed_angle"
         ):
             project_statcast_date(source, RUN_ID, PROJECTED_AT)
 

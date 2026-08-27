@@ -73,6 +73,7 @@ classified_batted_balls as (
         c.coordinate_p_x as pitch_plate_x,
         c.coordinate_p_z as pitch_plate_z,
         c.zone as pitch_zone,
+        d.launch_speed_angle as statcast_launch_speed_angle_code,
         d.estimated_ba_using_speedangle as expected_batting_average,
         d.estimated_slg_using_speedangle as expected_slugging_percentage,
         d.estimated_woba_using_speedangle as expected_weighted_on_base_average,
@@ -83,13 +84,7 @@ classified_batted_balls as (
             'home_run'
         ) as is_hit,
         b.event_type = 'home_run' as is_home_run,
-        coalesce(
-            a.launch_speed >= 98.0
-            and a.launch_angle between 8.0 and 50.0
-            and a.launch_speed + a.launch_angle >= 124.0
-            and a.launch_speed * 1.5 - a.launch_angle >= 117.0,
-            false
-        ) as is_barrel,
+        coalesce(d.launch_speed_angle = 6, false) as is_barrel,
         coalesce(a.launch_speed >= 95.0, false) as is_hard_hit,
         coalesce(a.launch_angle between 8.0 and 32.0, false) as is_sweet_spot,
         a.trajectory in (
@@ -169,6 +164,7 @@ final as (
         location,
         total_distance,
         trajectory,
+        statcast_launch_speed_angle_code,
         has_exit_velocity,
         has_launch_angle,
         has_statcast_tracking,

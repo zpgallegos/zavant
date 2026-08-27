@@ -164,6 +164,12 @@ models:
         description: MLB's detailed trajectory classification.
         data_type: varchar
 
+      - name: statcast_launch_speed_angle_code
+        description: >-
+          Baseball Savant's contact-quality classification code derived from
+          launch speed and angle. Code 6 identifies a barrel.
+        data_type: integer
+
       - name: has_exit_velocity
         description: Whether MLB supplied an exit-velocity measurement.
         data_type: boolean
@@ -178,9 +184,8 @@ models:
 
       - name: is_barrel
         description: >-
-          Whether the measured exit-velocity and launch-angle combination is
-          inside MLB's Statcast barrel zone: at least 98 mph, bounded from 8
-          through 50 degrees, and within the velocity-dependent angle range.
+          Whether Baseball Savant assigned contact-quality classification code
+          6, its authoritative Barrel classification.
         data_type: boolean
 
       - name: is_hard_hit

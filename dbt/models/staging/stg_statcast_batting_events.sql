@@ -9,6 +9,7 @@ select
     event,
     launch_speed,
     launch_angle,
+    launch_speed_angle,
     estimated_ba_using_speedangle,
     estimated_slg_using_speedangle,
     estimated_woba_using_speedangle,

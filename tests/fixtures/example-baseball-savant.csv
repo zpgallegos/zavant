@@ -1,4 +1,4 @@
-"game_date","game_type","game_pk","at_bat_number","pitch_number","batter","pitcher","events","launch_speed","launch_angle","estimated_ba_using_speedangle","estimated_slg_using_speedangle","estimated_woba_using_speedangle","woba_value","woba_denom"
-"2026-08-08","R","823514","1","1","605141","682243","","","","","","","",""
-"2026-08-08","R","823514","1","2","605141","682243","field_out","88.8","52","0.010","0.017","0.013","0.000","1"
-"2026-08-08","R","823514","8","5","660271","682243","walk","","","","","0.689","0.689","1"
+"game_date","game_type","game_pk","at_bat_number","pitch_number","batter","pitcher","events","launch_speed","launch_angle","launch_speed_angle","estimated_ba_using_speedangle","estimated_slg_using_speedangle","estimated_woba_using_speedangle","woba_value","woba_denom"
+"2026-08-08","R","823514","1","1","605141","682243","","","","","","","","",""
+"2026-08-08","R","823514","1","2","605141","682243","field_out","88.8","52","3","0.010","0.017","0.013","0.000","1"
+"2026-08-08","R","823514","8","5","660271","682243","walk","","","","","","0.689","0.689","1"

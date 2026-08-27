@@ -3,7 +3,7 @@
 from zavant.projection.contracts import Column, TableContract
 
 
-STATCAST_PROJECTION_CONTRACT_VERSION = "zavant-analytical-statcast-projection/v1"
+STATCAST_PROJECTION_CONTRACT_VERSION = "zavant-analytical-statcast-projection/v2"
 
 STATCAST_IDENTITY_COLUMNS = (
     Column("game_date", "date", False),
@@ -26,6 +26,7 @@ STATCAST_BATTING_EVENTS_CONTRACT = TableContract(
         Column("event", "string", False),
         Column("launch_speed", "float64"),
         Column("launch_angle", "float64"),
+        Column("launch_speed_angle", "int32"),
         Column("estimated_ba_using_speedangle", "float64"),
         Column("estimated_slg_using_speedangle", "float64"),
         Column("estimated_woba_using_speedangle", "float64"),

@@ -182,6 +182,10 @@ The project combines generic grain tests with domain-specific singular tests:
   verifies the Stats API side of the contact-event revision tuple, while
   [`batted_ball_fact_uses_current_savant_revision.sql`](tests/batted_ball_fact_uses_current_savant_revision.sql)
   verifies the Savant side.
+- [`batted_ball_fact_matches_statcast_expected_statistics.sql`](tests/batted_ball_fact_matches_statcast_expected_statistics.sql)
+  and [`batted_ball_fact_matches_statcast_barrel_classification.sql`](tests/batted_ball_fact_matches_statcast_barrel_classification.sql)
+  verify that the fact preserves Savant's expected values and authoritative
+  barrel classification.
 - [`statcast_batting_events_use_current_date_revision.sql`](tests/statcast_batting_events_use_current_date_revision.sql)
   verifies projected outcomes agree with the authoritative date-revision
   mapping used by the combined incremental selector.

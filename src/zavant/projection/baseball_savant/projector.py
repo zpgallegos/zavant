@@ -27,9 +27,10 @@ def project_statcast_date(
 ) -> StatcastDateProjection:
     """Project terminal batting outcomes from one exact-date CSV revision.
 
-    Savant exports one row per pitch. Expected batting values belong to the
-    terminal row identified by a non-empty ``events`` value, so non-terminal
-    pitches are intentionally excluded from this analytical slice.
+    Savant exports one row per pitch. Expected batting values and contact
+    classifications belong to the terminal row identified by a non-empty
+    ``events`` value, so non-terminal pitches are intentionally excluded from
+    this analytical slice.
     """
 
     if projected_at.utcoffset() is None:
@@ -63,6 +64,9 @@ def project_statcast_date(
                 "event": event,
                 "launch_speed": _optional_float(row, "launch_speed", row_number),
                 "launch_angle": _optional_float(row, "launch_angle", row_number),
+                "launch_speed_angle": _optional_integer(
+                    row, "launch_speed_angle", row_number
+                ),
                 "estimated_ba_using_speedangle": _optional_float(
                     row, "estimated_ba_using_speedangle", row_number
                 ),
@@ -125,6 +129,22 @@ def _optional_float(
         return None
     try:
         return float(value)
+    except ValueError as exc:
+        raise ProjectionContractError(
+            f"Statcast CSV row {row_number} has invalid {column}"
+        ) from exc
+
+
+def _optional_integer(
+    row: Dict[str, str | None],
+    column: str,
+    row_number: int,
+) -> Optional[int]:
+    value = row.get(column)
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
     except ValueError as exc:
         raise ProjectionContractError(
             f"Statcast CSV row {row_number} has invalid {column}"

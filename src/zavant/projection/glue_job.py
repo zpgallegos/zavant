@@ -17,7 +17,6 @@ from zavant.projection.baseball_savant.contracts import (
     CURRENT_STATCAST_DATE_REVISIONS_CONTRACT,
     STATCAST_DATES_CONTRACT,
     STATCAST_HISTORY_CONTRACTS,
-    STATCAST_ICEBERG_CONTRACTS,
     STATCAST_PROJECTION_CONTRACT_VERSION,
 )
 from zavant.projection.baseball_savant.models import StatcastDateProjection
@@ -32,6 +31,7 @@ from zavant.projection.baseball_savant.s3_sources import (
     resolve_current_statcast_revisions,
     validate_current_statcast_revisions,
 )
+from zavant.projection.catalog import all_projection_contracts
 from zavant.projection.contracts import (
     Column,
     TableContract,
@@ -304,7 +304,7 @@ def run_glue_projection(
     with _timed_phase("current_view_publication"):
         expected_history_tables = {
             contract.name
-            for contract in _all_projection_contracts()
+            for contract in all_projection_contracts()
         }
         view_catalog = (
             existing_tables
@@ -450,22 +450,12 @@ def _project_statcast_partition(
         )
 
 
-def _all_projection_contracts() -> tuple[TableContract, ...]:
-    """Return every Iceberg history and control contract owned by this job."""
-
-    return (
-        *TABLE_CONTRACTS.values(),
-        CURRENT_REVISION_CONTRACT,
-        *STATCAST_ICEBERG_CONTRACTS,
-    )
-
-
 def _ensure_tables(
     spark: Any,
     configuration: GlueProjectionConfiguration,
     existing_tables: Set[str],
 ) -> None:
-    for contract in _all_projection_contracts():
+    for contract in all_projection_contracts():
         if contract.name not in existing_tables:
             spark.sql(
                 create_table_sql(

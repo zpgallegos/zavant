@@ -35,6 +35,14 @@ earlier implementation without a big-bang rewrite.
   is superseded by the workflow-owned Step Functions schedule in ADR 0017; the
   one-time CloudFormation ownership migration remains operator-controlled.
 - Add alarms and a failed-event destination, then verify the first scheduled invocation.
+- Deferred storage namespace cleanup: canonicalize future Stats API coordinator
+  manifests under `runs/mlb_stats_api/daily/` and
+  `runs/mlb_stats_api/backfill/` instead of the legacy `runs/daily/` and
+  `runs/backfill/` prefixes. Implement this as a compatibility migration when
+  changing producer paths: readers and Dagster's publication monitor must
+  recognize both layouts, resumed historical backfills must continue resolving
+  legacy manifest paths stored in season checkpoints, and existing S3 objects
+  should remain in place rather than being moved or deleted.
 
 Local exit demo established: bootstrap one daily run, acquire eligible schedule games, replay an MLB correction into a new revision, rerun safely, and inspect the schedule, correction, watermark, and coordinator manifests.
 

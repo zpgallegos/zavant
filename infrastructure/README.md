@@ -8,8 +8,11 @@ and Step Functions, while the
 [analytical projection infrastructure](analytical.md) references this bucket
 and owns the Glue/Iceberg execution boundary. The
 [Hex integration infrastructure](hex.md) owns its Athena workgroup, ephemeral
-query-result bucket, and temporary-credential warehouse role. Monitoring
-remains a later slice.
+query-result bucket, and temporary-credential warehouse role. The independent
+[Dagster deployment](dagster/README.md) monitors the externally published Athena
+relations and builds eligible dbt branches, with a private UI, persistent state,
+and optional failure alerts. It does not invoke acquisitions or Glue, or replace
+the EventBridge/Step Functions stack.
 
 ## Bucket guarantees
 

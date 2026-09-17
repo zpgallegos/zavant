@@ -1,0 +1,13 @@
+# EC2-only profile. Boto3 uses the instance role; no static AWS credentials.
+zavant_analytics:
+  target: prod
+  outputs:
+    prod:
+      type: athena
+      database: awsdatacatalog
+      schema: zavant_dbt_prod
+      region_name: "{{ env_var('ZAVANT_AWS_REGION') }}"
+      work_group: "{{ env_var('ZAVANT_ANALYTICAL_ATHENA_WORKGROUP') }}"
+      s3_staging_dir: "s3://{{ env_var('ZAVANT_S3_BUCKET') }}/{{ env_var('ZAVANT_S3_PREFIX') }}/analytical/athena-results/dagster-dbt/"
+      s3_data_dir: "s3://{{ env_var('ZAVANT_S3_BUCKET') }}/{{ env_var('ZAVANT_DBT_DATA_PREFIX') }}/"
+      threads: 2

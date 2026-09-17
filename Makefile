@@ -11,6 +11,8 @@ export ZAVANT_DAILY_SCHEDULE_EXPRESSION
 export ZAVANT_DAILY_SCHEDULE_STATE
 export ZAVANT_DAILY_SCHEDULE_TIMEZONE
 export ZAVANT_DATA_DIR
+export ZAVANT_DAGSTER_ALERT_TOPIC_ARN
+export ZAVANT_DAGSTER_CYCLE_TIMEZONE
 export ZAVANT_DEPLOYMENT_ENVIRONMENT
 export ZAVANT_INITIAL_CORRECTION_WATERMARK
 export ZAVANT_INITIAL_SCHEDULE_DATE
@@ -36,12 +38,18 @@ GH_CLI ?= gh
 BUILD_DIR := build
 DBT_PROJECT_DIR := dbt
 DBT_PROFILES_DIR ?= $(HOME)/.dbt
+DBT_TARGET ?= dev
+export DBT_PROFILES_DIR DBT_TARGET
 VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_DBT := $(abspath $(VENV_DIR)/bin/dbt)
 VENV_METRICFLOW := $(abspath $(VENV_DIR)/bin/mf)
 VENV_SQLFLUFF := $(abspath $(VENV_DIR)/bin/sqlfluff)
 PYTHON_CONSTRAINTS_FILE := constraints.txt
+
+# Persistent local Dagster state; override with an absolute path if needed.
+DAGSTER_HOME ?= $(CURDIR)/.local/dagster
+DAGSTER_INSTANCE_TEMPLATE := infrastructure/dagster/dagster.yaml
 
 # AWS deployment identity
 
@@ -131,6 +139,15 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	dbt-semantic-validate \
 	dbt-source-freshness \
 	dbt-staging-build \
+	dagster-dev \
+	dagster-init \
+	dagster-service-init \
+	dagster-prepare \
+	dagster-code-server \
+	dagster-webserver \
+	dagster-daemon \
+	dagster-package \
+	dagster-infra-validate \
 	glue-package \
 	glue-start \
 	help \
@@ -159,6 +176,15 @@ help:
 	@echo "dbt-semantic-validate       validate MetricFlow semantic definitions"
 	@echo "dbt-source-freshness        check the analytical reconciliation timestamp"
 	@echo "dbt-staging-build           build and test staging against Athena"
+	@echo "dagster-init                initialize persistent local Dagster storage"
+	@echo "dagster-dev                 open Dagster using its persistent local instance"
+	@echo "dagster-prepare             install dbt packages and parse the configured target"
+	@echo "dagster-service-init        initialize a new single-host instance with run queuing"
+	@echo "dagster-code-server         serve prepared definitions on localhost:4000"
+	@echo "dagster-webserver           serve the UI on localhost:3000"
+	@echo "dagster-daemon              evaluate schedules/sensors and launch queued runs"
+	@echo "dagster-package             build an allowlisted EC2 release (no upload)"
+	@echo "dagster-infra-validate      validate the Dagster monitor EC2 template"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
 	@echo "hex-context-sync            publish the Hex semantic context via GitHub Actions"
@@ -183,7 +209,46 @@ bootstrap:
 	@$(VENV_PYTHON) -m pip install --upgrade pip
 	@$(VENV_PYTHON) -m pip install --constraint $(PYTHON_CONSTRAINTS_FILE) --editable '.[dev]'
 	@$(MAKE) --no-print-directory dbt-deps
+	@$(MAKE) --no-print-directory dbt-parse
 	@$(VENV_PYTHON) -c 'import sys; print(f"ready: {sys.executable} ({sys.version.split()[0]})")'
+
+dagster-init:
+	@case "$(DAGSTER_HOME)" in /*) ;; \
+		*) echo "DAGSTER_HOME must be a non-empty absolute path." >&2; exit 1 ;; esac
+	@mkdir -p "$(DAGSTER_HOME)"
+	@test -e "$(DAGSTER_HOME)/dagster.yaml" || \
+		cp -n "$(DAGSTER_INSTANCE_TEMPLATE)" "$(DAGSTER_HOME)/dagster.yaml"
+
+dagster-dev: dagster-init
+	@DAGSTER_HOME="$(DAGSTER_HOME)" PYTHONPATH=src $(VENV_DIR)/bin/dagster dev \
+		-m zavant.orchestration.definitions
+
+# For a new service-mode home only; existing instance configuration is preserved.
+dagster-service-init:
+	@$(MAKE) --no-print-directory dagster-init \
+		DAGSTER_INSTANCE_TEMPLATE=infrastructure/dagster/dagster-service.yaml
+
+dagster-prepare:
+	@PYTHONPATH=src $(VENV_PYTHON) -m zavant.orchestration.prepare
+
+dagster-code-server: dagster-init
+	@DAGSTER_HOME="$(DAGSTER_HOME)" PYTHONPATH=src $(VENV_DIR)/bin/dagster api grpc \
+		-h 127.0.0.1 -p 4000 -m zavant.orchestration.definitions
+
+dagster-webserver: dagster-init
+	@DAGSTER_HOME="$(DAGSTER_HOME)" PYTHONPATH=src $(VENV_DIR)/bin/dagster-webserver \
+		-h 127.0.0.1 -p 3000 -w infrastructure/dagster/workspace.yaml
+
+dagster-daemon: dagster-init
+	@DAGSTER_HOME="$(DAGSTER_HOME)" PYTHONPATH=src $(VENV_DIR)/bin/dagster-daemon run \
+		-w infrastructure/dagster/workspace.yaml
+
+dagster-package:
+	@$(VENV_PYTHON) infrastructure/dagster/package.py
+
+dagster-infra-validate: aws-check-account
+	@$(AWS_CLI) cloudformation validate-template --region "$(AWS_REGION)" \
+		--template-body "file://$(abspath infrastructure/dagster-stack.yaml)"
 
 test:
 	@PYTHONPATH=src $(VENV_PYTHON) -m unittest discover -s tests -v

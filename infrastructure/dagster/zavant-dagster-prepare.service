@@ -1,0 +1,18 @@
+[Unit]
+Description=Prepare Zavant dbt manifest (does not build warehouse data)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/lib/zavant
+
+[Service]
+Type=oneshot
+User=dagster
+Group=dagster
+WorkingDirectory=/opt/zavant/app
+EnvironmentFile=/etc/zavant/dagster.env
+ExecStart=/bin/bash /opt/zavant/app/infrastructure/dagster/run-service.sh prepare
+RemainAfterExit=yes
+TimeoutStartSec=600
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027

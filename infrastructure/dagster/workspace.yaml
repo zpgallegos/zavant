@@ -1,0 +1,6 @@
+# The webserver and daemon connect to one separately managed code server.
+load_from:
+  - grpc_server:
+      host: 127.0.0.1
+      port: 4000
+      location_name: zavant.orchestration.definitions

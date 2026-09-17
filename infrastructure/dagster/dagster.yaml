@@ -1,0 +1,18 @@
+# Local development only: keep Dagster's run/event history and schedule/sensor
+# state in SQLite files below the same persistent home on every startup.
+# This stores orchestration metadata, not the datasets in S3 or Athena.
+storage:
+  sqlite:
+    base_dir:
+      env: DAGSTER_HOME
+
+# Serialize dbt writes, including requests made manually in the UI.
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 1
+
+# Run launching and compute-log storage use Dagster's local defaults.
+# Schedule/sensor activation is controlled by definitions and persisted UI state,
+# not by this file. No daemon or AWS job is started by initializing this home.

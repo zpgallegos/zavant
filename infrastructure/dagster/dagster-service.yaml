@@ -1,0 +1,27 @@
+# Single-host deployment only. All three services share this persistent home.
+storage:
+  sqlite:
+    base_dir:
+      env: DAGSTER_HOME
+
+# Queue additional runs, including UI launches. This does not lock out another
+# Dagster instance, direct execute_in_process calls, or the AWS orchestrator.
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 1
+
+run_monitoring:
+  # Startup/cancellation monitoring. The default local launcher does not offer
+  # worker-health recovery after a host crash; see the recovery runbook.
+  enabled: true
+  poll_interval_seconds: 30
+  # A lost worker can leave Athena/dbt queries running. Inspect before retrying.
+  max_resume_run_attempts: 0
+
+run_retries:
+  enabled: false
+
+telemetry:
+  enabled: false

@@ -17,6 +17,7 @@ from zavant.projection.baseball_savant.s3_sources import (
     StatcastProjectionInventory,
     StatcastProjectionRevision,
 )
+from zavant.projection.catalog import all_projection_contracts
 from zavant.projection.mlb_stats_api.contracts import TABLE_CONTRACTS
 from zavant.projection.current_views import (
     PRIVATE_COLUMNS,
@@ -29,7 +30,6 @@ from zavant.projection.current_views import (
 )
 from zavant.projection.glue_job import (
     GlueProjectionConfiguration,
-    _all_projection_contracts,
     _analytical_merge_contracts,
     _completed_projections,
     _ensure_tables,
@@ -262,7 +262,7 @@ class IcebergDefinitionTests(unittest.TestCase):
         )
         existing = {
             contract.name
-            for contract in _all_projection_contracts()
+            for contract in all_projection_contracts()
         }
 
         with patch("zavant.projection.glue_job._validate_table_schema"):

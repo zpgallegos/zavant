@@ -1,0 +1,26 @@
+[Unit]
+Description=Zavant Dagster %i
+Requires=zavant-dagster-prepare.service
+After=zavant-dagster-prepare.service network-online.target
+RequiresMountsFor=/var/lib/zavant
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=dagster
+Group=dagster
+WorkingDirectory=/opt/zavant/app
+EnvironmentFile=/etc/zavant/dagster.env
+ExecStart=/bin/bash /opt/zavant/app/infrastructure/dagster/run-service.sh %i
+Restart=always
+RestartSec=10
+# A deployment/reboot is not a graceful handoff of active Lambda/Glue work.
+# Drain the queue and wait for active runs before stopping these services.
+TimeoutStopSec=120
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

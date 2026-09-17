@@ -62,6 +62,9 @@ flowchart LR
 The scheduled production workflow currently coordinates acquisition and Glue
 projection. dbt publication and Hex semantic synchronization remain explicit
 deployment boundaries rather than being implied as steps in that state machine.
+The optional [Dagster implementation](docs/dagster.md) monitors these external
+publications and builds source-ready dbt branches; it does not run acquisitions
+or Glue. Its automation starts disabled and requires explicit activation.
 
 ## Design highlights
 
@@ -92,6 +95,7 @@ deployment boundaries rather than being implied as steps in that state machine.
 | [`src/zavant/ingestion`](src/zavant/ingestion/) | Shared HTTP boundaries plus isolated MLB Stats API and Baseball Savant clients, contracts, workflows, stores, and Lambda handlers. |
 | [`src/zavant/storage`](src/zavant/storage/) | Source-neutral artifact references and local/S3 path primitives. |
 | [`src/zavant/projection`](src/zavant/projection/) | Explicit JSON projections, analytical contracts, Iceberg reconciliation, and current views. |
+| [`src/zavant/orchestration`](src/zavant/orchestration/) | Dagster external assets, publication monitoring, readiness checks, and selective dbt builds. |
 | [`infrastructure`](infrastructure/) | CloudFormation for acquisition, analytical projection, orchestration, and Hex access. |
 | [`dbt`](dbt/) | Staging, grain-first intermediates, facts, dimensions, tests, and MetricFlow definitions. |
 | [`scripts/monitoring`](scripts/monitoring/) | Daily-run inspection, Glue-run inspection, and warehouse-completeness reporting. |

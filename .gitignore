@@ -1,22 +1,39 @@
 *.egg-info/
 *.py[cod]
-.coverage
 .DS_Store
-.env
+.coverage
+.coverage.*
 .local/
 .pytest_cache/
+.ruff_cache/
 .venv/
 .vscode
+/coverage.xml
+/dist/
+/logs/
+/scripts/
 __pycache__/
 build/
 htmlcov/
-/logs/
 package-lock.yml
-/scripts/
+
+# Environment files; exceptions must follow the ignore rules.
+.env
+.env.*
+!.env.*.example
+!.env.example
+
+# Interactive Python state; notebooks themselves remain trackable.
+.ipynb_checkpoints/
+.ipython/
+
+# Legacy Dagster development instances; new state lives under ignored .local/.
+/.tmp_dagster_home_*/
 
 # dbt-generated and machine-local state
 /dbt/.user.yml
 /dbt/dbt_packages/
 /dbt/logs/
+/dbt/package-lock.concurrent-update-lock
 /dbt/profiles.yml
 /dbt/target/

@@ -105,6 +105,15 @@ publication or one run per model. A failing model can hold up other models in
 its branch. If the producer later publishes individual tables independently,
 the readiness contracts and branch planner should become correspondingly finer.
 
+The dbt project defaults to `indirect_selection: buildable`. A branch runs tests
+whose dependencies are selected models or their upstream ancestors. Building
+Savant staging therefore does not pull in tests against downstream combined
+facts; those tests run when the combined facts are selected instead. This is a
+graph-selection rule, not proof that upstream data is ready: the sensor still
+requires successful prerequisite branches. The default lives in
+[`dbt_project.yml`](../dbt/dbt_project.yml), so terminal dbt commands share it and
+Dagster can still override it when the UI explicitly excludes checks.
+
 [`checks/athena.py`](../src/zavant/orchestration/checks/athena.py) supplies blocking
 `published_after_acquisition` checks. They run with the requested subset, query
 each selected family once, and fail before dbt if inputs are no longer ready.
@@ -130,7 +139,7 @@ pinned input snapshots or producer/consumer coordination, which is not provided.
    target before launching anything: dbt materializations write real Athena data.
 2. Run `make dagster-dev`. The existing AWS daily workflow should remain enabled.
    In development Dagster refreshes the dbt manifest. The separate-service path
-   uses `make dagster-prepare` first; see the deployment runbook below.
+   uses `make dagster-prepare` first; see the local operations runbook below.
 3. Confirm only dbt assets offer materialization, and inspect lineage such as
    `pitches → current_pitches → analytics/stg_pitches` plus the revision-mapping
    edge into `current_pitches`.
@@ -144,6 +153,21 @@ pinned input snapshots or producer/consumer coordination, which is not provided.
 5. When ready to permit real dbt writes, enable this sensor. Monitor actual ticks,
    `build_dbt` runs, relation checks, and asset Events. The optional
    `notify_run_failure` sensor requires an SNS topic and separate activation.
+
+Sensor activation is persisted: restarting `make dagster-dev` resumes a sensor
+that was previously enabled, even though its code default is stopped. There is
+no automatic dry-run period on restart. To inspect before permitting builds,
+use a new home, for example `make dagster-dev DAGSTER_HOME="$PWD/.local/dagster-inspect"`.
+That home has independent history and deduplication state; do not enable the
+monitor in multiple homes against the same dbt outputs.
+
+If today's acquisitions and Glue publication finished before Dagster started,
+the first eligible tick can still discover them. With both sources ready and
+no prior attempts or active runs, it requests the independent time spine,
+Savant-only, and Stats-only branches. The queue runs them one at a time. A later
+tick requests the combined branch once its prerequisite branches succeed.
+The sensor polls stored evidence; it does not need to witness the original
+acquisition or Glue execution.
 
 Both instance templates serialize runs (`max_concurrent_runs: 1`) to avoid
 overlapping dbt writes. Initialization **never overwrites an existing**
@@ -183,10 +207,16 @@ acquisition evidence, dbt CLI, and optional SNS notifications. Lambda invocation
 Glue-job resources, executable acquisition/projection assets, old observation
 sensors, and the full-pipeline daily schedule have been removed.
 
-Persistent local SQLite storage, the three-service setup, and the optional EC2
-deployment remain useful. EC2 IAM now permits source reads and dbt writes, **not
-Lambda invocation or Glue job execution**. See the
-[deployment and recovery runbook](../infrastructure/dagster/README.md).
+Persistent local SQLite storage and the optional local three-service setup
+remain. The EC2 CloudFormation template and its release/bootstrap files have
+been removed; the external producer stacks are unchanged. See the
+[local operations and recovery runbook](../infrastructure/dagster/README.md).
+
+This portfolio setup intentionally runs Dagster only while the local process
+and machine are available. It does not offer continuous monitoring, missed-day
+replay, or production availability. A production control plane would normally
+run continuously with durable state, operational monitoring, and tested backups.
+Local operation removes dedicated hosting costs, not Athena/S3 charges.
 
 Tests cover source failure/delay, stale and partial publications, manifest
 pagination, branch ordering/deduplication/reexecution, preserved lineage, actual

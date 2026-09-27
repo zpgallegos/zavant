@@ -20,7 +20,6 @@ from dagster._daemon.run_coordinator.queued_run_coordinator_daemon import (
 )
 
 
-from infrastructure.dagster.package import release_files
 from zavant.orchestration import prepare
 from zavant.orchestration.resources.notifications import SnsNotificationResource
 from zavant.orchestration.sensors.failures import notify_run_failure
@@ -31,40 +30,6 @@ _SERVICE_CONFIG = _ROOT / "infrastructure/dagster/dagster-service.yaml"
 
 
 class DagsterOperationsTests(unittest.TestCase):
-    def test_host_has_no_producer_execution_permissions(self) -> None:
-        template = (_ROOT / "infrastructure/dagster-stack.yaml").read_text()
-        # BaseLoader accepts CloudFormation tags without evaluating them.
-        parsed = yaml.load(template, Loader=yaml.BaseLoader)
-        self.assertNotIn("StatsLambdaArn", parsed["Parameters"])
-        self.assertNotIn("SavantLambdaArn", parsed["Parameters"])
-        self.assertNotIn("GlueJobName", parsed["Parameters"])
-        statements = parsed["Resources"]["HostRole"]["Properties"]["Policies"][0][
-            "PolicyDocument"
-        ]["Statement"]
-        actions = {
-            action
-            for statement in statements
-            for action in (
-                statement["Action"]
-                if isinstance(statement["Action"], list)
-                else [statement["Action"]]
-            )
-        }
-        self.assertFalse(
-            {"lambda:InvokeFunction", "glue:StartJobRun", "states:StartExecution"}
-            & actions
-        )
-        self.assertTrue(
-            {
-                "athena:StartQueryExecution",
-                "glue:GetTable",
-                "glue:CreateTable",
-                "s3:GetObject",
-                "sns:Publish",
-            }
-            <= actions
-        )
-
     def test_prepare_installs_then_parses_without_building(self) -> None:
         with patch.object(prepare.subprocess, "run") as run:
             prepare.main()
@@ -175,37 +140,7 @@ class DagsterOperationsTests(unittest.TestCase):
                 SnsNotificationResource().notify_failure("build_dbt", "test")
             client.assert_not_called()
 
-    def test_release_excludes_local_state_credentials_and_generated_artifacts(
-        self,
-    ) -> None:
-        paths = {path.relative_to(_ROOT).as_posix() for path in release_files(_ROOT)}
-        self.assertIn("src/zavant/orchestration/definitions.py", paths)
-        self.assertIn("infrastructure/dagster/profiles.yml", paths)
-        self.assertIn("dbt/dbt_project.yml", paths)
-        self.assertNotIn("dbt/profiles.yml", paths)
-        self.assertTrue(
-            all(
-                not path.startswith(
-                    (".env", ".local/", ".venv/", "dbt/target/", "dbt/dbt_packages/")
-                )
-                for path in paths
-            )
-        )
-
-    def test_release_rejects_symlinks(self) -> None:
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "src").mkdir()
-            (root / "src/link.py").symlink_to(_ROOT / "src/zavant/__init__.py")
-            with self.assertRaises(ValueError):
-                release_files(root)
-
-    def test_systemd_services_share_configuration_and_restart(self) -> None:
-        unit = (_ROOT / "infrastructure/dagster/zavant-dagster@.service").read_text()
-        self.assertIn("EnvironmentFile=/etc/zavant/dagster.env", unit)
-        self.assertIn("Restart=always", unit)
-        self.assertIn("User=dagster", unit)
-        self.assertIn("RequiresMountsFor=/var/lib/zavant", unit)
+    def test_local_service_workspace_uses_loopback(self) -> None:
         workspace = yaml.safe_load(
             (_ROOT / "infrastructure/dagster/workspace.yaml").read_text()
         )

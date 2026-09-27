@@ -8,6 +8,9 @@ models:
       but MLB also emits independent baserunning, pitching, and advisory plays
       with the same shape. Child play-events contain the ordered pitches and
       actions within each record. Its grain is one at_bat_index per game_pk.
+      Reviewed advisories in final games are normalized only when one unambiguous
+      batter movement records a groundout or grounded-into-double-play out at
+      first base. Original result fields remain available as reported_* columns.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -58,7 +61,9 @@ models:
         data_type: bigint
 
       - name: description
-        description: Human-readable description of the top-level play's result.
+        description: >-
+          Original human-readable result description. For recovered reviewed
+          outs this remains the source advisory, not a reconstructed narrative.
         data_type: varchar
 
       - name: ended_at
@@ -66,11 +71,11 @@ models:
         data_type: timestamp
 
       - name: event
-        description: Human-readable MLB label for the top-level play's result.
+        description: Result label, recovered from the batter movement for qualified reviewed outs.
         data_type: varchar
 
       - name: event_type
-        description: Machine-readable MLB classification of the top-level play's result.
+        description: Result classification, normalized for qualified reviewed batter outs.
         data_type: varchar
 
       - name: half_inning
@@ -94,11 +99,11 @@ models:
         data_type: integer
 
       - name: is_complete
-        description: Whether MLB marks the top-level play as complete.
+        description: Whether MLB marks the play complete or a reviewed batter out was recovered.
         data_type: boolean
 
       - name: is_out
-        description: Whether MLB classifies the top-level play's result as an out.
+        description: Whether the reported or recovered batting result is an out.
         data_type: boolean
 
       - name: is_scoring_play
@@ -160,6 +165,29 @@ models:
       - name: strikes
         description: Strike count reported for the top-level play.
         data_type: integer
+
+      # source-normalization audit
+      - name: reported_event
+        description: Original MLB result label before reviewed-out recovery.
+        data_type: varchar
+
+      - name: reported_event_type
+        description: Original MLB result classification, including game_advisory.
+        data_type: varchar
+
+      - name: reported_is_complete
+        description: Original MLB completion flag before reviewed-out recovery.
+        data_type: boolean
+
+      - name: reported_is_out
+        description: Original MLB result-out flag before reviewed-out recovery.
+        data_type: boolean
+
+      - name: is_batting_outcome_recovered
+        description: Whether a qualified reviewed advisory was normalized to its batter-out outcome.
+        data_type: boolean
+        data_tests:
+          - not_null
 
       # metadata
       - name: official_date

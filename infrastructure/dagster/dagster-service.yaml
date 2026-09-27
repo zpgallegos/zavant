@@ -1,4 +1,4 @@
-# Single-host deployment only. All three services share this persistent home.
+# Optional local three-service setup. All services share this persistent home.
 storage:
   sqlite:
     base_dir:

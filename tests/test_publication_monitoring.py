@@ -225,6 +225,56 @@ class PublicationReadinessTests(unittest.TestCase):
                 self.assertEqual(state.publication_id, "projection-1")
                 self.assertEqual(state.metadata["processing_cycle"], CYCLE)
 
+    def test_reconciliation_accepts_athena_utc_suffix_and_iso_timestamps(self) -> None:
+        for timestamp in (
+            "2026-09-16 14:10:00.422515 UTC",
+            "2026-09-16 14:10:00.422515",
+            "2026-09-16T14:10:00.422515Z",
+            "2026-09-16T14:10:00.422515+00:00",
+            "2026-09-16T07:10:00.422515-07:00",
+        ):
+            for source in PUBLICATION_SOURCES:
+                with (
+                    self.subTest(timestamp=timestamp, source=source.name),
+                    patch.object(
+                        AcquisitionEvidenceResource,
+                        "latest",
+                        return_value=ACQUISITION,
+                    ),
+                    patch.object(
+                        AthenaQueryResource,
+                        "query_one",
+                        return_value=AthenaQueryResult(
+                            "query-1", {**VALID_ROW, "reconciled_at": timestamp}
+                        ),
+                    ),
+                ):
+                    state = read_publication(source, ATHENA, EVIDENCE, NOW)
+                    self.assertTrue(state.ready)
+                    parsed = datetime.fromisoformat(state.metadata["reconciled_at"])
+                    self.assertEqual(
+                        parsed,
+                        datetime(2026, 9, 16, 14, 10, 0, 422515, tzinfo=timezone.utc),
+                    )
+
+    def test_malformed_reconciliation_timestamp_fails_closed(self) -> None:
+        for timestamp in (None, "", "not-a-timestamp", "2026-09-16 14:10:00 XYZ"):
+            with (
+                self.subTest(timestamp=timestamp),
+                patch.object(
+                    AcquisitionEvidenceResource, "latest", return_value=ACQUISITION
+                ),
+                patch.object(
+                    AthenaQueryResource,
+                    "query_one",
+                    return_value=AthenaQueryResult(
+                        "query-1", {**VALID_ROW, "reconciled_at": timestamp}
+                    ),
+                ),
+                self.assertRaises(ValueError),
+            ):
+                read_publication(STATS_API, ATHENA, EVIDENCE, NOW)
+
     def test_no_current_success_does_not_query_athena(self) -> None:
         for evidence in (
             None,
@@ -254,6 +304,8 @@ class PublicationReadinessTests(unittest.TestCase):
             {"reconciled_at": "2026-09-15 14:00:00"},
             {"reconciled_at": "2026-09-16 13:30:00"},
             {"reconciled_at": "2026-09-16 17:00:00"},
+            {"reconciled_at": "2026-09-16 13:30:00 UTC"},
+            {"reconciled_at": "2026-09-16 17:00:00 UTC"},
         ]
         for override in overrides:
             with (

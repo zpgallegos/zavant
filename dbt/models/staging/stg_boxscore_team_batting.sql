@@ -1,5 +1,5 @@
 with team_batting as (
-    select * from {{ source("zavant_analytical_prod", "team_batting") }}
+    {{ boxscore_batting_with_pa_corrections("team_batting", player_level=false) }}
 )
 
 select
@@ -31,7 +31,12 @@ select
     team_batting.on_base_percentage,
     team_batting.on_base_plus_slugging,
     team_batting.pickoffs,
-    team_batting.plate_appearances,
+    team_batting.corrected_plate_appearances as plate_appearances,
+    team_batting.plate_appearances as reported_plate_appearances,
+    case
+        when team_batting.corrected_plate_appearances != team_batting.plate_appearances
+            then 'recovered_reviewed_batter_out'
+    end as plate_appearances_correction_reason,
     team_batting.pop_outs,
     team_batting.rbi,
     team_batting.runs,

@@ -1,18 +1,5 @@
 with non_at_bat_field_errors as (
-    -- identify fielding-credit signals that can mark a field_error as an award of
-    -- first base for interference or a defensive-shift violation. Interference
-    -- credits also occur on other outcomes, so only field_error plays are excluded
-    -- in the final filter.
-
-    select distinct
-        game_pk,
-        at_bat_index
-    from {{ ref("stg_fielding_credits") }}
-    where
-        credit in (
-            'f_defensive_shift_violation_error',
-            'f_interference'
-        )
+    {{ batter_first_base_awards() }}
 ),
 
 plate_appearances as (

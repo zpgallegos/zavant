@@ -1,218 +1,139 @@
-# Deploying the Dagster publication monitor
+# Running the Dagster publication monitor locally
 
-This optional single-host **learning deployment** monitors externally published
-Athena relations and runs dbt. EventBridge/Step Functions continue running the
-acquisitions and Glue. Dagster has no Lambda-invocation or Glue-job permissions.
-See the [workflow guide](../../docs/dagster.md) for readiness and branch behavior.
+This portfolio setup monitors externally published Athena relations and runs
+dbt on your machine. EventBridge/Step Functions continue running acquisitions
+and Glue independently. Dagster does not invoke those producers. See the
+[workflow guide](../../docs/dagster.md) for readiness and branch behavior.
 
-Local tests do not prove a live EC2 deployment works. Creating this stack incurs
-charges; no deployment or automation activation is implicit in these files.
+The EC2 template and its packaging/bootstrap files have been removed. No
+dedicated Dagster AWS stack is needed. This removes dedicated hosting costs,
+not Athena/S3 query and storage charges.
 
-## Three services, one persistent instance
+## Start and inspect
 
-| Service | Local command | Responsibility |
-| --- | --- | --- |
-| Code server | `make dagster-code-server` | Loads definitions and hosts run workers |
-| Webserver | `make dagster-webserver` | UI and run submission |
-| Daemon | `make dagster-daemon` | Sensor evaluation and queued run launch |
+From the repository root:
 
-[`workspace.yaml`](workspace.yaml) points to `127.0.0.1:4000`; the UI listens on
-`127.0.0.1:3000`. Loopback works both locally and on EC2 because these services
-share one host. All three must share the same `DAGSTER_HOME` and environment.
+```sh
+make dagster-dev
+```
 
-Before loading definitions, [`prepare.py`](../../src/zavant/orchestration/prepare.py)
-runs `dbt deps` and `dbt parse --no-partial-parse`. This downloads dependencies
-and creates the manifest, but does not execute `dbt build` or query Athena.
-Preparation uses the selected profile directory and `DBT_TARGET`; errors stop
-startup. Re-prepare after changing dbt code/packages/target, with runs drained
-and the code server stopped.
+Open `http://localhost:3000`. This development command starts the UI, code
+server, and daemon together. It reads the Make configuration, defaults to
+`~/.dbt/profiles.yml` with `DBT_TARGET=dev`, and refreshes the dbt manifest.
+Confirm the actual destination in your profile: local orchestration still
+builds real tables in Athena. Local AWS credentials need source/catalog reads,
+Athena query access, and writes to the configured dbt/output locations.
 
-To test separate services locally, stop `dagster dev` first. In each terminal:
+State lives under `.local/dagster` by default. Both instance templates queue
+runs with `max_concurrent_runs: 1`, but initialization never overwrites an
+existing `dagster.yaml`. For an older home, stop Dagster and merge the queue
+configuration from [the local template](dagster.yaml). Keep its SQLite files.
+
+The monitor is stopped by default **only until its activation state is saved**.
+A previously enabled `monitor_athena_publications` resumes when the daemon
+starts. Starting the UI is therefore not necessarily observation-only.
+
+For a separate, initially stopped instance:
+
+```sh
+make dagster-dev DAGSTER_HOME="$PWD/.local/dagster-inspect"
+```
+
+Use this for inspection, not a second enabled monitor for the same dbt outputs.
+It has independent history, cursors, and run deduplication.
+
+## What enabling the monitor does
+
+1. Every eligible tick reads today's acquisition manifests and queries Athena's
+   revision registries and completion markers. A source can be discovered even
+   if its publication completed before Dagster started.
+2. Newly ready sources get external materialization events on their raw and
+   Athena assets. These record observed AWS publication, not Dagster execution
+   of acquisitions or Glue.
+3. With both sources ready and no previous attempts or active runs, the sensor
+   requests three `build_dbt` subsets: the independent time spine (1 model),
+   Savant-only (2), and Stats-only (33). The queue serializes their execution.
+4. Each source-dependent run validates its inputs again before building dbt.
+   A later sensor tick requests the combined branch (2 models) after its
+   prerequisite dbt branches succeed for the same publication identities.
+5. Unchanged publications are not rebuilt every tick. Failed/canceled attempts
+   require investigation and deliberate reexecution; they are not retried in a
+   five-minute loop.
+
+Use Automation to inspect sensor ticks, Runs for `build_dbt` selections/logs,
+and asset Events/Checks for publication metadata and readiness results. Preview
+issues S3 reads and Athena SELECTs but does not execute dbt. Do not commit a
+preview merely to inspect it: committing can change cursor/run state.
+
+The optional `notify_run_failure` sensor needs an existing SNS topic, publish
+permissions, and separate activation. Leave it stopped if you do not need
+notifications; no topic is created by the local setup.
+
+## Stop, restart, and recover
+
+For a deliberate shutdown, disable the monitor, let queued/running work finish,
+then press Ctrl-C in the `make dagster-dev` terminal. Its saved state and history
+survive. Re-enable the monitor when ready after restarting.
+
+While the process is stopped or the laptop sleeps, no sensors evaluate and no
+new dbt work is launched by that local instance. The external AWS daily
+workflow is unaffected. The monitor handles the current local calendar day,
+not automatic replay of missed days. Run Dagster on the publication day if you
+want that cycle processed automatically.
+
+This is an explicit portfolio availability tradeoff, not a continuously
+available production control plane. Production operation would normally keep
+the daemon running with durable state, operational monitoring, and tested
+backups.
+
+Avoid stopping mid-build: Athena queries can outlive their local worker.
+Inspect warehouse and Dagster state before retrying an interrupted run. Stale
+active runs block new requests. Preserve the original config/tags when
+reexecuting a sensor-requested run so its dependent branches recognize success.
+
+SQLite is single-host metadata storage, not a backup. Drain work and stop
+Dagster before backing up the entire `DAGSTER_HOME`; copying individual live
+SQLite files does not ensure consistency. Restored state includes enabled
+sensors, so inspect it before restarting automation.
+
+The queue does not coordinate other Dagster instances or external Glue writes.
+Publication checks do not pin Athena snapshots during a build. Avoid external
+reruns while dbt is consuming a publication when consistent inputs matter.
+
+## Optional: inspect the three services separately
+
+Stop `dagster dev` first. In each terminal, use the same environment and home:
 
 ```sh
 export DAGSTER_HOME="$PWD/.local/dagster-services"
 export DBT_TARGET=dev
 ```
 
-Initialize and prepare once, then start each service in its own terminal:
+Initialize and prepare once:
 
 ```sh
 make dagster-service-init
 make dagster-prepare
 ```
 
-Both [`dagster.yaml`](dagster.yaml) and
-[`dagster-service.yaml`](dagster-service.yaml) queue runs with
-`max_concurrent_runs: 1`. The latter also configures run monitoring and disables
-automatic retries/resume. A new home does not inherit history or enabled sensor
-state from `.local/dagster`. Initialization never overwrites an existing config;
-stop services and review/merge template changes when reusing an older home.
+Preparation runs `dbt deps` and `dbt parse --no-partial-parse`, not a build.
+Re-prepare after changing dbt code/packages/target, with work drained and the
+code server stopped. Then start each service in its own terminal:
 
-## Optional EC2 host
+| Service | Command | Responsibility |
+| --- | --- | --- |
+| Code server | `make dagster-code-server` | Loads definitions and hosts run workers |
+| Webserver | `make dagster-webserver` | UI and run submission |
+| Daemon | `make dagster-daemon` | Sensor evaluation and queued run launch |
 
-[`../dagster-stack.yaml`](../dagster-stack.yaml) defines:
+[The workspace](workspace.yaml) points to `127.0.0.1:4000`; the UI listens on
+`127.0.0.1:3000`. [The service template](dagster-service.yaml) also enables run
+monitoring and disables automatic retries/resume. A new home does not inherit
+history or sensor activation from `.local/dagster`.
 
-- Amazon Linux 2023, default `t3.medium`, instance-role credentials, IMDSv2,
-  and no inbound security-group rules.
-- An encrypted 20 GiB EBS data volume mounted at `/var/lib/zavant` for SQLite
-  history, cursors, and compute logs. It is retained on deletion/replacement;
-  the replaceable root disk holds code and the virtual environment.
-- A dedicated Athena workgroup with encrypted S3 results and a 10 GiB per-query
-  scan limit. This is **not** a monthly spending cap.
-- Read access to acquisition manifests and the analytical lake/catalog; scoped
-  dbt S3/catalog writes and query-result access. No producer execution permissions.
-- SNS notifications and an EC2 status-check alarm, with optional confirmed email.
-
-[`install.sh`](install.sh) identifies the exact EBS volume ID, formats it only
-when empty, installs dependencies, and enables systemd services. A missing
-state disk prevents startup. [`zavant-dagster-prepare.service`](zavant-dagster-prepare.service)
-prepares the manifest once per boot. [`zavant-dagster@.service`](zavant-dagster@.service)
-runs `code`, `webserver`, and `daemon` as a non-root user and restarts exited
-services. Code/UI health checks precede the CloudFormation success signal.
-
-All services read `/etc/zavant/dagster.env`, including:
-
-```text
-DAGSTER_HOME=/var/lib/zavant/dagster
-DBT_PROFILES_DIR=/opt/zavant/app/infrastructure/dagster
-DBT_TARGET=prod
-```
-
-[`profiles.yml`](profiles.yml) has no credentials and uses the EC2 role. The
-deployment targets existing `zavant_analytical_prod` sources and `zavant_dbt_prod`
-outputs. The repo's dbt source definitions are prod-specific; an environment
-variable alone does not retarget them to a different lake.
-
-### Review before launching
-
-1. Choose an existing VPC/public subnet and matching AZ. An Internet Gateway
-   route is needed for downloads/AWS APIs. No VPC/NAT gateway is created. Public
-   IPv4 provides outbound connectivity, not a public UI, and has its own charges.
-2. Confirm account, region, bucket, and data prefix from the existing stacks.
-3. Set `DbtDataPrefix` to the existing production dbt S3 directory, relative to
-   that bucket. Incremental tables may already reference it. Other buckets,
-   customer-managed KMS keys, or Lake Formation restrictions require additional
-   reviewed permissions; the supplied policy does not cover them.
-4. Keep Dagster sensors stopped until validation is complete. Keep the external
-   AWS workflow enabled. Only one Dagster instance should automate these dbt
-   outputs; the run queue does not coordinate multiple instances.
-
-### Build and deploy explicitly
-
-```sh
-make dagster-package
-make dagster-infra-validate
-```
-
-Packaging is local; validation sends the template to AWS but does not create a
-stack. The release allowlist excludes `.env`, local profiles, `.local`, `.venv`,
-logs, and generated dbt artifacts. It includes uncommitted source changes, so
-review the working tree before uploading.
-
-After setting the reviewed `AWS_REGION`, `DATA_BUCKET`, `DATA_PREFIX`,
-`DBT_DATA_PREFIX`, `VPC_ID`, `SUBNET_ID`, and `AVAILABILITY_ZONE`:
-
-```sh
-make aws-check-account AWS_REGION="$AWS_REGION"
-release_sha="$(shasum -a 256 build/zavant-dagster.tar.gz | awk '{print $1}')"
-release_key="deployments/dagster/$release_sha.tar.gz"
-aws s3 cp build/zavant-dagster.tar.gz "s3://$DATA_BUCKET/$release_key" --region "$AWS_REGION"
-aws cloudformation deploy --region "$AWS_REGION" \
-  --stack-name zavant-dagster-prod \
-  --template-file infrastructure/dagster-stack.yaml \
-  --capabilities CAPABILITY_IAM \
-  --parameter-overrides \
-    VpcId="$VPC_ID" SubnetId="$SUBNET_ID" AvailabilityZone="$AVAILABILITY_ZONE" \
-    DataBucketName="$DATA_BUCKET" DataPrefix="$DATA_PREFIX" \
-    DbtDataPrefix="$DBT_DATA_PREFIX" \
-    ReleaseKey="$release_key" ReleaseSha256="$release_sha"
-```
-
-`AlertEmail=you@example.com` is optional and needs recipient confirmation. The
-operator needs normal CloudFormation/EC2/IAM/pass-role/SSM/Athena/SNS/S3 deployment
-permissions, not merely the restricted host role. The checksum pins the archive;
-this is not a fully locked/prebuilt machine image.
-
-This is an initial-install template, not a rolling-release controller. Changing
-`ReleaseKey` does not rerun cloud-init on an existing host. For updates, disable
-the monitor, drain runs, stop services, back up state, deliberately install the
-reviewed release/venv, prepare, and restart. Host replacement with retained state
-requires a planned stopped-host detach/reattach or snapshot restore in the same
-AZ; do not assume a still-attached state disk migrates automatically.
-
-### Access and inspection
-
-Run the stack's `UiTunnelCommand` output locally using the AWS Session Manager
-plugin, then open `http://localhost:3000`. The operator needs permission to start
-an SSM session. There is no public UI, SSH key, reverse proxy, or application
-authentication: AWS access to the tunnel is the security boundary. Do not change
-the bind address/open inbound ports without adding authentication.
-
-In an SSM shell:
-
-```sh
-sudo systemctl status zavant-dagster@code zavant-dagster@webserver zavant-dagster@daemon
-sudo journalctl -u zavant-dagster-prepare -u zavant-dagster@daemon -n 100
-sudo journalctl -u cloud-final -n 100
-```
-
-## Acceptance and operations
-
-1. Confirm 57 external assets, 38 executable dbt models, `build_dbt`, no Dagster
-   schedules, and two stopped sensors. Check all services and daemon heartbeats.
-2. Verify the dbt target, source-read permissions, and dbt write locations.
-   A healthy code server does not prove warehouse IAM works.
-3. Preview `monitor_athena_publications` after an external daily publication.
-   This issues Athena SELECTs and reads S3, but does not execute dbt. Verify
-   the expected source-specific run selections/configuration. If a preview
-   commit advanced the cursor without recording events, reset that cursor
-   before the first real tick.
-4. Explicitly enable the monitor when ready to authorize dbt writes. Verify
-   source events, blocking checks, Stats/Savant branch runs, then the combined
-   branch. EventBridge remains the producer's scheduler throughout.
-5. Optionally configure and enable `notify_run_failure` before a planned bounded
-   failure test. It sends job/run identifiers, not raw exception text; it neither
-   retries jobs nor backfills old failures on activation. SNS may duplicate
-   messages, and a publish error requires investigation.
-6. While idle, restart services, then test a reboot and confirm history survives
-   and preparation/services start automatically. These live acceptance steps
-   are not covered by mocked tests.
-
-An opt-in local smoke test starts all three real services with an isolated home,
-checks loading/heartbeats, and confirms no runs launched:
+An opt-in smoke test starts these services with isolated state and no enabled
+sensors or dbt runs:
 
 ```sh
 ZAVANT_TEST_DAGSTER_SERVICES=1 PYTHONPATH=src .venv/bin/python -m unittest tests.test_dagster_services
 ```
-
-The one-run queue serializes requests, including UI launches, but not external
-Glue activity or writes from other Dagster instances. Publication IDs checked
-before a build do not pin Athena snapshots during the build. Avoid overlapping
-external reruns when consistent inputs matter.
-
-Automatic retries/resume are disabled. Inspect Athena/dbt state before retrying
-after a lost worker: queries may still be running. The default launcher does
-not recover lost workers after a host crash. A stale STARTED run can block the
-queue until you reconcile its state. Preserve original config/tags when
-reexecuting a failed sensor-requested run so downstream readiness recognizes it.
-
-The EC2 alarm detects host status failures, not a stuck daemon, disk exhaustion,
-sensor errors, or missing source publications. Inspect ticks, heartbeats, disk,
-and logs. External freshness/heartbeat alerts and automated backups are future
-hardening, not implemented here.
-
-## Backups and recovery
-
-SQLite is intentionally single-host. A retained EBS volume is **not a backup**.
-Disable sensors, drain work, stop all services, then snapshot the volume or back
-up the complete stopped `DAGSTER_HOME`. Independently copying live SQLite files
-does not ensure consistency. Test restores in isolation with automation off:
-restored state includes enabled sensors and may launch real work on daemon start.
-
-Restore into the same AZ, verify mount/ownership/config, and use matching pinned
-application/dependency versions. Reconcile interrupted queries and Dagster's
-active/queued runs before restarting the daemon.
-
-Deleting the stack terminates the host but retains the data volume and its
-charges. Record `DataVolumeId`; retained volumes, snapshots, and release objects
-require deliberate cleanup when no longer needed.

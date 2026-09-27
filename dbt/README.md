@@ -122,6 +122,8 @@ Representative metric contracts are:
 | Slugging percentage | `total_bases / at_bats` | Keeps total bases additive before division. |
 | Expected batting average | `expected_hits / at_bats` | Keeps Savant contact probabilities additive while strikeout at-bats remain in the denominator. |
 | Expected slugging percentage | `expected_total_bases / at_bats` | Calculates the player rate from additive Savant total-base expectations. |
+| Expected weighted on-base average | `expected_woba_numerator / woba_denominator` | Includes Savant's eligible contact and non-contact outcomes. |
+| Expected wOBA on contact | `expected_woba_on_contact_numerator / expected_woba_on_contact_observations` | Restricts both components to batted balls with a supplied expected wOBA value; true zero estimates remain eligible. |
 | Barrels per plate appearance | Average of the PA-grain `barrel_ind` | Keeps the numerator and denominator on the plate-appearance dataset accepted by Hex. |
 | On-base plus slugging | `on_base_percentage + slugging_percentage` | Reuses governed component metrics. |
 | BABIP | `(hits - home_runs) / (at_bats - strikeouts - home_runs + sacrifice_flies)` | Defines balls-in-play eligibility explicitly. |
@@ -142,6 +144,45 @@ participation and baserunning definitions in their neighboring semantic-model
 directories.
 Their measures, dimensions, entities, and default time grains live beside them
 in the corresponding `sem_*.yml` files.
+
+### Statcast batting-table columns
+
+The columns after Sweet-Spot Rate use these semantic metrics. Select the same
+player and season population across the PA and batted-ball datasets; aggregate
+each fact independently rather than joining raw fact rows and multiplying PAs.
+
+| Display column | Metric name | Semantic model |
+|---|---|---|
+| xBA | `expected_batting_average` | `plate_appearances` |
+| xSLG | `expected_slugging_percentage` | `plate_appearances` |
+| wOBA | Not yet published; requires an annual-weights reference | — |
+| xwOBA | `expected_weighted_on_base_average` | `plate_appearances` |
+| xwOBAcon | `expected_weighted_on_base_average_on_contact` | `batted_balls` |
+| HardHit% | `hard_hit_rate` | `batted_balls` |
+| K% | `strikeout_rate` | `plate_appearances` |
+| BB% | `walk_rate` | `plate_appearances` |
+
+xBA, xSLG, xwOBA, and xwOBAcon are decimal statistics, normally displayed to
+three decimal places. HardHit%, K%, and BB% are fractions formatted as
+percentages, not values multiplied by 100 in the semantic layer.
+
+xwOBAcon is contact-only: home runs and supplied sacrifice-contact estimates
+remain eligible, while walks, hit-by-pitches, and strikeouts are absent from
+the batted-ball fact. Missing expected values are excluded from both components;
+zero-valued estimates count. This differs from PA-level xwOBA, which includes
+eligible non-contact outcomes using Savant's `woba_denom`. Both definitions
+use [Savant's event fields](https://baseballsavant.mlb.com/csv-docs), not the
+precomputed player-page aggregates. Exact page parity is not guaranteed.
+
+Observed wOBA must not be calculated by simply averaging the CSV's
+`woba_value`: those values include generic weights and can credit reached-on-error
+and fielder's-choice outcomes. The standard statistic needs annual outcome
+weights and its official eligibility denominator. It remains deferred until
+that reference data is added; no approximate metric is labeled as standard wOBA.
+
+The xwOBAcon addition is semantic-only and uses an existing fact column; it
+does not require an acquisition, Glue run, or fact full refresh. Validate the
+definitions and refresh the Hex semantic project before selecting the metric.
 
 ## Correction-safe incremental facts
 
@@ -168,6 +209,14 @@ macros centralize changed-game selection and deletion-set generation while
 leaving each model's business-grain SQL visible for review and debugging.
 
 ## Quality and reconciliation
+
+[`dbt_project.yml`](dbt_project.yml) sets `flags.indirect_selection: buildable`
+for both terminal commands and Dagster. Subset builds run tests whose inputs
+are selected models or their upstream ancestors, rather than pulling in tests
+against unselected downstream facts. For example, Savant staging builds defer
+fact-to-Savant comparisons until the combined facts are built. This controls
+test selection, not upstream freshness; existing upstream relations must still
+be usable. Explicit CLI/environment overrides take precedence over this default.
 
 The project combines generic grain tests with domain-specific singular tests:
 
@@ -203,6 +252,57 @@ The project combines generic grain tests with domain-specific singular tests:
 
 Together, these checks demonstrate both internal model consistency and
 independent reconciliation to another section of the retained source response.
+
+### Historical batting-outcome normalization
+
+The retained MLB responses are not always internally consistent. dbt applies
+two narrow corrections without changing raw S3 objects or Glue-published data:
+
+- [`stg_plays`](models/staging/stg_plays.sql) recovers a reviewed `game_advisory`
+  only for a final game with exactly one batter movement from home that records
+  an out at first as `field_out` or `grounded_into_double_play`. Its `event`,
+  `event_type`, `is_complete`, and `is_out` then describe that batting outcome.
+  The original values remain in `reported_*` columns and
+  `is_batting_outcome_recovered` marks the correction. Rain delays, unfinished
+  games, unrelated runner outs, and ambiguous evidence are not reclassified.
+- [`batter_first_base_awards`](macros/batting_outcomes.sql) shares the at-bat
+  exclusion rule between `int_at_bats` and `fct_plate_appearances`. Interference
+  and defensive-shift credits must belong to the batter's movement from home
+  to first. A credit affecting another runner or advancement beyond first does
+  not remove the batter's at-bat or label their batting outcome interference.
+
+For example, game `448816`, play `26` contains an ordinary Tim Beckham
+reached-on-error and an interference credit on Steven Souza Jr.'s advancement.
+It remains an at-bat. Games `490101` (play `76`, Ryan Braun) and `490136`
+(play `72`, Kolten Wong) contain reviewed game-ending outs mislabeled as
+advisories. Their reported boxscore PA counts also omit those plays despite
+including their ABs.
+
+Player and team batting staging models correct a reported PA shortfall only
+when the recovered-out count exactly explains the difference from
+`AB + BB + HBP + SH + SF + catcher interference`. Intentional walks are already
+included in BB. Missing components do not qualify for correction. Both models
+retain `reported_plate_appearances` and set
+`plate_appearances_correction_reason = 'recovered_reviewed_batter_out'` only
+when a correction was applied. There are no game-ID exceptions or test skips.
+The [boxscore consistency test](tests/boxscore_batting_plate_appearances_are_consistent.sql)
+fails remaining PA shortfalls; the existing reconciliation tests stay intact.
+
+Offline regression tests execute the model SELECTs over minimal retained-game
+fixtures and negative cases:
+
+```shell
+.venv/bin/python -m unittest tests.test_batting_outcome_normalization -v
+```
+
+After deploying changes to these rules, rebuild existing incremental facts:
+their revision selectors detect source changes, not model-logic changes. Pause
+the Dagster monitor and let active/queued runs finish before doing a manual
+production rebuild; do not overlap writes to the same Iceberg tables.
+
+```shell
+.venv/bin/dbt build --project-dir dbt --target prod --full-refresh
+```
 
 ## Project structure
 

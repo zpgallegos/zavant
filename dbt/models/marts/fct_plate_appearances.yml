@@ -263,7 +263,10 @@ models:
         data_type: boolean
 
       - name: is_interference
-        description: Whether the result or its fielding credits record defensive interference.
+        description: >-
+          Whether the batter was awarded first for interference, based on the
+          result or credits on the batter's home-to-first movement. Interference
+          affecting other runners or later advancement is not a batting outcome.
         data_type: boolean
 
       - name: is_defensive_shift_violation
@@ -271,7 +274,7 @@ models:
         data_type: boolean
 
       - name: is_out
-        description: Whether MLB classifies the terminal result as an out.
+        description: Whether the reported or recovered terminal result is an out.
         data_type: boolean
 
       - name: is_scoring_play
@@ -451,7 +454,7 @@ models:
         data_type: timestamp
 
       - name: is_complete
-        description: Whether MLB marks the plate appearance as complete.
+        description: Whether the reported or recovered plate appearance is complete.
         data_type: boolean
 
       - name: captivating_index

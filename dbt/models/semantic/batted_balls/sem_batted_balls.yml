@@ -162,6 +162,21 @@ semantic_models:
         agg: sum
         expr: sweet_spot_ind
 
+      - name: expected_woba_on_contact_numerator
+        description: >-
+          Sum of supplied Savant expected wOBA values at batted-ball grain.
+          Non-contact outcomes are absent from this fact; missing contact
+          estimates remain null rather than becoming zero-value contact.
+        agg: sum
+        expr: expected_weighted_on_base_average
+
+      - name: expected_woba_on_contact_observations
+        description: >-
+          Number of batted balls with a supplied expected wOBA value, including
+          true zero estimates. Missing estimates do not enter the denominator.
+        agg: count
+        expr: expected_weighted_on_base_average
+
       - name: bunts
         description: Number of batted balls classified as bunts.
         agg: sum

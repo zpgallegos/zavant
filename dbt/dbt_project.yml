@@ -4,6 +4,10 @@ config-version: 2
 
 profile: zavant_analytics
 
+flags:
+  # Branch builds must not test downstream facts that have not been rebuilt yet.
+  indirect_selection: buildable
+
 model-paths:
   - models
 analysis-paths:

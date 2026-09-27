@@ -35,19 +35,11 @@ at_bats as (
 ),
 
 field_error_exceptions as (
-    select
-        a.game_pk,
-        a.at_bat_index,
-        count(*) filter (where a.credit = 'f_interference') > 0 as has_interference,
-        count(*) filter (where a.credit = 'f_defensive_shift_violation_error') > 0 as has_defensive_shift_violation
-    from {{ ref("stg_fielding_credits") }} as a
+    select a.*
+    from (
+        {{ batter_first_base_awards() }}
+    ) as a
     inner join changed_games as b on a.game_pk = b.game_pk
-    where
-        a.credit in (
-            'f_interference',
-            'f_defensive_shift_violation_error'
-        )
-    group by 1, 2
 ),
 
 pitch_counts as (

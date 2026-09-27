@@ -1,0 +1,46 @@
+{
+  "description": "Minimal projected fields from the three retained MLB responses that failed reconciliation. Team lines are actual team totals; plays include only the affected batters, not the full games.",
+  "games": [
+    {"game_pk": 448816, "abstract_game_state": "Final", "official_date": "2016-08-28", "season": 2016, "statsapi_source_revision_id": "fixture-448816"},
+    {"game_pk": 490101, "abstract_game_state": "Final", "official_date": "2017-04-03", "season": 2017, "statsapi_source_revision_id": "fixture-490101"},
+    {"game_pk": 490136, "abstract_game_state": "Final", "official_date": "2017-04-04", "season": 2017, "statsapi_source_revision_id": "fixture-490136"}
+  ],
+  "plays": [
+    {"game_pk": 448816, "at_bat_index": 10, "batter_id": 542921, "offense_team_id": 139, "event_type": "field_out"},
+    {"game_pk": 448816, "at_bat_index": 26, "batter_id": 542921, "offense_team_id": 139, "event_type": "field_error", "event": "Field Error", "is_out": false},
+    {"game_pk": 448816, "at_bat_index": 47, "batter_id": 542921, "offense_team_id": 139, "event_type": "field_out"},
+    {"game_pk": 448816, "at_bat_index": 63, "batter_id": 542921, "offense_team_id": 139, "event_type": "single", "is_out": false},
+    {"game_pk": 448816, "at_bat_index": 78, "batter_id": 542921, "offense_team_id": 139, "event_type": "field_out"},
+    {"game_pk": 490101, "at_bat_index": 5, "batter_id": 460075, "offense_team_id": 158, "event_type": "field_out"},
+    {"game_pk": 490101, "at_bat_index": 23, "batter_id": 460075, "offense_team_id": 158, "event_type": "strikeout"},
+    {"game_pk": 490101, "at_bat_index": 41, "batter_id": 460075, "offense_team_id": 158, "event_type": "strikeout"},
+    {"game_pk": 490101, "at_bat_index": 59, "batter_id": 460075, "offense_team_id": 158, "event_type": "walk", "is_out": false},
+    {"game_pk": 490101, "at_bat_index": 76, "batter_id": 460075, "offense_team_id": 158, "event_type": "game_advisory", "event": "Game Advisory", "is_complete": false, "has_review": true, "is_out": false, "outs": 3},
+    {"game_pk": 490136, "at_bat_index": 18, "batter_id": 543939, "offense_team_id": 138, "event_type": "field_out"},
+    {"game_pk": 490136, "at_bat_index": 37, "batter_id": 543939, "offense_team_id": 138, "event_type": "single", "is_out": false},
+    {"game_pk": 490136, "at_bat_index": 53, "batter_id": 543939, "offense_team_id": 138, "event_type": "field_out"},
+    {"game_pk": 490136, "at_bat_index": 72, "batter_id": 543939, "offense_team_id": 138, "event_type": "game_advisory", "event": "Game Advisory", "is_complete": false, "has_review": true, "is_out": false, "outs": 3}
+  ],
+  "runner_movements": [
+    {"game_pk": 448816, "at_bat_index": 26, "runner_index": 1, "runner_id": 542921, "event_type": "field_error", "start_base": null, "origin_base": null, "end_base": "1B", "is_out": false},
+    {"game_pk": 448816, "at_bat_index": 26, "runner_index": 2, "runner_id": 542921, "event_type": "field_error", "start_base": "1B", "origin_base": null, "end_base": "2B", "is_out": false},
+    {"game_pk": 448816, "at_bat_index": 26, "runner_index": 3, "runner_id": 519306, "event_type": "error", "start_base": "2B", "origin_base": "2B", "end_base": "score", "is_out": false},
+    {"game_pk": 490101, "at_bat_index": 76, "runner_index": 0, "runner_id": 542340, "event_type": "grounded_into_double_play", "event": "Grounded Into DP", "start_base": "1B", "origin_base": "1B", "out_base": "2B", "is_out": true},
+    {"game_pk": 490101, "at_bat_index": 76, "runner_index": 1, "runner_id": 460075, "event_type": "grounded_into_double_play", "event": "Grounded Into DP", "start_base": null, "origin_base": null, "out_base": "1B", "is_out": true},
+    {"game_pk": 490136, "at_bat_index": 72, "runner_index": 0, "runner_id": 543939, "event_type": "field_out", "event": "Groundout", "start_base": null, "origin_base": null, "out_base": "1B", "is_out": true}
+  ],
+  "fielding_credits": [
+    {"game_pk": 448816, "at_bat_index": 26, "runner_index": 1, "credit_index": 0, "credit": "f_fielding_error"},
+    {"game_pk": 448816, "at_bat_index": 26, "runner_index": 3, "credit_index": 0, "credit": "f_interference"}
+  ],
+  "player_batting": [
+    {"game_pk": 448816, "team_id": 139, "player_id": 542921, "at_bats": 5, "plate_appearances": 5, "base_on_balls": 0, "hit_by_pitch": 0, "sac_bunts": 0, "sac_flies": 0, "catchers_interference": 0},
+    {"game_pk": 490101, "team_id": 158, "player_id": 460075, "at_bats": 4, "plate_appearances": 4, "base_on_balls": 1, "hit_by_pitch": 0, "sac_bunts": 0, "sac_flies": 0, "catchers_interference": 0},
+    {"game_pk": 490136, "team_id": 138, "player_id": 543939, "at_bats": 4, "plate_appearances": 3, "base_on_balls": 0, "hit_by_pitch": 0, "sac_bunts": 0, "sac_flies": 0, "catchers_interference": 0}
+  ],
+  "team_batting": [
+    {"game_pk": 448816, "team_id": 139, "at_bats": 42, "plate_appearances": 44, "base_on_balls": 2, "hit_by_pitch": 0, "sac_bunts": 0, "sac_flies": 0, "catchers_interference": 0},
+    {"game_pk": 490101, "team_id": 158, "at_bats": 31, "plate_appearances": 38, "base_on_balls": 6, "hit_by_pitch": 1, "sac_bunts": 1, "sac_flies": 0, "catchers_interference": 0},
+    {"game_pk": 490136, "team_id": 138, "at_bats": 31, "plate_appearances": 34, "base_on_balls": 3, "hit_by_pitch": 1, "sac_bunts": 0, "sac_flies": 0, "catchers_interference": 0}
+  ]
+}

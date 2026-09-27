@@ -94,6 +94,12 @@ Zavant derives the reusable analytical product from those observations:
 | OBP | Hits, walks, and hit-by-pitch divided by at-bats, walks, hit-by-pitch, and sacrifice flies. |
 | SLG | Total bases divided by official at-bats. |
 | OPS | On-base percentage plus slugging percentage. |
+| xBA | Sum of Savant expected hits divided by official at-bats, including strikeouts in the denominator. |
+| xSLG | Sum of Savant expected total bases divided by official at-bats. |
+| xwOBA | Sum of Savant expected values weighted by `woba_denom`, divided by the sum of those denominator contributions. |
+| xwOBAcon | Sum of supplied expected wOBA values for batted balls divided by the number of non-null contact estimates. Includes home runs; excludes non-contact outcomes. |
+| K% | Strikeouts divided by completed plate appearances. |
+| BB% | Walks, including intentional walks, divided by completed plate appearances. |
 | Batted-ball events | Count of projected batted-ball events. |
 | Average exit velocity | Sum of measured exit velocities divided by events with an exit-velocity observation. |
 | Maximum exit velocity | Highest supplied exit velocity in the selected population. |
@@ -138,6 +144,9 @@ measurements are not converted to zero:
 - Sweet-spot rate requires launch angle.
 - Statcast tracking rate reports the share of batted balls with both primary
   contact measurements.
+- xwOBAcon requires a supplied expected wOBA contact value; missing estimates
+  are excluded, while actual zero estimates count. It does not use all PAs or
+  all BBE as its denominator when expected-contact coverage is incomplete.
 
 The profile can therefore distinguish performance from measurement coverage.
 
@@ -176,6 +185,9 @@ and traceable to retained source evidence.
   is not an authoritative current-roster endpoint.
 - Public values reflect the latest successful acquisition, projection, dbt, and
   Hex publication boundaries rather than a live in-game feed.
+- Statcast metrics are reconstructed from retained event data. Source coverage
+  and public event fields can differ from Savant's precomputed player-page
+  metrics, so these are not guaranteed replicas of the displayed aggregates.
 
 ## Suggested Hex methodology tab
 

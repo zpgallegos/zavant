@@ -133,10 +133,24 @@ class DagsterDefinitionsTests(unittest.TestCase):
             DBT_TRANSLATOR.get_asset_key(source)
             for source in DBT_MANIFEST["sources"].values()
         }
+        # Most staging models read one source directly. Historical batting
+        # normalization additionally needs final-game and runner evidence.
+        normalization_inputs = {
+            "stg_plays": {"stg_games", "stg_runner_movements"},
+            "stg_boxscore_player_batting": {"stg_plays"},
+            "stg_boxscore_team_batting": {"stg_plays"},
+        }
         for key in zavant_dbt_assets.keys:
             if graph.get(key).group_name == "dbt_staging":
-                self.assertEqual(len(graph.get(key).parent_keys), 1)
-                self.assertTrue(graph.get(key).parent_keys <= source_keys)
+                parents = graph.get(key).parent_keys
+                self.assertEqual(len(parents & source_keys), 1)
+                self.assertEqual(
+                    parents - source_keys,
+                    {
+                        dg.AssetKey(["analytics", name])
+                        for name in normalization_inputs.get(key.path[-1], set())
+                    },
+                )
         self.assertEqual(
             len({spec.key for spec in ATHENA_ASSET_SPECS} - source_keys), 28
         )

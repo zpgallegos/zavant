@@ -4,9 +4,9 @@ models:
   - name: int_plate_appearances
     description: >-
       Completed batter turns selected from MLB's top-level
-      plays. The model excludes independent baserunning, pitching, and advisory
+      plays, including reviewed outs normalized in stg_plays. The model excludes independent baserunning, pitching, and advisory
       plays that MLB also emits in allPlays with an at_bat_index. Qualification
-      is based on terminal event types and reconciles to MLB's official
+      is based on terminal event types and reconciles to normalized boxscore
       team-game plate-appearance totals. Pre-appearance state is calculated
       over the complete play stream before qualification so intervening
       non-plate-appearance plays remain visible. Its grain is game_pk and
@@ -112,11 +112,11 @@ models:
         data_type: integer
 
       - name: is_complete
-        description: Whether MLB marks the plate appearance as complete.
+        description: Whether the reported or recovered plate appearance is complete.
         data_type: boolean
 
       - name: is_out
-        description: Whether MLB classifies the plate-appearance result as an out.
+        description: Whether the reported or recovered plate-appearance result is an out.
         data_type: boolean
 
       - name: is_scoring_play

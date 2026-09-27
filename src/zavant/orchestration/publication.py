@@ -148,9 +148,14 @@ def read_publication(
             "Revision mappings are empty, mixed, duplicated, or incomplete.",
             metadata=metadata,
         )
-    # Spark writes these Athena TIMESTAMP values in UTC (without a zone suffix).
-    reconciled_at = datetime.fromisoformat(row.get("reconciled_at") or "")
+    # Athena can render the Iceberg timestamp with a literal UTC zone name.
+    # Normalize that spelling; retain explicit ISO offsets and reject bad input.
+    timestamp = row.get("reconciled_at") or ""
+    if timestamp.endswith(" UTC"):
+        timestamp = timestamp.removesuffix(" UTC") + "+00:00"
+    reconciled_at = datetime.fromisoformat(timestamp)
     if reconciled_at.utcoffset() is None:
+        # Older zone-less projections were also written in UTC by Spark.
         reconciled_at = reconciled_at.replace(tzinfo=timezone.utc)
     metadata.update(
         publication_id=publication_id, reconciled_at=reconciled_at.isoformat()

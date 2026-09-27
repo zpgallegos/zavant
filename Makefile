@@ -146,8 +146,6 @@ DAILY_WORKFLOW_SCHEDULE_STATE ?= $(ZAVANT_DAILY_SCHEDULE_STATE)
 	dagster-code-server \
 	dagster-webserver \
 	dagster-daemon \
-	dagster-package \
-	dagster-infra-validate \
 	glue-package \
 	glue-start \
 	help \
@@ -183,8 +181,6 @@ help:
 	@echo "dagster-code-server         serve prepared definitions on localhost:4000"
 	@echo "dagster-webserver           serve the UI on localhost:3000"
 	@echo "dagster-daemon              evaluate schedules/sensors and launch queued runs"
-	@echo "dagster-package             build an allowlisted EC2 release (no upload)"
-	@echo "dagster-infra-validate      validate the Dagster monitor EC2 template"
 	@echo "acquisition-infra-validate  validate the acquisition template"
 	@echo "analytics-infra-validate    validate the Glue/Iceberg template"
 	@echo "hex-context-sync            publish the Hex semantic context via GitHub Actions"
@@ -242,13 +238,6 @@ dagster-webserver: dagster-init
 dagster-daemon: dagster-init
 	@DAGSTER_HOME="$(DAGSTER_HOME)" PYTHONPATH=src $(VENV_DIR)/bin/dagster-daemon run \
 		-w infrastructure/dagster/workspace.yaml
-
-dagster-package:
-	@$(VENV_PYTHON) infrastructure/dagster/package.py
-
-dagster-infra-validate: aws-check-account
-	@$(AWS_CLI) cloudformation validate-template --region "$(AWS_REGION)" \
-		--template-body "file://$(abspath infrastructure/dagster-stack.yaml)"
 
 test:
 	@PYTHONPATH=src $(VENV_PYTHON) -m unittest discover -s tests -v

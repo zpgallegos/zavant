@@ -38,6 +38,20 @@ metrics:
     type_params:
       measure: sweet_spots
 
+  - name: expected_woba_on_contact_numerator
+    label: Expected wOBA on Contact Numerator
+    description: Sum of supplied Savant expected wOBA values for batted balls.
+    type: simple
+    type_params:
+      measure: expected_woba_on_contact_numerator
+
+  - name: expected_woba_on_contact_observations
+    label: Expected wOBA on Contact Observations
+    description: Number of batted balls with a non-null expected wOBA value.
+    type: simple
+    type_params:
+      measure: expected_woba_on_contact_observations
+
   - name: bunts
     label: Bunts
     description: Number of batted balls classified as bunts.
@@ -178,6 +192,18 @@ metrics:
     type_params:
       numerator: batted_ball_distance_sum
       denominator: distance_tracked_batted_balls
+
+  - name: expected_weighted_on_base_average_on_contact
+    label: Expected Weighted On-Base Average on Contact (xwOBAcon)
+    description: >-
+      Sum of Savant expected wOBA contact values divided by batted balls with
+      a supplied estimate, including home runs. Excludes walks, hit-by-pitches,
+      and strikeouts by using the batted-ball fact. Null estimates are excluded,
+      and an empty eligible population produces a null rate.
+    type: ratio
+    type_params:
+      numerator: expected_woba_on_contact_numerator
+      denominator: expected_woba_on_contact_observations
 
   - name: hard_hit_rate
     label: Hard-Hit Rate

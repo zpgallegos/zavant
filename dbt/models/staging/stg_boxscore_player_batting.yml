@@ -7,6 +7,9 @@ models:
       current version of each game's boxscore. These are statistics for the
       individual game rather than season-to-date totals. Its grain is one
       player-team batting line at game_pk, player_id, and team_id.
+      PA shortfalls are corrected only when recovered reviewed batter outs exactly
+      reconcile them to this line's AB, walk, HBP, sacrifice, and interference
+      totals. Reported PA and the correction reason remain inspectable.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -128,8 +131,16 @@ models:
         data_type: integer
 
       - name: plate_appearances
-        description: Plate appearances recorded for the player.
+        description: Reported PA, with only independently reconciled reviewed-out shortfalls corrected.
         data_type: integer
+
+      - name: reported_plate_appearances
+        description: Unmodified plateAppearances from the retained MLB player batting line.
+        data_type: integer
+
+      - name: plate_appearances_correction_reason
+        description: recovered_reviewed_batter_out when PA was corrected; null otherwise.
+        data_type: varchar
 
       - name: pop_outs
         description: Pop outs credited in the player's batting line.

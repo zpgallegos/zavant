@@ -7,7 +7,8 @@ models:
       spine according to MLB scoring rules. The model excludes walks,
       hit-by-pitches, sacrifices, and awards of first base caused by
       interference or defensive-shift violations. Ordinary fielding errors
-      remain at-bats. Its grain is game_pk and
+      remain at-bats. Award credits must belong to the batter's movement from
+      home to first, not another runner or advancement beyond first. Its grain is game_pk and
       at_bat_index; filtered rows are not renumbered.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
@@ -102,11 +103,11 @@ models:
         data_type: integer
 
       - name: is_complete
-        description: Whether MLB marks the at-bat as complete.
+        description: Whether the reported or recovered at-bat is complete.
         data_type: boolean
 
       - name: is_out
-        description: Whether MLB classifies the at-bat result as an out.
+        description: Whether the reported or recovered at-bat result is an out.
         data_type: boolean
 
       - name: is_scoring_play

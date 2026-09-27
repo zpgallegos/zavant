@@ -125,6 +125,19 @@ class DagsterInstanceTests(unittest.TestCase):
             command = _run_make("-n", "dagster-dev", f"DAGSTER_HOME={instance_home}")
             self.assertIn(f'DAGSTER_HOME="{instance_home}"', command.stdout)
 
+    def test_local_instance_serializes_runs(self) -> None:
+        with TemporaryDirectory() as directory:
+            result = _run_make("dagster-init", f"DAGSTER_HOME={directory}")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with (
+                patch.dict(os.environ, {"DAGSTER_HOME": directory}),
+                dg.DagsterInstance.get() as instance,
+            ):
+                queue = instance.get_concurrency_config().run_queue_config
+                self.assertIsNotNone(queue)
+                assert queue is not None
+                self.assertEqual(queue.max_concurrent_runs, 1)
+
     def test_initialization_rejects_empty_or_relative_home(self) -> None:
         for invalid_home in ("", "relative/dagster"):
             with self.subTest(instance_home=invalid_home):

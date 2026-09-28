@@ -161,9 +161,23 @@ metrics:
     type_params:
       measure: expected_woba_numerator
 
+  - name: woba_numerator
+    label: Observed wOBA Numerator
+    description: Sum of official outcome contributions using season-specific FanGraphs weights.
+    type: simple
+    type_params:
+      measure: woba_numerator
+
+  - name: woba_opportunities
+    label: Observed wOBA Opportunities
+    description: Official at-bats, unintentional walks, hit-by-pitches, and sacrifice flies.
+    type: simple
+    type_params:
+      measure: woba_opportunities
+
   - name: woba_denominator
     label: wOBA Denominator
-    description: Number of outcome opportunities included in wOBA.
+    description: Savant-supplied outcome opportunities used by xwOBA, not observed wOBA.
     type: simple
     type_params:
       measure: woba_denominator
@@ -205,6 +219,18 @@ metrics:
     type_params:
       numerator: total_bases
       denominator: at_bats
+
+  - name: weighted_on_base_average
+    label: Weighted On-Base Average (wOBA)
+    description: >-
+      Observed season-weighted outcome contributions divided by official
+      AB + unintentional BB + HBP + SF. Applies each season's FanGraphs weights
+      before aggregation; career values are not averages of season rates.
+      Zero opportunities yield null. Current-season weights may be provisional.
+    type: ratio
+    type_params:
+      numerator: woba_numerator
+      denominator: woba_opportunities
 
   - name: expected_weighted_on_base_average
     label: Expected Weighted On-Base Average (xwOBA)

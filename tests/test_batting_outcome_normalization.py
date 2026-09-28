@@ -5,6 +5,7 @@ dependency. dbt's materialization and surrogate-key hash are not under test;
 Athena dialect compatibility is checked separately with SQLFluff/read-only SQL.
 """
 
+import csv
 import json
 import sqlite3
 import unittest
@@ -25,7 +26,7 @@ def _fixture_key(columns: list[str]) -> str:
     return " || ':' || ".join(f"cast({column} as text)" for column in columns)
 
 
-def _render_sql(path: Path) -> str:
+def _render_sql(path: Path, *, incremental: bool = False) -> str:
     macros = "\n".join(
         macro.read_text(encoding="utf-8")
         for macro in sorted((_DBT / "macros").glob("*.sql"))
@@ -37,13 +38,16 @@ def _render_sql(path: Path) -> str:
             ref=lambda name: name,
             source=lambda schema, name: f"raw_{name}",
             config=lambda **kwargs: "",
-            is_incremental=lambda: False,
+            is_incremental=lambda: incremental,
+            this="existing_plate_appearances",
             dbt_utils=SimpleNamespace(generate_surrogate_key=_fixture_key),
         )
     )
 
 
-class BattingOutcomeNormalizationTests(unittest.TestCase):
+class BattingModelFixture(unittest.TestCase):
+    """Shared offline tables and actual model views for batting regression tests."""
+
     def _table(self, name: str, model: str) -> None:
         # Model documentation supplies all columns, including unused nullable
         # fields, so fixtures can focus on the evidence behind each correction.
@@ -102,6 +106,19 @@ class BattingOutcomeNormalizationTests(unittest.TestCase):
         }
         for table, model in tables.items():
             self._table(table, model)
+        seed = yaml.safe_load((_DBT / "seeds/woba_weights.yml").read_text())["seeds"][0]
+        columns = seed["config"]["column_types"]
+        self.connection.execute(
+            "create table woba_weights ("
+            + ", ".join(f"{name} {kind}" for name, kind in columns.items())
+            + ")"
+        )
+        with (_DBT / "seeds/woba_weights.csv").open(newline="") as source:
+            for record in csv.DictReader(source):
+                self._insert(
+                    "woba_weights",
+                    {**record, "is_provisional": record["is_provisional"] == "true"},
+                )
         for category, table in (
             ("games", "stg_games"),
             ("runner_movements", "stg_runner_movements"),
@@ -142,6 +159,8 @@ class BattingOutcomeNormalizationTests(unittest.TestCase):
                 f"create view {model} as {_render_sql(_MODEL_PATHS[model])}"
             )
 
+
+class BattingOutcomeNormalizationTests(BattingModelFixture):
     def test_all_three_batters_reconcile_after_normalization(self) -> None:
         rows = self._rows("""
             select f.game_pk, count(*) as pa, sum(f.at_bat_ind) as ab,

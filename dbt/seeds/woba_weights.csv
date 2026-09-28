@@ -1,0 +1,13 @@
+season,walk_weight,hit_by_pitch_weight,single_weight,double_weight,triple_weight,home_run_weight,is_provisional,retrieved_on,source_url
+2015,0.687,0.718,0.881,1.256,1.594,2.065,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2016,0.691,0.721,0.878,1.242,1.569,2.015,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2017,0.693,0.723,0.877,1.232,1.552,1.980,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2018,0.690,0.720,0.880,1.247,1.578,2.031,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2019,0.690,0.719,0.870,1.217,1.529,1.940,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2020,0.699,0.728,0.883,1.238,1.558,1.979,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2021,0.692,0.722,0.879,1.242,1.568,2.007,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2022,0.689,0.720,0.884,1.261,1.601,2.072,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2023,0.696,0.726,0.883,1.244,1.569,2.004,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2024,0.689,0.720,0.882,1.254,1.590,2.050,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2025,0.691,0.722,0.882,1.252,1.584,2.037,false,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn
+2026,0.698,0.729,0.890,1.262,1.596,2.051,true,2026-09-27,https://www.fangraphs.com/tools/guts?sort=7%2Ca&type=cn

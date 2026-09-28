@@ -6,9 +6,11 @@ models:
       Current official plate appearances derived from Glue-published Stats API
       game state and enriched with Baseball Savant expected outcomes and
       contact classifications. The physical grain is game_pk and at_bat_index.
-      The table replaces every row belonging to a game when either source
-      revision changes; obsolete plate appearances are transactionally deleted
-      during the same Iceberg merge.
+      Annual FanGraphs coefficients supply observed wOBA contributions. The
+      table replaces every row belonging to a game when either source revision
+      or its season's weights change; obsolete plate appearances are
+      transactionally deleted during the same Iceberg merge. A pre-hook rejects
+      missing, duplicate, or invalid weights before materialization.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -329,6 +331,27 @@ models:
         data_type: double
 
       # additive indicators and measures
+      - name: woba_numerator
+        description: >-
+          Season-weighted contribution of the official batting outcome to observed
+          wOBA. Outs, errors, fielder's choices, and intentional walks contribute
+          zero. Uses the annual reference, not Savant's woba_value.
+        data_type: double
+        data_tests: [not_null]
+
+      - name: woba_opportunity_ind
+        description: >-
+          Official AB + unintentional BB + HBP + SF contribution. Excludes IBB,
+          sacrifice bunts, and interference awards. Independent of the Savant
+          denominator retained for xwOBA, including when Savant coverage is absent.
+        data_type: integer
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+
       - name: plate_appearance_ind
         description: Additive plate-appearance indicator, always one per fact row.
         data_type: integer
@@ -462,6 +485,18 @@ models:
         data_type: integer
 
       # metadata
+      - name: woba_weights_revision
+        description: >-
+          Hash of the season's six coefficients and provisional flag; drives
+          recalculation when the reference changes without a source-data revision.
+        data_type: varchar
+        data_tests: [not_null]
+
+      - name: woba_weights_is_provisional
+        description: Whether this row uses an in-season, non-final weights snapshot.
+        data_type: boolean
+        data_tests: [not_null]
+
       - name: statsapi_source_revision_id
         description: >-
           Identifier of the current raw game revision used to replace the

@@ -19,6 +19,7 @@ _COMBINED_TESTS = {
     "batted_ball_fact_uses_current_savant_revision",
     "plate_appearance_fact_matches_statcast_batting_values",
     "plate_appearance_fact_uses_current_savant_revision",
+    "plate_appearance_fact_uses_current_woba_weights",
 }
 
 

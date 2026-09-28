@@ -97,6 +97,7 @@ Zavant derives the reusable analytical product from those observations:
 | xBA | Sum of Savant expected hits divided by official at-bats, including strikeouts in the denominator. |
 | xSLG | Sum of Savant expected total bases divided by official at-bats. |
 | xwOBA | Sum of Savant expected values weighted by `woba_denom`, divided by the sum of those denominator contributions. |
+| wOBA | Official batting outcomes weighted with their season's FanGraphs coefficients, divided by AB + unintentional BB + HBP + SF. Current-season weights are provisional. |
 | xwOBAcon | Sum of supplied expected wOBA values for batted balls divided by the number of non-null contact estimates. Includes home runs; excludes non-contact outcomes. |
 | K% | Strikeouts divided by completed plate appearances. |
 | BB% | Walks, including intentional walks, divided by completed plate appearances. |
@@ -149,6 +150,12 @@ measurements are not converted to zero:
   all BBE as its denominator when expected-contact coverage is incomplete.
 
 The profile can therefore distinguish performance from measurement coverage.
+
+Observed wOBA does not require Statcast tracking. Its annual coefficients live
+in the versioned [wOBA reference seed](../dbt/seeds/README.md), with source and
+retrieval dates. Each season's weights are applied before career aggregation;
+rounded reference coefficients need not reproduce every Savant aggregate
+exactly. Changes to those weights invalidate the affected season's PA facts.
 
 ## Validation
 

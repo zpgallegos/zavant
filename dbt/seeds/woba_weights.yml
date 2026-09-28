@@ -1,0 +1,66 @@
+version: 2
+
+seeds:
+  - name: woba_weights
+    description: >-
+      MLB regular-season wOBA outcome coefficients transcribed from FanGraphs'
+      public seasonal constants table, at its published three-decimal precision.
+      Covers the lake's 2015-2026 seasons. The 2026 row is an in-season snapshot,
+      not final coefficients. Update explicitly; never reuse a prior year's row
+      for an uncovered season. See seeds/README.md for provenance and maintenance.
+    config:
+      meta:
+        dagster:
+          group: dbt_reference
+      column_types:
+        season: integer
+        walk_weight: double
+        hit_by_pitch_weight: double
+        single_weight: double
+        double_weight: double
+        triple_weight: double
+        home_run_weight: double
+        is_provisional: boolean
+        retrieved_on: date
+        source_url: varchar
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: woba_weights_are_positive_and_ordered
+          arguments:
+            expression: >-
+              walk_weight > 0 and walk_weight < 3
+              and hit_by_pitch_weight > 0 and hit_by_pitch_weight < 3
+              and single_weight > 0 and single_weight < double_weight
+              and double_weight < triple_weight
+              and triple_weight < home_run_weight and home_run_weight < 3
+    columns:
+      - name: season
+        description: MLB season to which all six coefficients apply.
+        data_tests: [not_null, unique]
+      - name: walk_weight
+        description: FanGraphs wBB; applies only to unintentional walks.
+        data_tests: [not_null]
+      - name: hit_by_pitch_weight
+        description: FanGraphs wHBP.
+        data_tests: [not_null]
+      - name: single_weight
+        description: FanGraphs w1B.
+        data_tests: [not_null]
+      - name: double_weight
+        description: FanGraphs w2B.
+        data_tests: [not_null]
+      - name: triple_weight
+        description: FanGraphs w3B.
+        data_tests: [not_null]
+      - name: home_run_weight
+        description: FanGraphs wHR.
+        data_tests: [not_null]
+      - name: is_provisional
+        description: True for an in-season snapshot requiring later review.
+        data_tests: [not_null]
+      - name: retrieved_on
+        description: Date the displayed reference values were retrieved, not their effective date.
+        data_tests: [not_null]
+      - name: source_url
+        description: Public source of the transcribed coefficients.
+        data_tests: [not_null]

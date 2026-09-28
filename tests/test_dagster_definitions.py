@@ -69,7 +69,7 @@ class DagsterDefinitionsTests(unittest.TestCase):
         dg.Definitions.validate_loadable(defs)
         graph = defs.resolve_asset_graph()
         self.assertEqual(len(EXTERNAL_ASSET_SPECS), 57)
-        self.assertEqual(len(zavant_dbt_assets.keys), 38)
+        self.assertEqual(len(zavant_dbt_assets.keys), 39)
         self.assertEqual(
             {
                 key
@@ -80,7 +80,7 @@ class DagsterDefinitionsTests(unittest.TestCase):
         )
         self.assertEqual(
             Counter(key.path[0] for key in graph.get_all_asset_keys()),
-            {"aws": 57, "analytics": 38},
+            {"aws": 57, "analytics": 39},
         )
         self.assertFalse(defs.schedules)
         self.assertEqual([job.name for job in defs.jobs or []], ["build_dbt"])
@@ -170,7 +170,7 @@ class DagsterDefinitionsTests(unittest.TestCase):
         )
         self.assertEqual(
             {branch.name: len(branch.keys) for branch in DBT_BRANCHES},
-            {"independent": 1, "savant": 2, "stats_api": 33, "savant_and_stats_api": 2},
+            {"independent": 2, "savant": 2, "stats_api": 33, "savant_and_stats_api": 2},
         )
         self.assertEqual(
             DBT_MODEL_SOURCES[dg.AssetKey(["analytics", "fct_pitches"])], {"stats_api"}
@@ -183,6 +183,21 @@ class DagsterDefinitionsTests(unittest.TestCase):
             DBT_MODEL_SOURCES[dg.AssetKey(["analytics", "metricflow_time_spine"])],
             set(),
         )
+
+    def test_woba_reference_is_built_before_the_combined_branch(self) -> None:
+        key = dg.AssetKey(["analytics", "woba_weights"])
+        self.assertEqual(DBT_MODEL_SOURCES[key], set())
+        self.assertEqual(zavant_dbt_assets.group_names_by_key[key], "dbt_reference")
+        self.assertIn(
+            key,
+            zavant_dbt_assets.asset_deps[
+                dg.AssetKey(["analytics", "fct_plate_appearances"])
+            ],
+        )
+        combined = next(
+            branch for branch in DBT_BRANCHES if branch.name == "savant_and_stats_api"
+        )
+        self.assertIn("independent", combined.upstream_branches)
 
     def test_alias_maps_to_physical_source_and_dbt_outputs_keep_analytics_prefix(
         self,

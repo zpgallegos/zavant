@@ -123,6 +123,7 @@ Representative metric contracts are:
 | Expected batting average | `expected_hits / at_bats` | Keeps Savant contact probabilities additive while strikeout at-bats remain in the denominator. |
 | Expected slugging percentage | `expected_total_bases / at_bats` | Calculates the player rate from additive Savant total-base expectations. |
 | Expected weighted on-base average | `expected_woba_numerator / woba_denominator` | Includes Savant's eligible contact and non-contact outcomes. |
+| Weighted on-base average | `woba_numerator / woba_opportunities` | Uses season-specific FanGraphs weights and official AB + unintentional BB + HBP + SF, independently of Savant coverage. |
 | Expected wOBA on contact | `expected_woba_on_contact_numerator / expected_woba_on_contact_observations` | Restricts both components to batted balls with a supplied expected wOBA value; true zero estimates remain eligible. |
 | Barrels per plate appearance | Average of the PA-grain `barrel_ind` | Keeps the numerator and denominator on the plate-appearance dataset accepted by Hex. |
 | On-base plus slugging | `on_base_percentage + slugging_percentage` | Reuses governed component metrics. |
@@ -155,14 +156,14 @@ each fact independently rather than joining raw fact rows and multiplying PAs.
 |---|---|---|
 | xBA | `expected_batting_average` | `plate_appearances` |
 | xSLG | `expected_slugging_percentage` | `plate_appearances` |
-| wOBA | Not yet published; requires an annual-weights reference | — |
+| wOBA | `weighted_on_base_average` | `plate_appearances` |
 | xwOBA | `expected_weighted_on_base_average` | `plate_appearances` |
 | xwOBAcon | `expected_weighted_on_base_average_on_contact` | `batted_balls` |
 | HardHit% | `hard_hit_rate` | `batted_balls` |
 | K% | `strikeout_rate` | `plate_appearances` |
 | BB% | `walk_rate` | `plate_appearances` |
 
-xBA, xSLG, xwOBA, and xwOBAcon are decimal statistics, normally displayed to
+xBA, xSLG, wOBA, xwOBA, and xwOBAcon are decimal statistics, normally displayed to
 three decimal places. HardHit%, K%, and BB% are fractions formatted as
 percentages, not values multiplied by 100 in the semantic layer.
 
@@ -174,11 +175,13 @@ eligible non-contact outcomes using Savant's `woba_denom`. Both definitions
 use [Savant's event fields](https://baseballsavant.mlb.com/csv-docs), not the
 precomputed player-page aggregates. Exact page parity is not guaranteed.
 
-Observed wOBA must not be calculated by simply averaging the CSV's
-`woba_value`: those values include generic weights and can credit reached-on-error
-and fielder's-choice outcomes. The standard statistic needs annual outcome
-weights and its official eligibility denominator. It remains deferred until
-that reference data is added; no approximate metric is labeled as standard wOBA.
+Observed wOBA uses [`woba_weights.csv`](seeds/woba_weights.csv), with one set of
+FanGraphs coefficients per season, and official Stats API batting outcomes.
+It does not average Savant's generic `woba_value` research values, credit errors
+or fielder's choices as hits, or use the Savant denominator retained for xwOBA.
+The 2026 reference is provisional. See [reference maintenance and first
+deployment](seeds/README.md) for provenance, incremental invalidation, and the
+one-time PA fact full refresh required to add the new columns.
 
 The xwOBAcon addition is semantic-only and uses an existing fact column; it
 does not require an acquisition, Glue run, or fact full refresh. Validate the
@@ -202,6 +205,11 @@ This game-replacement boundary handles corrections from either source that add,
 change, or remove events or enrichments without requiring a full-table rebuild
 and without leaving obsolete rows behind. A changed date-scoped Savant revision
 recalculates every game represented by that revision.
+
+The PA fact additionally compares `woba_weights_revision`: updating a season's
+coefficients or provisional status replaces that season's existing rows on the
+next build. The reference pre-hook validates season coverage before writing.
+This does not make arbitrary model-logic changes automatically incremental-safe.
 
 The documented
 [`correction_safe_incremental.sql`](macros/correction_safe_incremental.sql)
@@ -313,6 +321,7 @@ models/
 ├── marts/         # dimensions and correction-safe Iceberg facts
 └── semantic/      # MetricFlow entities, dimensions, measures, and metrics
 tests/             # cross-model, current-revision, and boxscore reconciliation
+seeds/             # versioned annual wOBA coefficients and provenance
 ```
 
 Breaking analytical projection releases rebuild the analytical tables and

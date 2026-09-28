@@ -10,12 +10,39 @@
         on_schema_change="ignore",
         table_type="iceberg",
         format="parquet",
-        partitioned_by=["season"]
+        partitioned_by=["season"],
+        pre_hook="{{ validate_woba_weights() }}"
     )
 }}
 
-with changed_games as (
+with annual_weights as (
+    {{ annual_woba_weights() }}
+),
+
+changed_games as (
     {{ changed_statsapi_and_savant_game_revisions() }}
+
+    {% if is_incremental() %}
+        union
+
+        -- Reference-data corrections also require complete game replacement,
+        -- even when both acquisition revisions are unchanged.
+        select
+            a.game_pk,
+            a.statsapi_source_revision_id,
+            b.savant_source_revision_id
+        from {{ ref("stg_games") }} as a
+        left join {{ ref("stg_statcast_date_revisions") }} as b
+            on a.official_date = b.game_date
+        inner join annual_weights as c on a.season = c.season
+        where exists (
+            select 1 as row_exists
+            from {{ this }} as d
+            where
+                a.game_pk = d.game_pk
+                and d.woba_weights_revision is distinct from c.woba_weights_revision
+        )
+    {% endif %}
 ),
 
 plate_appearances as (
@@ -163,6 +190,30 @@ classified_outcomes as (
     from event_flags as a
 ),
 
+weighted_plate_appearances as (
+    select
+        a.*,
+        -- Use official outcomes, not Savant's generic research woba_value.
+        case
+            when b.season is null then null
+            when a.is_walk and not a.is_intentional_walk then b.walk_weight
+            when a.is_hit_by_pitch then b.hit_by_pitch_weight
+            when a.is_single then b.single_weight
+            when a.is_double then b.double_weight
+            when a.is_triple then b.triple_weight
+            when a.is_home_run then b.home_run_weight
+            else 0.0
+        end as woba_numerator,
+        if(a.is_at_bat, 1, 0)
+        + if(a.is_walk and not a.is_intentional_walk, 1, 0)
+        + if(a.is_hit_by_pitch, 1, 0)
+        + if(a.is_sac_fly, 1, 0) as woba_opportunity_ind,
+        b.woba_weights_revision,
+        b.is_provisional as woba_weights_is_provisional
+    from classified_outcomes as a
+    left join annual_weights as b on a.season = b.season
+),
+
 sequenced_plate_appearances as (
     select
         a.*,
@@ -182,7 +233,7 @@ sequenced_plate_appearances as (
                 a.batter_id
             order by a.at_bat_index
         ) as result_batter_plate_appearance_number
-    from classified_outcomes as a
+    from weighted_plate_appearances as a
 ),
 
 final as (
@@ -280,6 +331,8 @@ final as (
         woba_denominator,
 
         -- additive indicators and measures
+        woba_numerator,
+        woba_opportunity_ind,
         1 as plate_appearance_ind,
         if(is_at_bat, 1, 0) as at_bat_ind,
         if(is_hit, 1, 0) as hit_ind,
@@ -321,6 +374,8 @@ final as (
         -- metadata
         statsapi_source_revision_id,
         savant_source_revision_id,
+        woba_weights_revision,
+        woba_weights_is_provisional,
         official_date,
         season
     from sequenced_plate_appearances

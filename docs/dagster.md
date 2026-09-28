@@ -26,7 +26,8 @@ including relations dbt does not consume. They have no materialization function.
   mapping. Its SQL definition is metadata, not something recreated by Dagster.
 - [`assets/dbt.py`](../src/zavant/orchestration/assets/dbt.py) translates dbt
   `source()` references to those physical keys and preserves `ref()` edges.
-  Only the 38 `analytics/...` dbt models are executable Dagster assets.
+  The 38 dbt models and annual wOBA seed are executable `analytics/...` assets.
+  The seed appears in `dbt_reference` and is upstream of the PA fact.
 - dbt YAML semantic models/metrics are definitions, not additional buildable
   tables. The SQL time-spine model remains an ordinary dbt asset.
 
@@ -87,12 +88,12 @@ Committing a cursor is not evidence that dbt built successfully.
 [`jobs.py`](../src/zavant/orchestration/jobs.py) derives branches from each
 model's **transitive dbt source dependencies**, not a hand-written model list:
 
-| Branch | Current models | Eligibility |
+| Branch | Current assets | Eligibility |
 | --- | ---: | --- |
 | Stats API | 33 | Stats acquisition and projection ready |
 | Savant | 2 | Savant acquisition and projection ready |
 | Combined | 2 | Both sources published by the same Glue run, and their prerequisite dbt branches succeeded for these publications |
-| Independent | 1 | Time spine; once per cycle when either source first becomes ready |
+| Independent | 2 | Time spine and annual wOBA seed; once per cycle when either source first becomes ready |
 
 For example, `fct_pitches` can build without Savant. `fct_batted_balls` and
 `fct_plate_appearances` wait for both sources and their dbt parents. A Savant-only
@@ -163,7 +164,7 @@ monitor in multiple homes against the same dbt outputs.
 
 If today's acquisitions and Glue publication finished before Dagster started,
 the first eligible tick can still discover them. With both sources ready and
-no prior attempts or active runs, it requests the independent time spine,
+no prior attempts or active runs, it requests the independent time spine/seed,
 Savant-only, and Stats-only branches. The queue runs them one at a time. A later
 tick requests the combined branch once its prerequisite branches succeed.
 The sensor polls stored evidence; it does not need to witness the original

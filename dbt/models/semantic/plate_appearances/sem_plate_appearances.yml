@@ -230,6 +230,16 @@ semantic_models:
         agg: sum
         expr: expected_woba_value * woba_denominator
 
+      - name: woba_numerator
+        description: Sum of observed outcome contributions weighted for each row's season.
+        agg: sum
+        expr: woba_numerator
+
+      - name: woba_opportunities
+        description: Official AB + unintentional BB + HBP + SF; independent of Savant coverage.
+        agg: sum
+        expr: woba_opportunity_ind
+
       - name: woba_denominator
         description: Sum of Savant outcome contributions to the wOBA denominator.
         agg: sum

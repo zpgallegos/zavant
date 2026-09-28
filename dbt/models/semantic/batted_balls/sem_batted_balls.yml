@@ -136,29 +136,44 @@ semantic_models:
         expr: batted_ball_key
 
       - name: exit_velocity_tracked_batted_balls
-        description: Number of batted-ball events with measured exit velocity.
+        description: Number of batted balls with Savant exit velocity, including supplied estimates.
         agg: sum
         expr: exit_velocity_tracked_ind
 
       - name: launch_angle_tracked_batted_balls
-        description: Number of batted-ball events with measured launch angle.
+        description: Number of batted balls with Savant launch angle, including supplied estimates.
         agg: sum
         expr: launch_angle_tracked_ind
 
       - name: statcast_tracked_batted_balls
         description: >-
-          Number of batted-ball events with both exit velocity and launch
-          angle available.
+          Number of batted balls with both Savant contact values available,
+          including supplied estimates. This is not the barrel-rate denominator.
         agg: sum
         expr: statcast_tracked_batted_ball_ind
 
+      - name: statsapi_contact_observations
+        description: >-
+          Batted balls with both original Stats API contact measurements.
+          Used as the observed-contact proxy for barrel-rate eligibility;
+          Savant-filled measurements must not expand this denominator.
+        agg: sum
+        expr: if(statsapi_launch_speed is not null and statsapi_launch_angle is not null, 1, 0)
+
+      - name: statsapi_launch_angle_observations
+        description: >-
+          Original Stats API angle coverage, retained solely to keep the
+          sweet-spot denominator unchanged while that metric is deferred.
+        agg: count
+        expr: statsapi_launch_angle
+
       - name: hard_hits
-        description: Number of batted balls with exit velocity of at least 95 mph.
+        description: Number of batted balls with Savant exit velocity of at least 95 mph.
         agg: sum
         expr: hard_hit_ind
 
       - name: sweet_spots
-        description: Number of batted balls with launch angle from 8 through 32 degrees.
+        description: Number of batted balls with original Stats API angle from 8 through 32 degrees.
         agg: sum
         expr: sweet_spot_ind
 
@@ -183,22 +198,22 @@ semantic_models:
         expr: bunt_ind
 
       - name: exit_velocity_sum
-        description: Sum of measured exit velocities, in miles per hour.
+        description: Sum of Savant exit velocities in mph, including supplied estimates.
         agg: sum
         expr: launch_speed
 
       - name: maximum_exit_velocity
-        description: Highest measured exit velocity, in miles per hour.
+        description: Highest supplied Savant exit velocity, in miles per hour.
         agg: max
         expr: launch_speed
 
       - name: non_bunt_launch_angle_sum
-        description: Sum of measured launch angles for non-bunt batted balls, in degrees.
+        description: Sum of Savant launch angles for non-bunt batted balls, including supplied estimates.
         agg: sum
         expr: if(not is_bunt, launch_angle, null)
 
       - name: non_bunt_launch_angle_observations
-        description: Number of non-bunt batted balls with measured launch angle.
+        description: Number of non-bunt batted balls with a supplied Savant launch angle.
         agg: sum
         expr: if(has_launch_angle and not is_bunt, 1, 0)
 

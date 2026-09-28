@@ -211,17 +211,30 @@ semantic_models:
 
       - name: expected_hits
         description: >-
-          Sum of Savant hit probabilities across terminal outcomes. At-bats
-          without tracked contact contribute zero.
+          Sum of Savant hit probabilities for official at-bat contact.
+          Strikeouts contribute zero; contact with missing estimates stays
+          null and is excluded from xBA eligibility, not treated as an out.
         agg: sum
-        expr: coalesce(expected_batting_average, 0)
+        expr: if(is_at_bat and not is_strikeout, expected_batting_average, 0.0)
+
+      - name: expected_batting_average_at_bats
+        description: Official strikeout at-bats plus at-bats with a supplied hit probability, including zero.
+        agg: sum
+        expr: if(is_at_bat and (is_strikeout or expected_batting_average is not null), 1, 0)
 
       - name: expected_total_bases
         description: >-
-          Sum of Savant expected total-base values across terminal outcomes.
-          At-bats without tracked contact contribute zero.
+          Sum of Savant expected total bases for official at-bat contact.
+          Strikeouts contribute zero; missing contact estimates stay null.
         agg: sum
-        expr: coalesce(expected_slugging_percentage, 0)
+        expr: if(is_at_bat and not is_strikeout, expected_slugging_percentage, 0.0)
+
+      - name: expected_slugging_at_bats
+        description: >-
+          Official strikeout at-bats plus at-bats with supplied expected total
+          bases, including zero. Eligibility is independent of xBA coverage.
+        agg: sum
+        expr: if(is_at_bat and (is_strikeout or expected_slugging_percentage is not null), 1, 0)
 
       - name: expected_woba_numerator
         description: >-

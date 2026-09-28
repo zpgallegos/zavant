@@ -5,8 +5,10 @@ models:
     description: >-
       Current batted-ball events enriched with the responsible batter,
       pitcher, teams, plate-appearance outcome, game state, pitch context, and
-      governed contact-quality classifications. Savant expected-contact values
-      are joined through the normalized plate-appearance identity. Its physical
+      governed contact-quality classifications. Savant measurements and
+      expected-contact values are joined through the normalized plate-appearance
+      identity; original Stats API measurements remain available for eligibility
+      and the deferred sweet-spot metric. Its physical
       grain is game_pk, at_bat_index, and event_index. A revision from either
       source replaces the affected game's rows as a unit so removed events or
       revised expected values do not survive a source correction.
@@ -145,11 +147,23 @@ models:
         data_type: varchar
 
       - name: launch_angle
-        description: Vertical launch angle in degrees.
+        description: Savant launch angle in degrees, including supplied estimates for untracked contact.
         data_type: double
 
       - name: launch_speed
-        description: Exit velocity in miles per hour.
+        description: Savant exit velocity in mph, including supplied estimates for untracked contact.
+        data_type: double
+
+      - name: statsapi_launch_angle
+        description: >-
+          Original Stats API launch angle in degrees. Retained for source
+          coverage comparisons and the intentionally unchanged sweet-spot metric.
+        data_type: double
+
+      - name: statsapi_launch_speed
+        description: >-
+          Original Stats API exit velocity in mph. Together with the original
+          angle, identifies the observed-contact denominator used for barrel rate.
         data_type: double
 
       - name: location
@@ -171,15 +185,15 @@ models:
         data_type: integer
 
       - name: has_exit_velocity
-        description: Whether MLB supplied an exit-velocity measurement.
+        description: Whether Savant supplied an exit velocity, measured or estimated.
         data_type: boolean
 
       - name: has_launch_angle
-        description: Whether MLB supplied a launch-angle measurement.
+        description: Whether Savant supplied a launch angle, measured or estimated.
         data_type: boolean
 
       - name: has_statcast_tracking
-        description: Whether both exit velocity and launch angle are available.
+        description: Whether both Savant contact values are available, including supplied estimates.
         data_type: boolean
 
       - name: is_barrel
@@ -189,11 +203,13 @@ models:
         data_type: boolean
 
       - name: is_hard_hit
-        description: Whether measured exit velocity is at least 95 miles per hour.
+        description: Whether Savant exit velocity is at least 95 miles per hour.
         data_type: boolean
 
       - name: is_sweet_spot
-        description: Whether measured launch angle is between 8 and 32 degrees, inclusive.
+        description: >-
+          Whether the original Stats API angle is between 8 and 32 degrees,
+          inclusive. Intentionally unchanged pending sweet-spot reconciliation.
         data_type: boolean
 
       - name: is_bunt
@@ -228,23 +244,23 @@ models:
         data_type: integer
 
       - name: exit_velocity_tracked_ind
-        description: Additive indicator for events with measured exit velocity.
+        description: Additive indicator for events with a supplied Savant exit velocity.
         data_type: integer
 
       - name: launch_angle_tracked_ind
-        description: Additive indicator for events with measured launch angle.
+        description: Additive indicator for events with a supplied Savant launch angle.
         data_type: integer
 
       - name: statcast_tracked_batted_ball_ind
-        description: Additive indicator for events with both primary contact measurements.
+        description: Additive indicator for events with both Savant contact values, including estimates.
         data_type: integer
 
       - name: hard_hit_ind
-        description: Additive indicator for measured exit velocity of at least 95 mph.
+        description: Additive indicator for Savant exit velocity of at least 95 mph.
         data_type: integer
 
       - name: sweet_spot_ind
-        description: Additive indicator for measured launch angle from 8 through 32 degrees.
+        description: Additive indicator for the original Stats API angle from 8 through 32 degrees.
         data_type: integer
 
       - name: bunt_ind

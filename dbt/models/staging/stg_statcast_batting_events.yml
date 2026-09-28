@@ -54,11 +54,11 @@ models:
         data_type: varchar
 
       - name: launch_speed
-        description: Exit velocity in miles per hour when tracked.
+        description: Savant exit velocity in mph, including supplied estimates for untracked contact.
         data_type: double
 
       - name: launch_angle
-        description: Vertical launch angle in degrees when tracked.
+        description: Savant launch angle in degrees, including supplied estimates for untracked contact.
         data_type: double
 
       - name: launch_speed_angle

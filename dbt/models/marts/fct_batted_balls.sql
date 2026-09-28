@@ -73,6 +73,10 @@ classified_batted_balls as (
         c.coordinate_p_x as pitch_plate_x,
         c.coordinate_p_z as pitch_plate_z,
         c.zone as pitch_zone,
+        -- Savant includes contact estimates absent from the Stats API feed.
+        -- Keep both sources: averages use Savant; sweet spots remain unchanged.
+        d.launch_angle as statcast_launch_angle,
+        d.launch_speed as statcast_launch_speed,
         d.launch_speed_angle as statcast_launch_speed_angle_code,
         d.estimated_ba_using_speedangle as expected_batting_average,
         d.estimated_slg_using_speedangle as expected_slugging_percentage,
@@ -85,16 +89,16 @@ classified_batted_balls as (
         ) as is_hit,
         b.event_type = 'home_run' as is_home_run,
         coalesce(d.launch_speed_angle = 6, false) as is_barrel,
-        coalesce(a.launch_speed >= 95.0, false) as is_hard_hit,
+        coalesce(d.launch_speed >= 95.0, false) as is_hard_hit,
         coalesce(a.launch_angle between 8.0 and 32.0, false) as is_sweet_spot,
         a.trajectory in (
             'bunt_grounder',
             'bunt_line_drive',
             'bunt_popup'
         ) as is_bunt,
-        a.launch_speed is not null as has_exit_velocity,
-        a.launch_angle is not null as has_launch_angle,
-        a.launch_speed is not null and a.launch_angle is not null as has_statcast_tracking
+        d.launch_speed is not null as has_exit_velocity,
+        d.launch_angle is not null as has_launch_angle,
+        d.launch_speed is not null and d.launch_angle is not null as has_statcast_tracking
     from batted_balls as a
     inner join plate_appearances as b
         on
@@ -159,8 +163,10 @@ final as (
         coordinate_x,
         coordinate_y,
         hardness,
-        launch_angle,
-        launch_speed,
+        statcast_launch_angle as launch_angle,
+        statcast_launch_speed as launch_speed,
+        launch_angle as statsapi_launch_angle,
+        launch_speed as statsapi_launch_speed,
         location,
         total_distance,
         trajectory,

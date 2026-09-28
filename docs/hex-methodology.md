@@ -51,6 +51,13 @@ Every published fact retains the source game revision from which it was built.
 Glue resolves the current revision, dbt replaces complete games when that
 revision changes, and MetricFlow aggregates the resulting current-state facts.
 
+Baseball Savant's separately acquired, revisioned CSV data also flows through
+Glue into the combined batting facts. Savant supplies contact velocity/angle,
+barrel classifications, and expected-outcome values; Stats API supplies the
+event grain and official outcomes. The batted-ball fact retains original Stats
+API velocity/angle alongside the Savant values so measurement coverage remains
+auditable. Combined facts are rebuilt when either source revision changes.
+
 ## MLB-supplied observations
 
 MLB supplies the underlying event evidence, including:
@@ -94,19 +101,20 @@ Zavant derives the reusable analytical product from those observations:
 | OBP | Hits, walks, and hit-by-pitch divided by at-bats, walks, hit-by-pitch, and sacrifice flies. |
 | SLG | Total bases divided by official at-bats. |
 | OPS | On-base percentage plus slugging percentage. |
-| xBA | Sum of Savant expected hits divided by official at-bats, including strikeouts in the denominator. |
-| xSLG | Sum of Savant expected total bases divided by official at-bats. |
+| xBA | Expected hits for official at-bats divided by strikeout at-bats plus contact at-bats with supplied hit probabilities. Missing contact estimates are excluded; zero estimates remain eligible. |
+| xSLG | Expected total bases for official at-bats divided by strikeout at-bats plus contact at-bats with supplied total-base estimates. Coverage is evaluated independently of xBA. |
 | xwOBA | Sum of Savant expected values weighted by `woba_denom`, divided by the sum of those denominator contributions. |
 | wOBA | Official batting outcomes weighted with their season's FanGraphs coefficients, divided by AB + unintentional BB + HBP + SF. Current-season weights are provisional. |
 | xwOBAcon | Sum of supplied expected wOBA values for batted balls divided by the number of non-null contact estimates. Includes home runs; excludes non-contact outcomes. |
 | K% | Strikeouts divided by completed plate appearances. |
 | BB% | Walks, including intentional walks, divided by completed plate appearances. |
 | Batted-ball events | Count of projected batted-ball events. |
-| Average exit velocity | Sum of measured exit velocities divided by events with an exit-velocity observation. |
-| Maximum exit velocity | Highest supplied exit velocity in the selected population. |
-| Average launch angle | Sum of measured non-bunt launch angles divided by non-bunt events with a launch-angle observation. |
-| Hard-hit rate | Events hit at least 95 mph divided by events with measured exit velocity. |
-| Sweet-spot rate | Events with launch angle from 8 through 32 degrees divided by events with measured launch angle. |
+| Average exit velocity | Sum of Savant exit velocities, including supplied estimates, divided by events with a non-null Savant velocity. |
+| Maximum exit velocity | Highest supplied Savant exit velocity in the selected population. |
+| Average launch angle | Sum of Savant non-bunt launch angles divided by non-bunt events with a non-null Savant angle. Includes supplied estimates. |
+| Barrel rate | Savant-classified barrels divided by events with both original Stats API contact measurements, an observed-contact proxy. |
+| Hard-hit rate | Events with Savant exit velocity at least 95 mph divided by all batted-ball events. |
+| Sweet-spot rate | Original Stats API angles from 8 through 32 degrees divided by events with an original Stats API angle. Intentionally unchanged pending reconciliation. |
 | Pitches | Count of actual pitch events, including pitches in plays that do not end in a completed plate appearance. |
 | Pitch-family rate | Pitches in a governed pitch family divided by all actual pitches in the selected population. |
 | Average release velocity | Sum of supplied release velocities divided by pitches with a release-velocity observation. |
@@ -137,14 +145,27 @@ dividing the sum of tracked measurements by the number of eligible observations.
 
 ## Tracking eligibility
 
-MLB does not supply every tracking measurement for every batted ball. Missing
-measurements are not converted to zero:
+MLB does not supply every tracking measurement for every batted ball.
+[Savant's CSV documentation](https://baseballsavant.mlb.com/csv-docs) explains
+that its velocity and angle fields include estimates for some untracked balls.
+Eligibility is metric-specific:
 
-- Average exit velocity and hard-hit rate use only events with exit velocity.
-- Average launch angle excludes bunts and requires launch angle.
-- Sweet-spot rate requires launch angle.
-- Statcast tracking rate reports the share of batted balls with both primary
-  contact measurements.
+- Contact averages use Savant observations, including supplied estimates;
+  null values are excluded rather than averaged as zero. Average launch angle
+  continues to exclude bunts.
+- Hard-hit rate uses Savant velocity for the numerator and all BBE for the
+  denominator. A missing velocity does not add a hard hit but does add a BBE.
+- Barrel rate uses the original Stats API velocity-and-angle coverage as an
+  observed-contact proxy. The extra Savant-filled values do not expand this
+  denominator. This reconciles the checked Mookie season rates but is not an
+  authoritative Savant eligibility flag, which our retained export lacks.
+- Sweet-spot rate retains its original Stats API source and angle coverage;
+  both its numerator and denominator are unchanged by the source correction.
+- Statcast tracking rate reports Savant value availability, including supplied
+  estimates, not the directly measured fraction.
+- xBA/xSLG include strikeout at-bats as zero-value opportunities. Unestimated
+  contact is excluded from the corresponding denominator; a supplied zero is
+  included. No eligible opportunities produces a null rate.
 - xwOBAcon requires a supplied expected wOBA contact value; missing estimates
   are excluded, while actual zero estimates count. It does not use all PAs or
   all BBE as its denominator when expected-contact coverage is incomplete.
@@ -157,10 +178,31 @@ retrieval dates. Each season's weights are applied before career aggregation;
 rounded reference coefficients need not reproduce every Savant aggregate
 exactly. Changes to those weights invalidate the affected season's PA facts.
 
+## Remaining Savant reconciliation
+
+The 2026-09-28 correction addresses confirmed source-coverage and denominator
+differences, not a promise of exact agreement with every player-page aggregate.
+Mookie's 2020 xBA/xSLG reconcile after excluding two unestimated contact at-bats;
+small residual expected-stat differences remain in some older seasons. Observed
+wOBA, xwOBA, and xwOBAcon were not changed by this correction.
+
+Sweet-spot reconciliation is explicitly deferred. For the checked 2025 Mookie
+population, both retained feeds contain the same 531 whole-degree angles.
+Inclusive 8–32 gives 212 qualifying balls (39.9%), strict 8–32 gives 192 (36.2%),
+and neither reproduces Savant's 37.7%. Higher-precision internal angles are a
+possible explanation, not a verified one. Do not change boundaries merely to
+approximate the displayed rate. Future work should establish Savant's exact
+event eligibility/precision before changing this metric.
+
 ## Validation
 
 The published metrics are supported by several independent checks:
 
+- A contact-source test verifies Savant values, preserved Stats API values,
+  coverage/quality indicators, and the unchanged sweet-spot classification.
+- Offline regressions execute the actual fact SQL and semantic expressions to
+  distinguish missing estimates, true zeros, strikeouts, and metric-specific
+  denominators without modifying the warehouse.
 - Fact grains and required join keys are tested in dbt.
 - Plate-appearance and at-bat counts reconcile to MLB's separately projected
   game boxscores.

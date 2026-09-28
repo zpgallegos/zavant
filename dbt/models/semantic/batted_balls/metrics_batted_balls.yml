@@ -18,22 +18,38 @@ metrics:
   - name: statcast_tracked_batted_balls
     label: Statcast-Tracked Batted Balls
     description: >-
-      Number of batted-ball events with both exit velocity and launch angle
-      available.
+      Number of batted balls with both Savant contact values available,
+      including supplied estimates. Not the barrel-rate denominator.
     type: simple
     type_params:
       measure: statcast_tracked_batted_balls
 
+  - name: statsapi_contact_observations
+    label: Stats API Contact Observations
+    description: >-
+      Batted balls with both original Stats API contact measurements, used
+      as the observed-contact proxy for barrel-rate eligibility.
+    type: simple
+    type_params:
+      measure: statsapi_contact_observations
+
+  - name: statsapi_launch_angle_observations
+    label: Stats API Launch-Angle Observations
+    description: Original Stats API angle coverage used by the deferred sweet-spot metric.
+    type: simple
+    type_params:
+      measure: statsapi_launch_angle_observations
+
   - name: hard_hits
     label: Hard Hits
-    description: Number of batted balls with exit velocity of at least 95 mph.
+    description: Number of batted balls with Savant exit velocity of at least 95 mph.
     type: simple
     type_params:
       measure: hard_hits
 
   - name: sweet_spots
     label: Sweet Spots
-    description: Number of batted balls with launch angle from 8 through 32 degrees.
+    description: Number of batted balls with original Stats API angle from 8 through 32 degrees.
     type: simple
     type_params:
       measure: sweet_spots
@@ -89,7 +105,7 @@ metrics:
 
   - name: maximum_exit_velocity
     label: Maximum Exit Velocity
-    description: Highest measured exit velocity, in miles per hour.
+    description: Highest supplied Savant exit velocity, in miles per hour.
     type: simple
     type_params:
       measure: maximum_exit_velocity
@@ -103,21 +119,21 @@ metrics:
 
   - name: exit_velocity_sum
     label: Exit Velocity Sum
-    description: Sum of measured exit velocities, used to calculate the weighted average.
+    description: Sum of Savant exit velocities, including supplied estimates, for weighted averages.
     type: simple
     type_params:
       measure: exit_velocity_sum
 
   - name: exit_velocity_tracked_batted_balls
     label: Exit-Velocity Observations
-    description: Number of batted-ball events with measured exit velocity.
+    description: Number of batted balls with Savant exit velocity, including supplied estimates.
     type: simple
     type_params:
       measure: exit_velocity_tracked_batted_balls
 
   - name: launch_angle_tracked_batted_balls
     label: Launch-Angle Observations
-    description: Number of batted-ball events with measured launch angle.
+    description: Number of batted balls with Savant launch angle, including supplied estimates.
     type: simple
     type_params:
       measure: launch_angle_tracked_batted_balls
@@ -125,15 +141,15 @@ metrics:
   - name: non_bunt_launch_angle_sum
     label: Non-Bunt Launch Angle Sum
     description: >-
-      Sum of measured non-bunt launch angles, used to calculate the weighted
-      average.
+      Sum of Savant non-bunt launch angles, including supplied estimates,
+      used to calculate the weighted average.
     type: simple
     type_params:
       measure: non_bunt_launch_angle_sum
 
   - name: non_bunt_launch_angle_observations
     label: Non-Bunt Launch-Angle Observations
-    description: Number of non-bunt batted balls with measured launch angle.
+    description: Number of non-bunt batted balls with a supplied Savant launch angle.
     type: simple
     type_params:
       measure: non_bunt_launch_angle_observations
@@ -163,7 +179,7 @@ metrics:
 
   - name: statcast_tracking_rate
     label: Statcast Tracking Rate
-    description: Share of batted-ball events with both primary Statcast measurements.
+    description: Share of batted balls with both Savant contact values, including supplied estimates.
     type: ratio
     type_params:
       numerator: statcast_tracked_batted_balls
@@ -171,7 +187,7 @@ metrics:
 
   - name: average_exit_velocity
     label: Average Exit Velocity
-    description: Average measured exit velocity, in miles per hour.
+    description: Average Savant exit velocity in mph, including supplied estimates; nulls excluded.
     type: ratio
     type_params:
       numerator: exit_velocity_sum
@@ -179,7 +195,7 @@ metrics:
 
   - name: average_launch_angle
     label: Average Launch Angle
-    description: Average measured launch angle for non-bunt batted balls, in degrees.
+    description: Average Savant non-bunt launch angle in degrees, including supplied estimates.
     type: ratio
     type_params:
       numerator: non_bunt_launch_angle_sum
@@ -207,20 +223,25 @@ metrics:
 
   - name: hard_hit_rate
     label: Hard-Hit Rate
-    description: Share of exit-velocity-tracked batted balls hit at least 95 mph.
+    description: >-
+      Batted balls with Savant exit velocity at least 95 mph divided by all
+      batted-ball events. Missing velocities do not count as hard hits but
+      remain in the denominator; this differs from a contact average.
     type: ratio
     type_params:
       numerator: hard_hits
-      denominator: exit_velocity_tracked_batted_balls
+      denominator: batted_ball_events
 
   - name: sweet_spot_rate
     label: Sweet-Spot Rate
     description: >-
-      Share of launch-angle-tracked batted balls hit from 8 through 32 degrees.
+      Share of original Stats API angle observations from 8 through 32 degrees.
+      Source, inclusive boundaries, and eligibility remain unchanged pending
+      reconciliation with Savant's published sweet-spot rate.
     type: ratio
     type_params:
       numerator: sweet_spots
-      denominator: launch_angle_tracked_batted_balls
+      denominator: statsapi_launch_angle_observations
 
   - name: bunt_rate
     label: Bunt Rate
@@ -273,8 +294,12 @@ metrics:
 
   - name: barrel_rate
     label: Barrel Rate
-    description: Barrels divided by all batted-ball events.
+    description: >-
+      Savant-classified barrels divided by batted balls with both original
+      Stats API contact measurements. This observed-contact proxy matches
+      the checked historical barrel rates without counting Savant-filled
+      measurements as newly observed contact. Zero coverage yields null.
     type: ratio
     type_params:
       numerator: barrels
-      denominator: batted_ball_events
+      denominator: statsapi_contact_observations

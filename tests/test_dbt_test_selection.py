@@ -14,6 +14,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SAVANT_MODELS = "stg_statcast_batting_events stg_statcast_date_revisions"
 _COMBINED_MODELS = "fct_batted_balls fct_plate_appearances"
 _COMBINED_TESTS = {
+    "batted_ball_fact_matches_contact_measurements",
     "batted_ball_fact_matches_statcast_barrel_classification",
     "batted_ball_fact_matches_statcast_expected_statistics",
     "batted_ball_fact_uses_current_savant_revision",

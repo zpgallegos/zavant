@@ -120,17 +120,18 @@ Representative metric contracts are:
 | Batting average | `hits / at_bats` | Calculates a ratio of aggregate components instead of averaging row-level rates. |
 | On-base percentage | `(hits + walks + hit_by_pitch) / (at_bats + walks + hit_by_pitch + sacrifice_flies)` | Preserves the official opportunity denominator at every query grain. |
 | Slugging percentage | `total_bases / at_bats` | Keeps total bases additive before division. |
-| Expected batting average | `expected_hits / at_bats` | Keeps Savant contact probabilities additive while strikeout at-bats remain in the denominator. |
-| Expected slugging percentage | `expected_total_bases / at_bats` | Calculates the player rate from additive Savant total-base expectations. |
+| Expected batting average | `expected_hits / expected_batting_average_at_bats` | Includes official strikeout at-bats and contact at-bats with supplied hit probabilities; missing contact estimates are not zero-value outs. |
+| Expected slugging percentage | `expected_total_bases / expected_slugging_at_bats` | Uses its own total-base-estimate coverage, including strikeouts and supplied zero estimates. |
 | Expected weighted on-base average | `expected_woba_numerator / woba_denominator` | Includes Savant's eligible contact and non-contact outcomes. |
 | Weighted on-base average | `woba_numerator / woba_opportunities` | Uses season-specific FanGraphs weights and official AB + unintentional BB + HBP + SF, independently of Savant coverage. |
 | Expected wOBA on contact | `expected_woba_on_contact_numerator / expected_woba_on_contact_observations` | Restricts both components to batted balls with a supplied expected wOBA value; true zero estimates remain eligible. |
 | Barrels per plate appearance | Average of the PA-grain `barrel_ind` | Keeps the numerator and denominator on the plate-appearance dataset accepted by Hex. |
 | On-base plus slugging | `on_base_percentage + slugging_percentage` | Reuses governed component metrics. |
 | BABIP | `(hits - home_runs) / (at_bats - strikeouts - home_runs + sacrifice_flies)` | Defines balls-in-play eligibility explicitly. |
-| Average exit velocity | `exit_velocity_sum / exit_velocity_tracked_batted_balls` | Weights regrouped averages by the number of tracked batted balls. |
-| Hard-hit rate | `hard_hits / exit_velocity_tracked_batted_balls` | Excludes events for which MLB supplied no exit velocity. |
-| Sweet-spot rate | `sweet_spots / launch_angle_tracked_batted_balls` | Excludes events for which MLB supplied no launch angle. |
+| Average exit velocity | `exit_velocity_sum / exit_velocity_tracked_batted_balls` | Uses Savant values, including supplied estimates, and excludes null observations. |
+| Barrel rate | `barrels / statsapi_contact_observations` | Uses original Stats API contact coverage as an observed-contact proxy, not all BBE or Savant-expanded coverage. |
+| Hard-hit rate | `hard_hits / batted_ball_events` | Uses Savant velocity for classification; all BBE remain in the denominator. |
+| Sweet-spot rate | `sweet_spots / statsapi_launch_angle_observations` | Retains the original Stats API inputs, inclusive boundaries, and denominator while reconciliation is deferred. |
 | Pitches | Count of rows in `fct_pitches` | Counts the pitch event stream directly rather than summing only pitches attached to completed plate appearances. |
 | Fastball pitch rate | `fastball_pitches / pitches` | Preserves pitch-family membership as additive components before division. |
 | Average release velocity | `release_velocity_sum / velocity_tracked_pitches` | Weights regrouped velocity by the number of pitches with a supplied measurement. |
@@ -186,6 +187,46 @@ one-time PA fact full refresh required to add the new columns.
 The xwOBAcon addition is semantic-only and uses an existing fact column; it
 does not require an acquisition, Glue run, or fact full refresh. Validate the
 definitions and refresh the Hex semantic project before selecting the metric.
+
+### Contact-source and denominator correction
+
+`fct_batted_balls.launch_speed` and `launch_angle` now come from Savant,
+including its supplied estimates for some untracked events. Missing Savant
+values stay null; there is no silent fallback to the Stats API. The original
+values remain in `statsapi_launch_speed` and `statsapi_launch_angle` for
+observed-contact eligibility and auditability. Availability flags now describe
+the Savant values, so `statcast_tracking_rate` includes supplied estimates and
+must not be interpreted as the directly measured share.
+
+Sweet-spot classification deliberately still uses the original Stats API angle,
+and its denominator counts that same original column. The new denominator
+name preserves existing results; it is not a sweet-spot correction. See the
+[remaining reconciliation limits](../docs/hex-methodology.md#remaining-savant-reconciliation)
+for the unresolved boundary/precision question and other small discrepancies.
+
+For xBA and xSLG, only official at-bats contribute. Strikeouts count as zero
+expected production and one opportunity, even without Savant estimates.
+Other at-bats require the corresponding estimate, including true zero values;
+walks and sacrifices do not enter either component. These semantic-only changes
+do not alter the PA fact or observed wOBA/xwOBA calculations.
+
+**First deployment:** the batted-ball fact needs a full refresh, both to add the
+two source-audit columns and to recompute history. Source revisions alone do
+not invalidate existing games when model logic changes, and the incremental
+merge cannot mix the old and new column layouts. Pause the local Dagster sensor
+and let active/queued builds finish before running this against production:
+
+```bash
+.venv/bin/dbt build --project-dir dbt --target prod --full-refresh --select fct_batted_balls
+```
+
+This assumes upstream staging/intermediate relations are already current. Use
+`--target dev` to migrate the development fact separately. No acquisition or
+Glue rerun is required, and `fct_plate_appearances` does not need a full refresh
+for these corrections. Refresh/sync the Hex semantic project **after** the fact
+rebuild succeeds, rerun the existing pivots, and republish the app. Public metric
+names are unchanged, so the pivot-join SQL does not need to change. Reload
+Dagster's code location after updating the definitions.
 
 ## Correction-safe incremental facts
 
